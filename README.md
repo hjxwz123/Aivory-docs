@@ -101,3 +101,27 @@ DOCS_SITE_BASE_URL=/
 ```
 
 如果部署到 GitHub Pages 的项目子路径，可使用 `DOCS_SITE_URL=https://<owner>.github.io` 和 `DOCS_SITE_BASE_URL=/Aivory/`。本地开发不设置这两个变量也可以正常运行。
+
+## Cloudflare Workers
+
+仓库包含 `wrangler.jsonc` 与静态资产 Worker，可将 `build/` 原样发布到 Cloudflare Workers。Worker 只将请求交给静态资产绑定，不会把未知的 `/docs/*` 地址回退到首页，因此目录式文档 HTML、404 行为和 SEO 预渲染保持一致。
+
+先使用浏览器登录 Cloudflare，或在 CI 设置具有 Workers 编辑权限的 `CLOUDFLARE_API_TOKEN` 与 `CLOUDFLARE_ACCOUNT_ID`：
+
+```bash
+npx wrangler login
+```
+
+部署前务必设置生产站点地址。它用于 canonical、Open Graph、sitemap、robots 和多语言 alternate URL：
+
+```bash
+DOCS_SITE_URL=https://docs.example.com npm run deploy:cf
+```
+
+首次没有自定义域名时，可以先运行 `npm run deploy:cf` 获取 Cloudflare 输出的 `workers.dev` 地址，再把该地址设置为 `DOCS_SITE_URL` 重新部署一次。开发预览使用：
+
+```bash
+DOCS_SITE_URL=http://localhost:8787 npm run preview:cf
+```
+
+Worker 名称默认为 `aivory-docs`；如该账号下已有同名 Worker，先修改 `wrangler.jsonc` 的 `name`，再部署。

@@ -7,6 +7,8 @@
 # Generated files
 .docusaurus
 .cache-loader
+.wrangler/
+.wrangler-dry-run/
 
 # Misc
 .DS_Store

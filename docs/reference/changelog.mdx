@@ -10,6 +10,26 @@ This page follows the tags and release times on [GitHub Releases](https://github
 
 ## v2.4 Series
 
+### [v2.4.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.2) - 2026-08-30
+
+- Password registration and OAuth/OIDC automatic provisioning are now independent, allowing provider-only signup without exposing the direct registration form.
+- Accounts can remain signed in on multiple devices while refresh-token replay protection and security-state checks remain enforced; the login page also adds browser-managed password memory.
+- Disabled models and channels can no longer be saved or used for model policy, task calls, tool routing, or new conversation execution.
+- Administrators can choose the default `Auto`, `On`, or `Off` tool mode used when neither the account nor the current turn has an explicit choice.
+- Fast mode has independent search, web-read, image, Python, total-call, and elapsed-time budgets. Provider-hosted tools remain available, and a local system tool is hidden only when its Fast limit is `0`.
+- Web reading leaves time for its Reader fallback, and direct image generation discards an irrelevant stale `base_image_index` instead of entering a failed duplicate-call path.
+- Reader fallback supports both Jina's escaped target format and raw target URLs required by services such as `https://markdown.new`.
+- Domain and HTTPS deployments must configure exact browser origins in `ALLOWED_ORIGINS`; same-origin IP/HTTP testing may leave it unset. No database migration or new mandatory variable is required.
+
+### [v2.4.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.1) - 2026-08-29
+
+- Image attachments remain available to conversation tools even when the selected chat model cannot accept native visual input.
+- Image generation and editing handle previous generations, selected bases, reference images, multiple outputs, and invalid operations more reliably.
+- Internal tasks and Auto tool routing inherit the current conversation model when no dedicated policy model is configured.
+- The administrator setup walkthrough adds optional task and tool-routing model steps and fixes its Next, Finish, and skip behavior.
+- Sandboxed HTML previews render generated Tailwind utilities and rewrite Google Fonts resources to reachable HTTPS mirrors.
+- The project READMEs prominently link the official documentation and live demo. This release requires no database migration or new environment variable.
+
 ### [v2.4.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.0) - 2026-08-29
 
 `v2.4.0` expands personal deployment from a setup that "requires maintaining a set of external infrastructure" into a ready-to-run single-instance edition, while continuing to preserve and remain compatible with the original PostgreSQL, Redis, and Qdrant full deployment. This version also consolidates improvements to administrator initialization, tool execution reliability, authentication session security, RAG protection, and the chat experience.

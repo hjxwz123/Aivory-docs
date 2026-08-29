@@ -165,6 +165,22 @@ body.aivory-home-page .dropdown__menu {
   backdrop-filter: blur(12px);
 }
 
+/* The 0.55rem margin above the home dropdown menu is a hover dead zone:
+   while the pointer crosses it, .dropdown loses :hover and the CSS-only
+   hoverable menu closes before a click can land. This invisible bridge
+   extends the dropdown container across that gap. It cannot live on
+   .dropdown__menu itself because the menu clips overflow (overflow-y: auto). */
+@media (min-width: 997px) {
+  body.aivory-home-page .dropdown::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 0.65rem;
+  }
+}
+
 body.aivory-home-page .dropdown__link {
   min-height: 42px;
   border-radius: 0.5rem;

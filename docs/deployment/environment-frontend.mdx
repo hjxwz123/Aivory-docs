@@ -1,60 +1,60 @@
 ---
-title: 前端构建变量
+title: Frontend Build Variables
 sidebar_position: 4
-description: Aivory 前端全部 VITE_* 构建期变量，以及什么时候不应该修改它们。
+description: All VITE_* build-time variables for the Aivory frontend, and when you should not change them.
 ---
 
-# 前端构建变量
+# Frontend Build Variables
 
-`VITE_*` 变量只在自行构建前端时读取，并会被写入构建产物。官方发布的 Aivory 应用镜像已经包含前端，因此在运行中的 Docker `.env` 文件中添加或修改 `VITE_*` **不会**改变网页行为；需要在构建环境设置后重新构建镜像/静态文件。
+`VITE_*` variables are read only when you build the frontend yourself, and they are written into the build output. The official published Aivory application image already includes the frontend, so adding or changing `VITE_*` in a running Docker `.env` file will **not** change web behavior; you must set them in the build environment and rebuild the image/static files.
 
-不要在任何 `VITE_*` 中放 API Key、JWT、数据库密码、OAuth Client Secret、支付密钥或内部地址。构建后这些值可以被用户浏览器读取。
+Do not put API keys, JWTs, database passwords, OAuth client secrets, payment keys, or internal addresses into any `VITE_*`. After the build, these values can be read by users' browsers.
 
-除非你正在维护自定义前端、遇到明确的 UI 性能问题并有回滚方案，否则保留默认值。大多数变量只影响分页、轮询、前端超时或客户端显示限制，不会放宽服务端安全上限。
+Keep the defaults unless you are maintaining a custom frontend, hit a clearly identified UI performance problem, and have a rollback plan. Most variables only affect pagination, polling, frontend timeouts, or client-side display limits; they do not relax server-side security limits.
 
-## API 与开发代理
+## API and development proxy
 
-| 变量 | 默认值 | 作用与取值 |
+| Variable | Default | Purpose and values |
 | --- | --- | --- |
-| `VITE_API_BASE` | `/api` | 浏览器请求 API 的基础路径。官方同源部署保持默认；仅分离前端/API 时使用受控的 HTTPS 地址或路径。 |
-| `VITE_API_TARGET` | `http://localhost:8787` | 本地开发服务器的代理目标，只对开发构建/开发服务器生效，不会写入生产浏览器请求。 |
+| `VITE_API_BASE` | `/api` | Base path the browser uses to request the API. Keep the default for the official same-origin deployment; use a controlled HTTPS address or path only when the frontend and API are separated. |
+| `VITE_API_TARGET` | `http://localhost:8787` | Proxy target for the local development server; it only applies to development builds/dev servers and is not written into production browser requests. |
 
-## 分页、列表与轮询
+## Pagination, lists, and polling
 
-| 变量 | 默认值 | 作用与取值 |
+| Variable | Default | Purpose and values |
 | --- | --- | --- |
-| `VITE_AIVORY_CONV_PAGE` | `200` | 左侧会话列表首次和滚动加载的每页数量。 |
-| `VITE_AIVORY_MSG_PAGE` | `40` | 打开会话及向上加载历史消息时每页请求数量。 |
-| `VITE_AIVORY_CONVERSATIONS_API_LIST_LIMIT` | `200` | 常规会话 API 列表的默认请求上限。 |
-| `VITE_AIVORY_CONVERSATIONS_API_LIST_ARCHIVED_LIMIT` | `200` | 归档会话 API 列表的默认请求上限。 |
-| `VITE_AIVORY_PROJECT_CONVERSATIONS_API_LIST_LIMIT` | `500` | 项目详情中加载会话的默认请求上限。 |
-| `VITE_AIVORY_WORKSPACES_API_ADMIN_LIST_LIMIT` | `200` | 管理员工作区列表请求默认上限。 |
-| `VITE_AIVORY_IMAGE_API_MY_IMAGES_LIMIT` | `60` | 当前用户生成图库每页请求数量。 |
-| `VITE_AIVORY_ADMIN_API_USERS_LIMIT` | `50` | 管理员用户列表 API 默认请求上限。 |
-| `VITE_AIVORY_ADMIN_API_USER_IMAGES_LIMIT` | `60` | 管理员查看单个用户图库时每页请求数量。 |
-| `VITE_AIVORY_ADMIN_API_ANALYTICS` | `30` | 管理员分析页请求的默认回溯天数。 |
-| `VITE_AIVORY_PAGE_SIZE` | `50` | 用户文件、管理员文件和用量记录等通用表格每页大小。 |
-| `VITE_AIVORY_PAGE_SIZE_2` | `20` | 管理员兑换码表格每页大小。 |
-| `VITE_AIVORY_PAGE_SIZE_3` | `20` | 管理员用户表格每页大小。 |
-| `VITE_AIVORY_IMAGES_PAGE` | `60` | 管理员用户图库无限滚动每页数量。 |
-| `VITE_AIVORY_PAGE` | `30` | 用户个人生成图库每页数量。 |
-| `VITE_AIVORY_KB_DOC_STATUS_POLL_INTERVAL` | `2200` | 知识库仍有解析/索引文档时的状态轮询间隔，毫秒。 |
-| `VITE_AIVORY_INGEST_POLL_MS` | `1200` | 聊天编辑器等待附件摄取时的轮询间隔，毫秒。 |
-| `VITE_AIVORY_ADMIN_BACKUP_EXPORT_JOB_POLL_INTERVAL` | `2500` | 管理员备份导出任务状态轮询间隔，毫秒。 |
-| `VITE_AIVORY_ADMIN_VECTOR_MAINTENANCE_JOB_POLL_INTERVAL` | `2500` | 管理员向量维护任务状态轮询间隔，毫秒。 |
-| `VITE_AIVORY_REALTIME_SYNC_THROTTLE_MS` | `800` | 多设备实时事件触发的前端同步节流时长，毫秒。 |
-| `VITE_AIVORY_ONLINE_WINDOW_S` | `300` | 管理员用户列表中判定“在线”的最后活动窗口，秒。 |
+| `VITE_AIVORY_CONV_PAGE` | `200` | Page size for the initial load and scroll loading of the left-side conversation list. |
+| `VITE_AIVORY_MSG_PAGE` | `40` | Number of items requested per page when opening a conversation and loading older history messages. |
+| `VITE_AIVORY_CONVERSATIONS_API_LIST_LIMIT` | `200` | Default request limit for regular conversation API lists. |
+| `VITE_AIVORY_CONVERSATIONS_API_LIST_ARCHIVED_LIMIT` | `200` | Default request limit for archived conversation API lists. |
+| `VITE_AIVORY_PROJECT_CONVERSATIONS_API_LIST_LIMIT` | `500` | Default request limit for loading conversations in project details. |
+| `VITE_AIVORY_WORKSPACES_API_ADMIN_LIST_LIMIT` | `200` | Default request limit for the administrator workspace list. |
+| `VITE_AIVORY_IMAGE_API_MY_IMAGES_LIMIT` | `60` | Per-page request count for the current user's generated image gallery. |
+| `VITE_AIVORY_ADMIN_API_USERS_LIMIT` | `50` | Default request limit for the administrator user list API. |
+| `VITE_AIVORY_ADMIN_API_USER_IMAGES_LIMIT` | `60` | Per-page request count when an administrator views a single user's image gallery. |
+| `VITE_AIVORY_ADMIN_API_ANALYTICS` | `30` | Default lookback days requested by the admin analytics page. |
+| `VITE_AIVORY_PAGE_SIZE` | `50` | General table page size for user files, admin files, and usage records. |
+| `VITE_AIVORY_PAGE_SIZE_2` | `20` | Page size for the admin redemption code table. |
+| `VITE_AIVORY_PAGE_SIZE_3` | `20` | Page size for the admin user table. |
+| `VITE_AIVORY_IMAGES_PAGE` | `60` | Per-page count for infinite scrolling of an admin user's image gallery. |
+| `VITE_AIVORY_PAGE` | `30` | Per-page count for the user's personal generated image gallery. |
+| `VITE_AIVORY_KB_DOC_STATUS_POLL_INTERVAL` | `2200` | Status polling interval when a knowledge base still has documents being parsed/indexed, in milliseconds. |
+| `VITE_AIVORY_INGEST_POLL_MS` | `1200` | Polling interval while the chat editor waits for attachment ingestion, in milliseconds. |
+| `VITE_AIVORY_ADMIN_BACKUP_EXPORT_JOB_POLL_INTERVAL` | `2500` | Polling interval for admin backup export job status, in milliseconds. |
+| `VITE_AIVORY_ADMIN_VECTOR_MAINTENANCE_JOB_POLL_INTERVAL` | `2500` | Polling interval for admin vector maintenance job status, in milliseconds. |
+| `VITE_AIVORY_REALTIME_SYNC_THROTTLE_MS` | `800` | Frontend sync throttle duration triggered by multi-device realtime events, in milliseconds. |
+| `VITE_AIVORY_ONLINE_WINDOW_S` | `300` | Last-activity window used to mark users as "online" in the admin user list, in seconds. |
 
-降低轮询间隔或提高列表上限会增加数据库/API 负载和浏览器内存；前端填写更大数值也可能被服务端分页、限流和权限规则拒绝或钳制。
+Lowering polling intervals or raising list limits increases database/API load and browser memory; larger values entered in the frontend may also be rejected or clamped by server-side pagination, rate limiting, and permission rules.
 
-## 输入、上传与浏览器 Python
+## Input, uploads, and browser Python
 
-| 变量 | 默认值 | 作用与取值 |
+| Variable | Default | Purpose and values |
 | --- | --- | --- |
-| `VITE_AIVORY_MAX_LEN` | `12000` | 聊天编辑器单条消息最大字符数。服务端仍可能有独立请求体限制。 |
-| `VITE_AIVORY_MAX_BYTES` | `262144` | 管理员图标上传在浏览器端的最大字节数，默认 256 KiB。 |
-| `VITE_AIVORY_RUN_TIMEOUT_MS` | `120000` | 浏览器内 Pyodide Python 单次运行硬超时，毫秒。与服务器沙盒无关。 |
-| `VITE_AIVORY_MAX_STREAM_CHARS` | `200000` | 浏览器 Pyodide 运行中的 stdout/stderr 最大累计字符数。 |
-| `VITE_AIVORY_MAX_RESULT_CHARS` | `20000` | 浏览器 Pyodide 最终表达式显示结果最大字符数。 |
+| `VITE_AIVORY_MAX_LEN` | `12000` | Maximum characters per message in the chat editor. The server may still impose separate request-body limits. |
+| `VITE_AIVORY_MAX_BYTES` | `262144` | Browser-side maximum bytes for admin icon uploads, default 256 KiB. |
+| `VITE_AIVORY_RUN_TIMEOUT_MS` | `120000` | Hard timeout for a single in-browser Pyodide Python run, in milliseconds. Unrelated to the server sandbox. |
+| `VITE_AIVORY_MAX_STREAM_CHARS` | `200000` | Maximum cumulative characters of stdout/stderr in an in-browser Pyodide run. |
+| `VITE_AIVORY_MAX_RESULT_CHARS` | `20000` | Maximum characters displayed for the final expression result in an in-browser Pyodide run. |
 
-浏览器内 Pyodide 仅影响前端本地体验，不等于服务器 Python 沙盒。需要模型调用 `python_execute` 时，仍必须配置受控的 `SANDBOX_*` sidecar，并遵守[工具、MCP 与沙盒](/docs/admin/tools-sandbox)中的权限和资源限制。
+In-browser Pyodide only affects the local frontend experience; it is not the server Python sandbox. When models need to call `python_execute`, you must still configure a controlled `SANDBOX_*` sidecar and follow the permission and resource limits in [Tools, MCP, and the Sandbox](../admin/tools-sandbox.mdx).

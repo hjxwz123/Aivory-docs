@@ -1,82 +1,82 @@
 ---
-title: 套餐、积分与支付
+title: Plans, Credits, and Payments
 sidebar_position: 6
-description: 配置用户组、模型配额、积分套餐、兑换码、支付渠道、支付方式和订单运营。
+description: Configure user groups, model quotas, credit packages, redemption codes, payment channels, payment methods, and order operations.
 ---
 
-# 套餐、积分与支付
+# Plans, Credits, and Payments
 
-套餐、积分和支付把模型成本、用户可用能力与订单流程连接起来。建议先用管理员和测试账号验证配额与积分，再开放真实支付；支付渠道、回调密钥和配置导出都应按高敏感资产管理。
+Plans, credits, and payments connect model costs, what users are able to do, and the order flow. Validate quotas and credits with an administrator and test accounts before enabling real payments; treat payment channels, callback secrets, and configuration exports as highly sensitive assets.
 
-## 先建立成本边界
+## Establish cost boundaries first
 
-在添加商品前，先明确每一类用户可以消耗什么：
+Before adding products, define what each class of user can consume:
 
-- 可以使用哪些聊天、图片、语音或 embedding 模型。
-- 每日消息、图片、上传、工具调用和并发生成的合理上限。
-- 积分如何换算到不同模型与服务商成本，免费额度是否足够用于试用。
-- 超出额度后是拒绝、提示充值、切换低成本模型，还是由管理员手工处理。
+- which chat, image, speech, or embedding models they may use.
+- reasonable daily limits on messages, images, uploads, tool calls, and concurrent generations.
+- how credits convert to the costs of different models and providers, and whether the free allowance is enough for trials.
+- what happens after limits are exceeded: reject, prompt to top up, fall back to low-cost models, or handle manually by administrators.
 
-先用低成本模型和小额度测试。不要在没有成本监控、滥用限制和退款/人工处理流程时公开高价模型、深度研究、图片生成或 Python 执行。
+Test first with low-cost models and small allowances. Don't publicly expose expensive models, deep research, image generation, or Python execution without cost monitoring, abuse limits, and refund/manual-handling workflows.
 
-## 用户组、套餐与模型配额
+## User groups, plans, and model quotas
 
-“套餐”中的用户组可用于为一组用户分配默认能力与经营规则；“积分与配额”用于设置积分套餐、模型额度和相关策略。
+User groups in "Plans" can assign default capabilities and business rules to a group of users; "Credits and Quotas" sets credit packages, model quotas, and related policies.
 
-推荐从简单分层开始，例如：管理员、内部成员、试用用户和付费用户。对每一层明确默认模型、可见模型、每天配额、积分余额上限和敏感工具权限。避免为单个用户建立大量不可追踪的例外；特殊情况优先使用一次性积分调整或有限期兑换码，并记录原因。
+Start with simple tiers, for example administrators, internal members, trial users, and paid users. For each tier, define the default model, visible models, daily quota, credit balance cap, and permissions for sensitive tools. Avoid building large numbers of untraceable exceptions for individual users; for special cases, prefer one-off credit adjustments or limited-time redemption codes, and record the reason.
 
-调整模型配额前应检查模型实际价格、上下文长度、输出上限和工具成本。配额变化通常只影响后续请求，不会自动抹去已有使用记录或已创建订单。
+Before adjusting model quotas, check the model's actual price, context length, output limit, and tool costs. Quota changes typically only affect subsequent requests; they do not retroactively erase existing usage records or already-created orders.
 
-## 积分套餐与兑换码
+## Credit packages and redemption codes
 
-积分套餐定义用户可以购买或获得的积分产品。创建前确认名称、展示文案、价格、赠送积分、启用状态、排序以及适用的支付方式。上线时先创建一个隐藏或测试用套餐，完成购买、支付回调、积分入账、取消和重复回调测试后再公开。
+Credit packages define the credit products users can purchase or receive. Before creating one, confirm the name, display copy, price, bonus credits, enabled state, ordering, and applicable payment methods. When launching, first create a hidden or test package, and only publish it after completing purchase, payment callback, credit crediting, cancellation, and duplicate-callback tests.
 
-兑换码适合邀请、补偿、企业发放和营销活动。管理时应明确：
+Redemption codes suit invitations, compensation, enterprise distribution, and marketing campaigns. When managing them, define:
 
-- 单码或批次的积分值、有效期、使用次数和适用用户范围。
-- 是否允许同一用户多次兑换，错误输入和高频尝试如何限流。
-- 码一旦泄露是否能撤销，批次删除是否会影响已经入账的积分。
-- 兑换记录、批次负责人和活动结束后的清理策略。
+- the credit value, validity period, usage count, and applicable user scope for a single code or batch.
+- whether the same user may redeem multiple times, and how mistyped input and high-frequency attempts are rate-limited.
+- whether a leaked code can be revoked, and whether deleting a batch affects credits that were already credited.
+- redemption records, batch owners, and the cleanup strategy after a campaign ends.
 
-不要把兑换码列表直接放到公开页面、客户端常量或客服截图中。生成大批量兑换码后先导出到受控的加密存储，再通过能撤销或追踪的渠道发放。
+Don't put redemption code lists directly on public pages, client-side constants, or support screenshots. After generating a large batch, export it to controlled encrypted storage first, then distribute it through channels that can revoke or track it.
 
-## 支付渠道与支付方式
+## Payment channels and payment methods
 
-支付渠道保存某个支付服务商的连接和 webhook 配置；支付方式决定用户在结算页可选择的具体方式。渠道和方法分开，可以让同一渠道提供多个方式，也能在故障时独立停用一种方式。
+A payment channel stores the connection and webhook configuration for one payment provider; payment methods determine which specific options users can choose at checkout. Keeping channels and methods separate lets one channel offer multiple methods and allows disabling a single method independently during an outage.
 
-安全上线流程：
+Secure rollout process:
 
-1. 在支付服务商创建受限 API/Webhook 凭据，区分测试与生产环境。
-2. 在后台创建支付渠道，使用后台显示的 webhook 地址注册回调。
-3. 校验 webhook 签名或密钥，确保回调通过 HTTPS 到达公开实例。
-4. 创建一个仅管理员可见的测试支付方式和测试积分套餐。
-5. 用真实服务商测试环境完成下单、成功、失败、取消、重复回调和延迟回调。
-6. 检查订单状态、积分入账、用量、退款或人工对账流程，再切换生产环境并公开。
+1. Create restricted API/webhook credentials with the payment provider, separating test and production environments.
+2. Create the payment channel in the admin console and register callbacks using the webhook URL shown there.
+3. Verify webhook signatures or secrets, and confirm callbacks reach the public instance over HTTPS.
+4. Create a test payment method and test credit package visible only to administrators.
+5. Complete order placement, success, failure, cancellation, duplicate callbacks, and delayed callbacks using the provider's real test environment.
+6. Review order status, credit crediting, usage, refunds, or manual reconciliation, then switch to the production environment and publish.
 
-测试环境与生产环境必须使用不同密钥和不同商品配置。不要将测试渠道误设为对普通用户开放，也不要把生产 webhook 密钥提交进版本控制或配置截图。
+Test and production environments must use different keys and different product configurations. Never leave a test channel open to regular users, and never commit production webhook keys to version control or configuration screenshots.
 
-## 订单与对账
+## Orders and reconciliation
 
-“支付订单”页面用于查看订单状态、过滤异常、在必要时人工对账或清理测试订单。人工操作应只修复已核实的外部支付事实，不能作为绕过支付验证的常规发积分方式。
+The "Payment orders" page is for viewing order status, filtering anomalies, and, when necessary, reconciling manually or cleaning up test orders. Manual actions should only fix verified external payment facts; they must not become a routine way to hand out credits that bypasses payment verification.
 
-发生争议、回调失败或金额不一致时：
+When disputes, callback failures, or amount mismatches occur:
 
-1. 保留支付服务商的订单号、事件 ID、时间、金额、币种和签名验证结果。
-2. 检查 Aivory 订单状态、是否已入账、是否收到重复 webhook。
-3. 先在支付服务商后台确认最终状态，再执行人工对账。
-4. 记录操作者、原因和关联证据，避免多个管理员重复发放积分。
+1. Preserve the payment provider's order number, event ID, timestamp, amount, currency, and signature verification result.
+2. Check the Aivory order status, whether credits were already credited, and whether duplicate webhooks were received.
+3. Confirm the final status in the payment provider's console first, then perform manual reconciliation.
+4. Record the operator, reason, and linked evidence to prevent multiple administrators from crediting the same order twice.
 
-支付 webhook 的网络入口需要 HTTPS、稳定的公网回调地址和合理限流。不要依赖浏览器打开后台页面来“触发”入账。
+The network entry point for payment webhooks requires HTTPS, a stable public callback address, and reasonable rate limiting. Don't rely on opening an admin page in a browser to "trigger" crediting.
 
-## 运营与审计
+## Operations and audit
 
-用量、分析、订单、兑换记录和用户反馈应一起看：积分余额增长不一定代表真实模型成本可控，模型高峰与异常工具调用也可能造成成本风险。
+Usage, analytics, orders, redemption records, and user feedback should be reviewed together: growing credit balances don't necessarily mean real model costs are under control, and model peaks plus abnormal tool calls can also create cost risk.
 
-上线后定期检查：
+Check regularly after launch:
 
-- 每个用户组的平均成本、失败率、退款和可疑高频使用。
-- 订单与支付服务商账单是否一致，是否存在长期挂起或重复订单。
-- 模型价格、积分换算、免费额度是否仍然覆盖成本。
-- 管理员是否仍能访问并轮换支付渠道密钥，Webhook 是否能继续验证。
+- average cost, failure rate, refunds, and suspicious high-frequency usage per user group.
+- whether orders match the payment provider's bills, and whether there are long-pending or duplicate orders.
+- whether model prices, credit conversion, and free allowances still cover costs.
+- whether administrators can still access and rotate payment channel keys and whether webhooks still verify.
 
-支付、渠道、OAuth、SMTP 和存储配置包含机密。管理员配置导出与完整备份都应加密保存、限制访问，并按处理生产密钥的同等标准保护。
+Payment, channel, OAuth, SMTP, and storage configurations contain secrets. Administrator configuration exports and full backups should all be encrypted at rest, access-restricted, and protected to the same standard as production keys.

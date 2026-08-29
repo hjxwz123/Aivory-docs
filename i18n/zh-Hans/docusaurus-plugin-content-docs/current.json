@@ -1,0 +1,30 @@
+{
+  "version.label": {
+    "message": "最新版本",
+    "description": "The label for version current"
+  },
+  "sidebar.docsSidebar.category.Get started": {
+    "message": "开始使用",
+    "description": "The label for category 'Get started' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Deployment": {
+    "message": "部署",
+    "description": "The label for category 'Deployment' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Administration": {
+    "message": "管理员",
+    "description": "The label for category 'Administration' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.User guide": {
+    "message": "用户指南",
+    "description": "The label for category 'User guide' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Troubleshooting": {
+    "message": "故障排查",
+    "description": "The label for category 'Troubleshooting' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Reference": {
+    "message": "参考",
+    "description": "The label for category 'Reference' in sidebar 'docsSidebar'"
+  }
+}

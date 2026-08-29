@@ -1,97 +1,97 @@
 ---
-title: 渠道、模型与策略
+title: Channels, models, and policies
 sidebar_position: 2
-description: 安全连接模型服务商，导入或创建模型，并为默认、回退和辅助任务配置策略。
+description: Connect model providers securely, import or create models, and configure policies for defaults, fallbacks, and auxiliary tasks.
 ---
 
-# 渠道、模型与策略
+# Channels, models, and policies
 
-渠道保存“如何连接一个上游服务商”，模型保存“该连接可以调用哪个具体模型”。二者分别管理，能让同一模型 ID 在不同账号、区域、网关或成本策略下共存。
+A channel stores "how to connect to an upstream provider"; a model stores "which specific model can be called through that connection". Managing them separately lets the same model ID coexist across different accounts, regions, gateways, or cost policies.
 
-用户能够正常聊天的最小条件是：存在一个已启用、可用的渠道；至少一个关联该渠道的已启用聊天模型；并且模型策略中选择了有效的默认聊天模型。完整首次流程见[管理员首次配置](/docs/admin/first-run)。
+The minimum conditions for users to chat normally: there is an enabled, usable channel; at least one enabled chat model is linked to that channel; and a valid default chat model is selected in the model policies. For the complete first-run flow, see [Administrator first-run setup](./first-run.mdx).
 
-## 规划渠道
+## Planning channels
 
-建议按凭据和故障边界创建渠道，而不是把所有服务商都塞进一条连接。
+Create channels around credentials and failure boundaries rather than stuffing every provider into one connection.
 
-| 场景 | 建议 |
+| Scenario | Recommendation |
 | --- | --- |
-| 同一服务商有生产与测试 Key | 创建两条渠道，名称清楚标记环境；不要让测试 Key 成为默认模型 |
-| 同一模型通过两个网关可用 | 创建两条渠道和两条模型记录，便于独立排序、禁用或回退 |
-| 需要按团队、地区或成本分流 | 每个独立合同、区域或预算池使用独立渠道 |
-| 服务商不提供模型列表接口 | 保留渠道后手动添加模型；列表导入不是使用渠道的前提 |
+| The same provider has production and test Keys | Create two channels with names that clearly mark the environment; never let a test Key become the default model |
+| The same model is available through two gateways | Create two channels and two model records for independent ordering, disabling, or fallback |
+| Traffic must be split by team, region, or cost | Use a separate channel for each contract, region, or budget pool |
+| The provider has no model-list endpoint | Keep the channel and add models manually; list import is not a prerequisite for using a channel |
 
-渠道中的 API Key 只应通过管理员后台保存。不要将服务商 Key 写进 `VITE_*`、前端页面、公开示例、浏览器请求参数或应用日志。轮换密钥时，先创建或修改受控渠道、做真实模型请求验证，再停用旧凭据，避免直接删除造成用户对话中断。
+API Keys in channels should only be saved through the admin backend. Never write provider Keys into `VITE_*`, frontend pages, public examples, browser request parameters, or application logs. When rotating a key, first create or update a controlled channel and verify with a real model request, then disable the old credential; don't delete it outright and break user conversations.
 
-## 添加与验证渠道
+## Adding and verifying channels
 
-在“AI 与模型 → 渠道”创建渠道时填写名称、服务商类型或 API 格式、Base URL、API Key 和启用状态。
+When creating a channel in "AI & models → Channels", fill in the name, provider type or API format, Base URL, API Key, and enabled state.
 
-1. 根据服务商协议选择 API 格式。模型名相同不代表接口兼容。
-2. 填写完整 Base URL。OpenAI 兼容网关通常以 `/v1` 结束，但不要自动把这个规则套到所有服务商。
-3. 仅在确认凭据正确后启用渠道。
-4. 保存后立即添加一个测试聊天模型，发出短请求验证网络、认证、模型授权和额度。
+1. Choose the API format based on the provider's protocol. The same model name does not imply API compatibility.
+2. Fill in the complete Base URL. OpenAI-compatible gateways usually end with `/v1`, but don't apply that rule to every provider automatically.
+3. Enable the channel only after you have confirmed the credentials are correct.
+4. Right after saving, add one test chat model and send a short request to verify network, authentication, model authorization, and quota.
 
-常见错误包括：Base URL 缺少版本路径、填入了网页控制台地址而不是 API 地址、代理把请求改写到错误路径、Key 没有目标模型权限、服务商只允许特定区域 IP，或账户额度不足。模型调用失败时优先检查渠道和上游返回，不要先修改默认策略。
+Common mistakes include: a Base URL missing the version path, entering the web console address instead of the API address, a proxy rewriting requests to the wrong path, a Key without permission for the target model, a provider that only allows IPs from specific regions, or insufficient account balance. When a model call fails, check the channel and the upstream response first; don't start by changing the default policy.
 
-## 自动导入与手动创建模型
+## Automatic import and manual model creation
 
-添加模型有两种方式：
+There are two ways to add models:
 
-- **自动添加渠道支持的模型**：向该渠道请求模型列表，导入可发现的项目。适合 OpenAI 兼容且允许列举模型的服务商。
-- **手动创建**：填写服务商真实请求 ID、显示名称、能力类型和关联渠道。适合不开放模型列表、私有网关或仅允许推理的 Key。
+- **Auto-add models supported by the channel**: request the model list from the channel and import whatever is discoverable. Best for OpenAI-compatible providers that allow model listing.
+- **Manual creation**: fill in the provider's real request ID, display name, capability type, and associated channel. Best for providers that don't open the model list, private gateways, or inference-only Keys.
 
-导入完成后仍需检查每条记录：是否应该给用户可见、是否启用、是聊天/embedding/图片/语音哪一种能力、请求 ID 是否与服务商文档一致，以及成本、上下文和多模态能力是否被正确描述。自动导入不会替代这些运营判断。
+After an import you still need to check every record: whether it should be visible to users, whether it is enabled, which capability it is—chat/embedding/image/audio—whether the request ID matches the provider documentation, and whether cost, context, and multimodal capabilities are described correctly. Automatic import does not replace these operational judgments.
 
-不同渠道可以拥有完全相同的模型 ID。例如渠道 A、渠道 B 都支持 `gpt-5` 时，可以各自创建一条 `gpt-5`。它们不会互相覆盖，因为运行时会同时使用模型记录与关联渠道来决定如何发请求。
+Different channels can have exactly the same model ID. For example, when channel A and channel B both support `gpt-5`, each can have its own `gpt-5` record. They don't overwrite each other, because the runtime uses the model record together with its associated channel to decide how to send the request.
 
-禁用渠道会使其下模型无法用于新请求；禁用或删除模型会影响默认策略、回退策略、用户选择器和正在进行的运营流程。生产变更前先确认是否被默认模型、任务模型、工作区策略、套餐或用户收藏引用。
+Disabling a channel makes its models unavailable for new requests; disabling or deleting a model affects default policies, fallback policies, user pickers, and ongoing operational flows. Before a production change, check whether the model is referenced by the default model, task models, workspace policies, plans, or user favorites.
 
-## 模型类型和能力
+## Model types and capabilities
 
-模型应只承担它实际支持的职责：
+A model should only be assigned roles it actually supports:
 
-| 类型 | 用途 | 配置重点 |
+| Type | Purpose | Configuration focus |
 | --- | --- | --- |
-| 聊天模型 | 普通对话、工具调用、任务与回退 | 请求 ID、上下文、输出限制、视觉与工具能力 |
-| Embedding 模型 | 知识库切块后的向量生成 | 输出维度必须与 `EMBEDDING_DIM` 和索引一致 |
-| 图片模型 | 图像生成或编辑 | 能力、尺寸、成本、文件保留策略 |
-| 语音模型 | 语音识别或相关输入能力 | 上游格式、文件大小、时长和配额 |
+| Chat model | Ordinary conversations, tool calling, tasks, and fallback | Request ID, context, output limit, vision and tool capabilities |
+| Embedding model | Vector generation after knowledge base chunking | Output dimension must match `EMBEDDING_DIM` and the index |
+| Image model | Image generation or editing | Capabilities, sizes, cost, file retention policy |
+| Audio model | Speech recognition or related input capabilities | Upstream format, file size, duration, and quota |
 
-不要把任意聊天模型标记为 embedding 模型，也不要假设同一个服务商的所有模型都支持图像、工具、JSON 或流式响应。错误的能力标记常常表现为“模型能在选择器里出现，但第一条请求就失败”。
+Don't mark an arbitrary chat model as an embedding model, and don't assume every model from the same provider supports images, tools, JSON, or streaming. Wrong capability flags usually show up as "the model appears in the picker, but the very first request fails".
 
-## 模型策略
+## Model policies
 
-在“设置 → 模型策略”中维护系统级选择规则。
+Maintain system-level selection rules in "Settings → Model policies".
 
-- **默认聊天模型**：新对话使用的主模型，也是唯一的首次聊天硬性前置项。
-- **任务模型**：供后台或辅助任务使用。推荐配置，但不影响没有它的普通聊天。
-- **工具路由模型**：可协助自动工具模式判断何时调用工具；留空时使用常规策略。
-- **校验模型**：用于答案审核或验证。它增加成本与时延，应选择稳定且适合校验任务的模型。
-- **回退模型**：主模型首 token 等待超过阈值或不可用时的降级选择。回退模型应独立验证，并且能力、隐私级别和成本符合承诺。
+- **Default chat model**: the main model for new conversations, and the only hard prerequisite for a first chat.
+- **Task model**: used by background or auxiliary tasks. Recommended, but ordinary chat works without it.
+- **Tool-routing model**: can help automatic tool mode decide when to call tools; when left empty, the regular policy applies.
+- **Verification model**: used for answer review or validation. It adds cost and latency; choose a stable model suited to verification tasks.
+- **Fallback model**: the degraded choice when the primary model's first-token wait exceeds the threshold or it is unavailable. The fallback model must be verified independently, and its capabilities, privacy level, and cost must match what you promise.
 
-设置默认模型后立即发起一条普通文本对话；设置回退后，可在受控时段模拟主渠道不可用来验证降级。不要把一个尚未验证的便宜模型直接设为全局回退。
+Right after setting the default model, start one ordinary text conversation; after setting a fallback, simulate an unavailable primary channel during a controlled window to verify the degradation. Never make an unverified cheap model the global fallback outright.
 
-## 排序、标签、可见性与配额
+## Ordering, labels, visibility, and quotas
 
-模型排序和标签影响用户选择器的可发现性，适合将“推荐”“经济”“长上下文”“图像”等运营语义显式化。对于不同用户群、套餐或工作区，需要通过用户组、积分、模型配额和权限策略限制可见模型与可消费额度。
+Model ordering and labels affect discoverability in the user picker, and are a good way to make operational semantics such as "Recommended", "Economy", "Long context", and "Image" explicit. For different user groups, plans, or workspaces, you need user groups, credits, model quotas, and permission policies to restrict which models are visible and how much can be consumed.
 
-建议从“默认只给用户少量已验证模型”开始。随着需求增加，再按成本、上下文、速度或数据处理边界添加分类；不要默认公开每个服务商可导入的模型。
+Start from "users see only a few verified models by default". As demand grows, add categories by cost, context, speed, or data-processing boundaries; don't expose every model a provider allows importing by default.
 
-## 服务商托管工具
+## Provider-hosted tools
 
-Aivory 不会为 OpenAI 或其他渠道的模型自动配置服务商托管工具。所有模型默认不携带这类工具。若服务商确实支持，并且你明确希望用户能够调用，应在对应模型的工具配置中显式添加兼容的工具请求配置。
+Aivory never configures provider-hosted tools automatically for OpenAI or other channels' models. All models ship without such tools by default. If a provider genuinely supports them and you explicitly want users to be able to call them, add a compatible tool request configuration in that model's tool settings.
 
-这项配置应经过单独的安全评估：明确哪些用户可见、哪些数据会被发给服务商、费用如何计入、失败时的降级方式，以及服务商工具与 Aivory 内置搜索、Python、MCP 是否存在能力重复或权限冲突。
+Treat this configuration as its own security assessment: clarify which users see it, what data is sent to the provider, how fees are accounted for, the degradation path on failure, and whether provider tools duplicate or conflict in permission terms with Aivory's built-in web search, Python, and MCP.
 
-## 变更与故障处理
+## Changes and troubleshooting
 
-安全的渠道/模型变更流程：
+A safe channel/model change process:
 
-1. 记录当前默认模型、回退模型、引用该模型的套餐和配额。
-2. 创建或修改渠道，保存新的凭据。
-3. 用目标模型发一条短请求，检查流式响应、工具、图片或 embedding 等实际能力。
-4. 再修改模型启用状态、排序和全局策略。
-5. 观察用量、错误记录和用户反馈，再停用旧渠道或旧模型。
+1. Record the current default model, fallback model, plans referencing the model, and quotas.
+2. Create or modify the channel and save the new credentials.
+3. Send a short request with the target model and check real capabilities such as streaming responses, tools, images, or embeddings.
+4. Only then change model enabled states, ordering, and global policies.
+5. Watch usage, error records, and user feedback before disabling the old channel or old model.
 
-如果“自动导入”失败，先检查服务商是否允许列出模型；如果“有模型但无法聊天”，检查模型类型、模型请求 ID、渠道启用状态和默认策略；如果“同一个 ID 选错上游”，检查模型记录关联的渠道，而不是只看显示名称。
+If "Auto-import" fails, first check whether the provider allows listing models; if "the model exists but chat fails", check the model type, model request ID, channel enabled state, and default policy; if "the wrong upstream is picked for the same ID", check the channel associated with the model record, not just the display name.

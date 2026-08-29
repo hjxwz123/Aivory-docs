@@ -69,7 +69,7 @@ curl -L https://docs.example.com/docs/deployment/environment/
 
 英文是默认语言：首页为 `/`，文档为 `/docs/.../`；中文使用独立静态 URL：首页为 `/zh-Hans/`，文档为 `/zh-Hans/docs/.../`。导航栏的语言菜单会保留当前页面路径，因此用户能在同一篇文档的两个语言版本之间切换；构建输出中的内容不是浏览器端翻译，仍可被搜索引擎索引。
 
-英文 MDX 由本地翻译命令生成到 `i18n/en/docusaurus-plugin-content-docs/current/`，不会修改 `docs/` 下的中文源文件。翻译前设置 OpenAI Responses API 所需变量，并由部署维护者明确选择模型：
+中文文档源文件位于 `i18n/zh-Hans/docusaurus-plugin-content-docs/current/`，`docs/` 根目录存放默认英文内容。新增或修改文档时先改中文源，再由本地翻译命令把英文 MDX 生成到 `docs/`，不会修改中文源文件；两个语言按相同文件路径自动配对，`i18n/zh-Hans` 下的 `current.json` 与 `docusaurus-theme-classic/*.json` 负责侧边栏、导航栏和页脚的中文标签。翻译前设置 OpenAI Responses API 所需变量，并由部署维护者明确选择模型：
 
 ```bash
 export OPENAI_API_KEY='your-api-key'

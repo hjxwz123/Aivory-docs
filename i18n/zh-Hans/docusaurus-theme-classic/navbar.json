@@ -1,0 +1,86 @@
+{
+  "title": {
+    "message": "Aivory",
+    "description": "The title in the navbar"
+  },
+  "logo.alt": {
+    "message": "Aivory",
+    "description": "The alt text of navbar logo"
+  },
+  "item.label.Capabilities": {
+    "message": "能力",
+    "description": "Navbar item with label Capabilities"
+  },
+  "item.label.Multi-model chat": {
+    "message": "多模型对话",
+    "description": "Navbar item with label Multi-model chat"
+  },
+  "item.label.Knowledge and vectors": {
+    "message": "知识库与向量",
+    "description": "Navbar item with label Knowledge and vectors"
+  },
+  "item.label.Tools and sandbox": {
+    "message": "工具与沙盒",
+    "description": "Navbar item with label Tools and sandbox"
+  },
+  "item.label.Deploy": {
+    "message": "部署",
+    "description": "Navbar item with label Deploy"
+  },
+  "item.label.Personal edition": {
+    "message": "个人版",
+    "description": "Navbar item with label Personal edition"
+  },
+  "item.label.Full edition": {
+    "message": "完整版",
+    "description": "Navbar item with label Full edition"
+  },
+  "item.label.ARM64 and x86_64": {
+    "message": "ARM64 与 x86_64",
+    "description": "Navbar item with label ARM64 and x86_64"
+  },
+  "item.label.Models": {
+    "message": "模型",
+    "description": "Navbar item with label Models"
+  },
+  "item.label.Learn": {
+    "message": "学习",
+    "description": "Navbar item with label Learn"
+  },
+  "item.label.Quick start": {
+    "message": "快速开始",
+    "description": "Navbar item with label Quick start"
+  },
+  "item.label.Troubleshooting": {
+    "message": "常见问题",
+    "description": "Navbar item with label Troubleshooting"
+  },
+  "item.label.Changelog": {
+    "message": "更新日志",
+    "description": "Navbar item with label Changelog"
+  },
+  "item.label.Explore": {
+    "message": "探索",
+    "description": "Navbar item with label Explore"
+  },
+  "item.label.Product workspace": {
+    "message": "产品工作区",
+    "description": "Navbar item with label Product workspace"
+  },
+  "item.label.Architecture path": {
+    "message": "架构路径",
+    "description": "Navbar item with label Architecture path"
+  },
+  "item.label.Interactive lab": {
+    "message": "交互实验室",
+    "description": "Navbar item with label Interactive lab"
+  },
+  "item.label.GitHub": {
+    "message": "GitHub",
+    "description": "Navbar item with label GitHub"
+  },
+  "item.label.Get started": {
+    "message": "开始使用",
+    "description": "Navbar item with label Get started"
+  }
+}

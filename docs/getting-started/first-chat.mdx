@@ -1,32 +1,32 @@
 ---
-title: 第一次对话
+title: First Conversation
 sidebar_position: 4
-description: 从启动实例到发送第一条消息。
+description: From starting your instance to sending the first message.
 ---
 
-# 第一次对话
+# First Conversation
 
-实例启动后，完成下面三步就可以开始聊天。
+Once your instance is up, complete the three steps below to start chatting.
 
-## 1. 添加渠道
+## 1. Add a Channel
 
-在管理员后台打开“渠道”，选择服务商类型和接口格式，填写 Base URL 与 API Key。OpenAI 兼容渠道通常使用以 <code>/v1</code> 结尾的地址。
+Open "Channels" in the admin console, choose the provider type and API format, and fill in the Base URL and API Key. OpenAI-compatible channels usually use an address ending in <code>/v1</code>.
 
-渠道只保存上游连接信息，不会自动让所有模型可用。
+A channel stores only upstream connection details; it does not automatically make every model available.
 
-## 2. 添加模型
+## 2. Add Models
 
-进入“模型”，创建一个聊天模型，或者打开渠道的“自动添加渠道支持的模型”功能，从服务商的模型接口导入列表。
+Go to "Models" and create a chat model, or turn on the channel's "auto-add models supported by the channel" option to import the list from the provider's models endpoint.
 
-同一个模型 ID 可以属于不同渠道。例如两个渠道都支持 <code>gpt-5</code> 时，可以分别添加两个模型记录；运行时会根据各自的渠道配置区分它们。
+The same model ID can belong to different channels. For example, if two channels both support <code>gpt-5</code>, you can add two separate model records; at runtime they are distinguished by their respective channel configurations.
 
-## 3. 选择默认模型
+## 3. Select a Default Model
 
-在“设置 → 模型策略”中选择一个已启用的聊天模型作为默认模型，然后返回首页新建对话。
+In "Settings → Model policy", pick one enabled chat model as the default, then return to the home page and start a new conversation.
 
-## 常见的下一步
+## Common Next Steps
 
-- 需要知识库时，添加 embedding 模型并创建知识库。
-- 需要联网回答时，配置搜索服务商。
-- 需要 Python 或文件工具时，确认沙盒地址可访问。
-- 需要团队协作时，创建工作区并设置成员权限。
+- For a knowledge base, add an embedding model and create the knowledge base.
+- For web-grounded answers, configure a search provider.
+- For Python or file tools, confirm the sandbox address is reachable.
+- For team collaboration, create workspaces and set member permissions.

@@ -4,12 +4,12 @@ const sidebars: SidebarsConfig = {
   docsSidebar: [
     {
       type: 'category',
-      label: '开始使用',
+      label: 'Get started',
       items: ['intro', 'getting-started/personal', 'getting-started/full', 'getting-started/first-chat'],
     },
     {
       type: 'category',
-      label: '部署',
+      label: 'Deployment',
       items: [
         'deployment/choose-edition',
         'deployment/environment',
@@ -23,7 +23,7 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: '管理员',
+      label: 'Administration',
       items: [
         'admin/first-run',
         'admin/channels-models',
@@ -36,17 +36,17 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: '用户指南',
+      label: 'User guide',
       items: ['user-guide/conversations-files'],
     },
     {
       type: 'category',
-      label: '故障排查',
+      label: 'Troubleshooting',
       items: ['troubleshooting/common-issues'],
     },
     {
       type: 'category',
-      label: '参考',
+      label: 'Reference',
       items: ['reference/changelog'],
     },
   ],

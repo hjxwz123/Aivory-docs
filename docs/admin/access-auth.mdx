@@ -1,82 +1,82 @@
 ---
-title: 用户、登录与工作区
+title: Users, Sign-in, and Workspaces
 sidebar_position: 5
-description: 配置注册、密码、OAuth、两步验证、用户生命周期和工作区协作权限。
+description: Configure sign-up, passwords, OAuth, two-factor authentication, user lifecycle, and workspace collaboration permissions.
 ---
 
-# 用户、登录与工作区
+# Users, Sign-in, and Workspaces
 
-访问控制决定谁能进入实例、以何种方式登录、能看到哪些工作区与资源，以及管理员在异常时如何处理账号。先完成一个可恢复的管理员登录路径，再收紧注册和登录策略；不要在未验证 OAuth 或管理员密码前关闭唯一可用的入口。
+Access control determines who can enter the instance, how they sign in, which workspaces and resources they can see, and how administrators handle accounts when things go wrong. Establish a recoverable administrator sign-in path first, then tighten sign-up and sign-in policies; never close your only available entry point before verifying OAuth or the administrator password.
 
-## 用户生命周期
+## User lifecycle
 
-“用户”页面支持查看、创建和维护账号，并可进一步查看用户对话、知识库、记忆、登录历史和用量。管理员操作应遵循最小影响原则：
+The "Users" page supports viewing, creating, and maintaining accounts, and lets you drill into a user's conversations, knowledge bases, memories, sign-in history, and usage. Follow the principle of least impact for administrative actions:
 
-- **创建/修改账号**：确认邮箱归属、显示名、角色和初始密码。不要通过聊天、截图或工单发送明文密码。
-- **提升管理员**：只对受信任人员授予。管理员可读取运营数据、修改渠道、导出配置和影响用户访问。
-- **暂停或封禁**：适合安全事件、滥用或离职处理。先记录原因、时间和负责人，并验证用户的已有会话被正确终止。
-- **重置密码或关闭 2FA**：先核验身份，操作后通知账号所有者并记录审计信息。
-- **删除用户**：是影响数据的操作。先确认法律保留、工作区所有权、共享资料和备份策略；不要把删除当作“暂时禁用”。
+- **Create/modify accounts**: Confirm email ownership, display name, role, and initial password. Never send plaintext passwords through chat, screenshots, or tickets.
+- **Promote to administrator**: Grant the role only to trusted personnel. Administrators can read operational data, modify channels, export configuration, and affect user access.
+- **Suspend or ban**: Appropriate for security incidents, abuse, or employee departures. First record the reason, time, and responsible person, and verify that the user's existing sessions are correctly terminated.
+- **Reset passwords or disable 2FA**: Verify identity first, then notify the account owner after the action and record audit information.
+- **Delete users**: A data-affecting action. First confirm legal retention requirements, workspace ownership, shared materials, and the backup strategy; do not treat deletion as "temporary disabling".
 
-定期检查登录历史、异常地区/IP、失败登录和高频注册。不要依赖单一指标判断攻击，而要结合邮箱、行为、用量和用户反馈处理。
+Regularly review sign-in history, unusual regions/IPs, failed sign-ins, and high-frequency sign-ups. Don't rely on a single metric to judge an attack; evaluate email, behavior, usage, and user feedback together.
 
-## 注册与密码登录
+## Sign-up and password sign-in
 
-“注册策略”中可控制是否开放注册、单 IP 注册限制、注册/登录验证码、邮箱验证、允许邮箱域名、密码登录和入口展示方式。
+The "Sign-up policy" section controls whether sign-up is open, per-IP sign-up limits, sign-up/sign-in captcha, email verification, allowed email domains, password sign-in, and how the entry point is presented.
 
-推荐的公共部署基线：
+Recommended baseline for public deployments:
 
-1. 初期关闭开放注册或启用严格的邮箱域名白名单。
-2. 需要开放注册时，启用验证码、邮箱验证和合理的单 IP 限制。
-3. 为管理员保留至少一个已验证的密码登录或身份源登录路径。
-4. 在真实发布前，用非管理员测试账号走完注册、验证、登录、登出、刷新、重置密码和禁用后的行为。
+1. Initially disable open sign-up or enforce a strict email domain allowlist.
+2. When open sign-up is required, enable captcha, email verification, and reasonable per-IP limits.
+3. Keep at least one verified password or identity-provider sign-in path for administrators.
+4. Before a real release, run through sign-up, verification, sign-in, sign-out, token refresh, password reset, and the behavior after being disabled with a non-administrator test account.
 
-密码登录可以与 OAuth 共存。若关闭密码登录、改为身份源选择器或自动跳转，系统会要求存在已启用的登录身份源；自动跳转还需要选择默认身份源。先在另一个浏览器或无痕窗口完成测试，再关闭原入口，防止把所有管理员锁在门外。
+Password sign-in can coexist with OAuth. If you disable password sign-in, switch to an identity-provider selector, or enable auto-redirect, the system requires at least one enabled sign-in identity provider; auto-redirect also requires selecting a default provider. Test in a different browser or an incognito window before closing the original entry point so you don't lock every administrator out.
 
-## OAuth、OIDC 与账号绑定
+## OAuth, OIDC, and account linking
 
-“登录身份源”支持 GitHub、Google、Apple、标准 OAuth2 与 OIDC。每个身份源应使用独立、受控的 Client ID、Client Secret 和精确回调地址。
+The "Sign-in identity providers" section supports GitHub, Google, Apple, standard OAuth2, and OIDC. Each identity provider should use its own controlled Client ID, Client Secret, and exact callback URL.
 
-上线一个身份源的安全步骤：
+Steps to securely roll out an identity provider:
 
-1. 先完成公开 HTTPS 域名和反向代理配置。
-2. 在管理员后台创建身份源，复制后台给出的回调地址到服务商控制台。
-3. 用测试账号发起登录，验证新用户创建、已有账号登录和显式账号绑定。
-4. 检查邮箱匹配、自动创建、初始密码策略和用户组分配是否符合预期。
-5. 再向真实用户开放入口或设置自动跳转。
+1. Complete public HTTPS domain and reverse proxy configuration first.
+2. Create the identity provider in the admin console and copy the callback URL shown there into the provider's console.
+3. Start a sign-in with a test account and verify new-user creation, sign-in for existing accounts, and explicit account linking.
+4. Check that email matching, automatic account creation, the initial password policy, and user group assignment behave as expected.
+5. Only then expose the entry point to real users or enable auto-redirect.
 
-启用自动创建账户前，要评估组织是否允许任何满足身份源条件的用户进入。若使用多个公开域名，配置固定 OAuth 回调域名和允许返回域名，详见[域名、HTTPS 与 OAuth](/docs/deployment/domain-tls-oauth)。
+Before enabling automatic account creation, evaluate whether your organization allows any user who satisfies the identity provider's conditions to enter. If you use multiple public domains, configure a fixed OAuth callback domain and allowed return URLs; see [Domains, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx).
 
-第三方登录出现 `token_exchange_failed` 时，账号绑定正常并不意味着服务器出网也正常。应检查服务器到服务商 token endpoint 的 HTTPS、DNS、代理、防火墙、回调地址与系统时间，而不是反复解绑用户账号。
+When third-party sign-in reports `token_exchange_failed`, a healthy account link does not mean the server's outbound network is healthy. Check the HTTPS path from the server to the provider's token endpoint, DNS, proxies, firewalls, callback URLs, and system time, rather than repeatedly unlinking user accounts.
 
-## 两步验证与会话安全
+## Two-factor authentication and session security
 
-用户可以启用两步验证，管理员可在完成身份核验后协助关闭。两步验证不能替代：
+Users can enable two-factor authentication, and administrators can help disable it after identity verification. Two-factor authentication is not a substitute for:
 
-- 强且唯一的管理员密码；
-- 保护 `JWT_SECRET`、数据库密码和 OAuth Client Secret；
-- HTTPS、正确 Cookie/反向代理配置和及时更新；
-- 对被盗设备或离职人员及时封禁和会话撤销。
+- strong, unique administrator passwords;
+- protecting `JWT_SECRET`, database passwords, and OAuth Client Secrets;
+- HTTPS, correct cookie/reverse-proxy configuration, and timely updates;
+- prompt banning and session revocation for stolen devices or departed staff.
 
-会话使用短期访问令牌与长期刷新令牌。降低访问令牌时长能缩短令牌泄露窗口；刷新令牌生命周期则应在用户便利和设备风险之间平衡。对多设备控制的完整策略应同时使用服务端会话记录、设备绑定、刷新令牌轮换、异常刷新检测、密码修改后的会话撤销和管理员封禁，而不是只缩短一个 TTL。
+Sessions use short-lived access tokens and long-lived refresh tokens. Shortening the access-token lifetime reduces the window in which a leaked token is useful; the refresh-token lifetime should balance user convenience against device risk. A complete multi-device policy should combine server-side session records, device binding, refresh-token rotation, anomalous refresh detection, session revocation after password changes, and administrator bans, rather than just shortening one TTL.
 
-## 用户组、套餐与工作区
+## User groups, plans, and workspaces
 
-用户组用于把一组账号映射到模型可见性、额度、积分、套餐或运营规则。建议为管理员、内部员工、试用、付费和受限用户定义清晰、少量的组，不要创建难以追踪的例外组合。
+User groups map a set of accounts to model visibility, quotas, credits, plans, or operational rules. Define a small number of clear groups—administrators, internal staff, trial, paid, and restricted users—instead of exception combinations that are hard to track.
 
-工作区用于团队协作。创建和成员管理时确认：
+Workspaces are for team collaboration. When creating workspaces and managing members, confirm:
 
-- 谁是工作区所有者，离职或删除用户后如何转移归属。
-- 成员能否创建、编辑、删除会话、项目、知识库和文件。
-- 邀请链接是否有合理有效期、是否允许外部邮箱和是否应在使用后撤销。
-- 将不同客户、法律实体或保密级别的数据放在独立工作区，不依赖用户口头约定隔离。
+- who the workspace owner is and how ownership transfers after a member leaves or is deleted.
+- whether members can create, edit, and delete conversations, projects, knowledge bases, and files.
+- whether invite links have a reasonable validity period, allow external email addresses, and should be revoked after use.
+- keeping data for different customers, legal entities, or confidentiality levels in separate workspaces; don't rely on verbal agreements for isolation.
 
-变更角色、用户组或工作区成员后，用一个低权限测试账号验证访问确实收紧或开放。不要只通过管理员视图判断权限。
+After changing roles, user groups, or workspace membership, verify with a low-privilege test account that access is actually tightened or opened. Don't judge permissions from the administrator view alone.
 
-## 安全运营检查表
+## Security operations checklist
 
-- 至少保留两个独立、可恢复的管理员登录路径，并妥善保存恢复流程。
-- 定期轮换 OAuth、SMTP、模型渠道和存储密钥；轮换后做真实登录与发送测试。
-- 开启注册或自动创建前，明确允许的用户范围、邮件域名和滥用处理机制。
-- 将用户、工作区、登录历史和敏感管理员操作纳入定期审阅。
-- 删除、封禁、导出或恢复数据前，记录操作者、原因、范围和回滚方案。
+- Keep at least two independent, recoverable administrator sign-in paths, and store the recovery procedure safely.
+- Rotate OAuth, SMTP, model channel, and storage keys regularly; after rotation, run real sign-in and send tests.
+- Before enabling open sign-up or automatic account creation, define the allowed user scope, email domains, and abuse-handling mechanism.
+- Include users, workspaces, sign-in history, and sensitive administrator actions in periodic reviews.
+- Before deleting, banning, exporting, or restoring data, record the operator, reason, scope, and rollback plan.

@@ -1,437 +1,437 @@
 ---
-title: 高级运行时变量
+title: Advanced Runtime Variables
 sidebar_position: 2
-description: Aivory 服务端运行时调优变量的完整参考，不含代码位置。
+description: Complete reference for Aivory server-side runtime tuning variables, without code locations.
 ---
 
-# 高级运行时变量
+# Advanced Runtime Variables
 
-本页列出服务端的高级调优变量。它们都不是首次部署的必填项；除非你正在处理明确的性能、容量、限流或兼容性问题，否则应保留默认值。基础部署、认证、存储、向量、集成和 Compose 变量见[环境变量总览](/docs/deployment/environment)。沙盒与前端构建变量分别见[沙盒变量](/docs/deployment/environment-sandbox)和[前端构建变量](/docs/deployment/environment-frontend)。
+This page lists the advanced server-side tuning variables. None of them are required for a first-time deployment; keep the defaults unless you are dealing with a specific performance, capacity, rate-limiting, or compatibility problem. For basic deployment, authentication, storage, vector, integration, and Compose variables, see [Environment Variable Overview](./environment.mdx). Sandbox and frontend build variables are covered in [Sandbox Variables](./environment-sandbox.mdx) and [Frontend Build Variables](./environment-frontend.mdx).
 
-除 `AIVORY_TOOLS_WEB_FETCH_JINA_FALLBACK` 和 `AIVORY_TOOLS_WEB_FETCH_JINA_BASE` 外，所有 `AIVORY_*` 变量都在应用进程启动时读取，修改后需要重启 `app`。这两个网页抓取回退变量会在每次抓取时读取，修改后从下一次抓取开始生效。时长值使用 `30s`、`5m`、`2h` 等格式；字节上限填写十进制字节数，例如 `20971520` 表示 20 MiB；整数、浮点数和布尔值必须使用有效格式，非法值会回退为默认值。变量名中的 `_2`、`_3` 等是稳定兼容名称，并不表示可任意自行编号。
+Except for `AIVORY_TOOLS_WEB_FETCH_JINA_FALLBACK` and `AIVORY_TOOLS_WEB_FETCH_JINA_BASE`, all `AIVORY_*` variables are read when the application process starts, and changes require a restart of `app`. These two web-fetch fallback variables are read on every fetch, and changes take effect starting with the next fetch. Duration values use formats like `30s`, `5m`, and `2h`; byte caps are given as decimal byte counts, e.g. `20971520` means 20 MiB; integers, floats, and booleans must use valid formats, and invalid values fall back to the default. Suffixes such as `_2` and `_3` in variable names are stable compatibility names and do not imply that you can number them freely.
 
-> 调优前先记录当前值、压测或问题证据和回滚方案。提高并发、请求体、超时或工具上限会同时增加成本、内存、上游压力和滥用面。
+> Before tuning, record the current values, the stress-test results or evidence of the problem, and a rollback plan. Raising concurrency, request body sizes, timeouts, or tool limits simultaneously increases cost, memory usage, upstream pressure, and the abuse surface.
 
-## 1. LLM 对话 / 编排 / 内部模型调用
+## 1. LLM Conversation / Orchestration / Internal Model Calls
 
-主对话流、工具循环、TTFT 看门狗，以及压缩 / 记忆 / 审核 / 校验 / 深度研究 / 文档生成等内部模型调用。
+The main conversation flow, tool loops, the TTFT watchdog, and internal model calls for compaction / memory / moderation / validation / deep research / document generation.
 
-| 环境变量 | 类型 | 默认值 | 说明 |
+| Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `AIVORY_LLM_APPLY_ANTHROPIC_THINKING_SETTINGS` | `int` | `2048` | 在抬高 Anthropic max_tokens 时，于扩展思考 budget_tokens 之上追加的 token 余量，使输出能容纳思考加回复。 |
-| `AIVORY_LLM_MAX_ITER` | `int` | `20` | Anthropic 流式 Stream 循环中原生工具调用轮次（Messages API 调用次数）的硬性上限。 |
-| `AIVORY_LLM_MAX_TOK` | `int` | `64000` | 流式工具循环中每次 Anthropic Messages 请求发送的默认 max_tokens（除非请求自身覆盖）。 |
-| `AIVORY_LLM_MAX_TOK_2` | `int` | `64000` | 提示词工具模式（promptRunOnce）下单次 Anthropic 调用的默认 max_tokens（除非请求覆盖）。 |
-| `AIVORY_LLM_INFLIGHT_GRACE` | `duration` | `2h` | status=streaming 的助手消息行在被视为崩溃残留之前免于被摘要处理的宽限时长；低于 `AIVORY_API_MAX_GEN_DURATION` 加最终落库余量的值会被自动抬高。 |
-| `AIVORY_LLM_T` | `int` | `4` | 在压缩 token 估算中为每条消息追加的结构性 token 开销（角色标记、外框）。 |
-| `AIVORY_LLM_MESSAGE_TOKEN_MEMO_CACHE_BOUND` | `int` | `100000` | 每消息 token 估算记忆缓存 map 在被原地重置以限制内存前允许的最大条目数。 |
-| `AIVORY_LLM_SUMMARY_TOKENS_CLAMP_FLOOR` | `int` | `256` | 管理端 summary_max_tokens 设置的下限；配置值小于该下限时重置为默认摘要预算。 |
-| `AIVORY_LLM_SUMMARY_TARGET_MIN_TOKENS` | `int` | `384` | 在管理员配置的硬输出上限允许时，新压缩摘要请求的最小细节目标。 |
-| `AIVORY_LLM_SUMMARY_TARGET_PER_ROUND_TOKENS` | `int` | `96` | 每个用户轮次对自适应摘要目标的 token 贡献，避免大量简短决策被压成泛泛一段。 |
-| `AIVORY_LLM_SUMMARY_TARGET_HEADROOM_NUM` | `int` | `5` | 自适应摘要目标上方输出余量比例的分子（默认 5/4）。 |
-| `AIVORY_LLM_SUMMARY_TARGET_HEADROOM_DEN` | `int` | `4` | 自适应摘要目标上方输出余量比例的分母（默认 5/4）。 |
-| `AIVORY_LLM_SUMMARY_SHORT_RETRY_THRESHOLD_NUM` | `int` | `1` | 摘要草稿被判定为明显过短并触发重试的长度比例分子（默认低于目标的 1/4）。 |
-| `AIVORY_LLM_SUMMARY_SHORT_RETRY_THRESHOLD_DEN` | `int` | `4` | 摘要明显过短重试阈值的分母（默认目标的 1/4）。 |
-| `AIVORY_LLM_SUMMARY_SHORT_RETRY_SOURCE_FACTOR` | `int` | `2` | 短摘要重试前要求的最小“源内容/目标”倍数，避免对本就稀疏的内容强行填充。 |
-| `AIVORY_LLM_BIG_TOKEN_OVERFLOW_NUM` | `int` | `5` | 本轮触发内联摘要的 token 触发阈值倍数（num/den，默认 5/4 = 1.25 倍）的分子。 |
-| `AIVORY_LLM_BIG_TOKEN_OVERFLOW_DEN` | `int` | `4` | 本轮触发内联摘要的 token 触发阈值倍数（num/den，默认 5/4 = 1.25 倍）的分母。 |
-| `AIVORY_LLM_INLINE_COMPACTION_BACKLOG_FACTOR` | `int` | `3` | 未摘要尾部长度相对 keepRounds*2 的倍数，超过则本轮强制内联（而非异步）压缩；规划器还会在异步高水位之上额外保留一个批次的缓冲。 |
-| `AIVORY_LLM_ATTEMPT` | `int` | `4` | 向会话 summary_blocks 追加新摘要块时的最大比较并交换（CAS）重试次数。 |
-| `AIVORY_LLM_TOOL_OUTPUT_TOKENS` | `int` | `2048` | 当无法从提供商 Raw 恢复完整且可识别的原生工具结果时，规范化内部工具结果块使用的单项 token 上限。已识别并恢复的完整结果不再在此截断，而由无损压缩 map-reduce 分片限制每次模型请求大小；界面展示的短预览保持不变。 |
-| `AIVORY_LLM_TOOL_INPUT_TOKENS` | `int` | `2048` | 将工具调用参数渲染到压缩请求时，每个工具调用的输入 token 上限。 |
-| `AIVORY_LLM_COMPACTION_METADATA_TOKENS` | `int` | `512` | 将附件、引用、文档和产物元数据渲染到压缩请求时，每项参考内容的 token 上限。 |
-| `AIVORY_LLM_COMPACTION_MEDIA_INLINE_BYTES` | `int64` | `20971520` | 为视觉模型恢复压缩图片时的总字节预算；所有图片引用都会持久化，未恢复的引用会以元数据形式标明。 |
-| `AIVORY_LLM_CHUNK_SIZE` | `int` | `400` | 重新校验已摘要消息是否仍存在时每条 SQL IN(...) 查询的消息 ID 批大小（用于规避驱动占位符上限分块）。 |
-| `AIVORY_LLM_COMPACTION_LEASE_TTL` | `duration` | `2h` | 数据库支持的每会话压缩租约有效期，防止内联、异步和手动摘要并发执行；即使多副本未配置 Redis 也会互斥。低于 `AIVORY_API_MAX_GEN_DURATION` 加最终落库余量的值会被自动抬高。 |
-| `AIVORY_LLM_DR_MAX_ROUNDS` | `int` | `4` | 深度研究引擎运行的 搜索再验证 轮次数量的硬性上限。 |
-| `AIVORY_LLM_DR_QUERIES_PER_ROUND` | `int` | `6` | 每个深度研究轮次派发的最大搜索查询数。 |
-| `AIVORY_LLM_DR_FETCH_PER_ROUND` | `int` | `5` | 每个深度研究轮次挑选并读取的最大新来源候选数。 |
-| `AIVORY_LLM_DR_MIN_DEEP_READS` | `int` | `5` | 深度研究在允许收尾前必须达到的最小深读来源数（即便覆盖缺口已看似充足）。 |
-| `AIVORY_LLM_DR_SEARCH_TOP_K` | `int` | `8` | 每次深度研究搜索调用请求的结果数（top_k）。 |
-| `AIVORY_LLM_DR_WALL_CLOCK` | `duration` | `5m` | 限定整个深度研究引擎运行的总墙钟超时。 |
-| `AIVORY_LLM_DR_CALL_TIMEOUT` | `duration` | `30s` | 单次深度研究搜索或抓取请求的每调用超时。 |
-| `AIVORY_LLM_DEEP_RESEARCH_VALIDATE_TIMEOUT` | `duration` | `75s` | 限定深度研究在撰写前审查薄弱/单来源论断的 validate 阶段的超时。 |
-| `AIVORY_LLM_SCORE_A` | `float` | `9` | 为 URL 信誉等级为 A 的候选来源所加的排序分（信誉在排序中占主导）。 |
-| `AIVORY_LLM_SCORE_B` | `float` | `6` | 为 URL 信誉等级为 B 的候选来源所加的排序分。 |
-| `AIVORY_LLM_SCORE_C` | `float` | `3` | 为 URL 信誉等级为 C 的候选来源所加的排序分。 |
-| `AIVORY_LLM_SCORE_KW` | `float` | `1` | 候选来源标题或摘要中每命中一个问题关键词（长度大于 3）所加的排序分。 |
-| `AIVORY_LLM_SCORE_FRESH_DOMAIN` | `float` | `2` | 为来自本次研究尚未见过域名的候选来源所加的排序加分。 |
-| `AIVORY_LLM_MAX_ITER_4` | `int` | `20` | Gemini 流式 Stream 循环中原生工具调用轮次（generateContent 调用次数）的硬性上限。 |
-| `AIVORY_LLM_GEMINI_MAX_TOK` | `int` | `64000` | Gemini 流式循环中每次请求 generationConfig.maxOutputTokens 的默认值（除非请求覆盖）。 |
-| `AIVORY_LLM_GEMINI_MAX_TOK_2` | `int` | `64000` | Gemini 提示词工具模式调用中 generationConfig.maxOutputTokens 的默认值（除非请求覆盖）。 |
-| `AIVORY_LLM_CONF` | `float` | `0.7` | 当提取器返回的置信度不在 (0,1] 范围内时，为抽取记忆赋予的回退置信度。 |
-| `AIVORY_STORE_M_CONFIDENCE` | `float` | `0.8` | 仅当传给 CreateMemory 的置信度恰好为 0 时写入的回退值；它是默认值，不是置信度过滤或检索阈值。 |
-| `AIVORY_STORE_LIST_MEMORIES_ACTIVE` | `int` | `20` | 注入系统提示词时返回的 ACTIVE 与 QUERY_DEPENDENT 记忆合计上限，按最近更新时间倒序选择。 |
-| `AIVORY_LLM_OFFICIAL_TOOL_SPEC` | `string` | `"medium"` | 仅在把旧版 OpenAI Responses `"web_search"` 字符串配置转换为当前对象格式时用作 `search_context_size`；新模型不再默认配置任何服务商托管工具，管理员显式填写的请求 JSON 会原样保存。 |
-| `AIVORY_LLM_MAX_ITER_2` | `int` | `20` | OpenAI streamChat（Chat Completions）循环中原生工具调用轮次的硬性上限。 |
-| `AIVORY_LLM_MAX_ITER_3` | `int` | `20` | OpenAI streamResponses（Responses API）循环中原生工具调用轮次的硬性上限。 |
-| `AIVORY_LLM_INLINE_QUOTE_SOURCE_INJECTION_CAP` | `int` | `8000` | 内联引用子对话中，随高亮摘录一并注入的来源消息文本在截断前的最大字符（rune）数。 |
-| `AIVORY_LLM_ATTACHMENT_IMAGE_INLINE_BYTES` | `int64` | `20971520` | 单个已验证图片附件在以 base64 写入渠道请求前的独立硬上限；读取过程同样受限，旧的错误大小元数据无法绕过。 |
-| `AIVORY_LLM_TOOL_ROUTE_TIMEOUT` | `duration` | `5s` | 自动工具模式等待专用路由模型的端到端时延预算；超时后按 fail-open 规则开启工具。 |
-| `AIVORY_LLM_TOOL_ROUTE_SCHEMA_TOKEN_THRESHOLD` | `int` | `512` | 工具声明不超过此估算 token 数时，自动模式跳过额外路由请求，直接交给主模型原生判断。设为 0 可让所有模糊请求都经过分类。 |
-| `AIVORY_LLM_SANDBOX_EXEC_TIMEOUT_CLAMP_RANGE_MAX` | `int` | `600` | 为 python_execute 调用上下文计时时，管理员配置的 sandbox_exec_timeout_sec 被钳制的上限（秒）。 |
-| `AIVORY_LLM_SANDBOX_EXEC_TIMEOUT_CLAMP_RANGE_MIN` | `int` | `10` | 为 python_execute 调用上下文计时时，管理员配置的 sandbox_exec_timeout_sec 被钳制的下限（秒）。 |
-| `AIVORY_LLM_SANDBOX_EXEC_CTX_SAFETY_MARGIN` | `duration` | `150s` | 为 python_execute 上下文计时时，在钳制后的沙箱执行超时之上额外增加的余量，使上下文比沙箱 HTTP 客户端更晚超时。 |
-| `AIVORY_LLM_PER_TURN_TOOL_LIMITS_WEB_SEARCH` | `int` | `16` | 普通模式下每条消息允许的 `aivory_web_search` 调用次数上限；超出即令该调用失败。 |
-| `AIVORY_LLM_PER_TURN_TOOL_LIMITS_WEB_FETCH` | `int` | `12` | 普通模式下每条消息允许的 web_fetch 调用次数上限；超出即令该调用失败。 |
-| `AIVORY_LLM_PER_TURN_TOOL_LIMITS_IMAGE_GENERATE` | `int` | `8` | 普通模式下每条消息允许的 image_generate 调用次数上限；超出即令该调用失败。 |
-| `AIVORY_LLM_PER_TURN_TOOL_LIMITS_PYTHON_EXECUTE` | `int` | `16` | 普通模式下每条消息允许的 python_execute 沙箱执行次数上限；超出即令该调用失败。 |
-| `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_WEB_SEARCH` | `int` | `40` | 深度研究运行时每条消息允许的 `aivory_web_search` 调用次数上限；超出即令该调用失败。 |
-| `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_WEB_FETCH` | `int` | `25` | 深度研究运行时每条消息允许的 web_fetch 调用次数上限；超出即令该调用失败。 |
-| `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_IMAGE_GENERATE` | `int` | `4` | 深度研究运行时每条消息允许的 image_generate 调用次数上限；超出即令该调用失败。 |
-| `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_PYTHON_EXECUTE` | `int` | `8` | 深度研究运行时每条消息允许的 python_execute 沙箱执行次数上限；超出即令该调用失败。 |
-| `AIVORY_LLM_MAX_TOOL_CALLS_PER_TURN` | `int` | `48` | 普通模式下每条消息跨所有工具的工具调用总数全局上限，叠加在各工具单独上限之上。 |
-| `AIVORY_LLM_MAX_TOOL_CALLS_PER_TURN_DEEP` | `int` | `150` | 深度研究运行时每条消息跨所有工具的工具调用总数全局上限。 |
-| `AIVORY_LLM_MAX_TOOL_TIME_PER_TURN` | `duration` | `15m` | 普通消息中所有工具执行的累计墙钟时间预算。耗尽后移除全部工具，并仅允许模型执行一次无工具收尾请求。设为非正值可禁用该时间预算。 |
-| `AIVORY_LLM_MAX_TOOL_TIME_PER_TURN_DEEP` | `duration` | `4m` | 深度研究的累计工具执行时间预算，在五分钟研究窗口内为一次无工具报告写作请求预留时间。设为非正值可禁用该时间预算。 |
-| `AIVORY_LLM_MAX_TOOL_TIME_PER_TURN_FAST` | `duration` | `3m` | 快速模式的累计工具执行时间预算，耗尽后仅执行一次无工具收尾请求。设为非正值可禁用该时间预算。 |
-| `AIVORY_LLM_TOOL_TIMEOUTS` | `duration` | `10s` | 单次 `aivory_web_search` 工具调用的每次调用超时上限。 |
-| `AIVORY_LLM_TOOL_TIMEOUTS_2` | `duration` | `30s` | 单次 web_fetch 工具调用的每次调用超时上限。 |
-| `AIVORY_LLM_TOOL_TIMEOUTS_3` | `duration` | `600s` | 单次 image_generate 工具调用的每次调用超时上限（为迟缓的第三方图像网关留出较宽窗口）。 |
-| `AIVORY_LLM_TOOL_TIMEOUT_DEFAULT` | `duration` | `100s` | 未在按类型配置的 toolTimeouts 映射中列出的工具所用的每次调用回退超时。 |
-| `AIVORY_LLM_PROMPT_MAX_ITER` | `int` | `10` | 提示模式工具循环在本轮结束前的最大迭代次数（每次迭代 = 一次模型生成加可选的工具调用）。 |
-| `AIVORY_LLM_PROMPT_MAX_RETRY` | `int` | `2` | 提示模式下重发格式错误的 `<tool_call>` JSON 或重试失败工具执行的最大重试次数。 |
-| `AIVORY_LLM_PROVIDER_REQUEST_BODY_MAX_BYTES` | `int` | `131072` | 用于诊断的已捕获供应商请求体/请求头 JSON 快照被钳制到的最大长度。 |
-| `AIVORY_LLM_PROVIDER_REQUEST_VALUE_MAX_BYTES` | `int` | `8192` | 每个单独捕获的供应商请求值（URL、请求头值）被钳制到的最大长度。 |
-| `AIVORY_LLM_IMAGE_DOCUMENT_FLAT_TOKEN_ALLOWANCE` | `int` | `1024` | 估算请求 token 时为每个 image/document 块计入的固定 token 数，因为 base64 无法按文本分词。 |
-| `AIVORY_LLM_OUTPUT_RESERVE` | `int` | `2000` | 计算预检积分可负担性估算时，在估算输入 token 之上加入的固定输出 token 预留量。 |
-| `AIVORY_LLM_MAX_CONCURRENT_TOOLS` | `int` | `4` | 单轮内并发执行的工具数上限（限制并发执行器扇出的信号量容量）。 |
-| `AIVORY_LLM_VCTX` | `duration` | `45s` | 限制答案生成后校验/审计 LLM 调用的超时，避免迟缓的跨供应商审计拖住本轮。 |
+| `AIVORY_LLM_APPLY_ANTHROPIC_THINKING_SETTINGS` | `int` | `2048` | Token margin added on top of the extended-thinking budget_tokens when raising the Anthropic max_tokens, so the output can fit thinking plus the reply. |
+| `AIVORY_LLM_MAX_ITER` | `int` | `20` | Hard cap on native tool-call rounds (Messages API calls) in the Anthropic streaming loop. |
+| `AIVORY_LLM_MAX_TOK` | `int` | `64000` | Default max_tokens sent with each Anthropic Messages request in the streaming tool loop (unless the request itself overrides it). |
+| `AIVORY_LLM_MAX_TOK_2` | `int` | `64000` | Default max_tokens for a single Anthropic call in prompt-tool mode (promptRunOnce) (unless the request overrides it). |
+| `AIVORY_LLM_INFLIGHT_GRACE` | `duration` | `2h` | Grace period during which assistant message rows with status=streaming are exempt from summarization before being treated as crash leftovers; values below `AIVORY_API_MAX_GEN_DURATION` plus the final-persistence margin are automatically raised. |
+| `AIVORY_LLM_T` | `int` | `4` | Structural token overhead added per message in compaction token estimation (role markers, framing). |
+| `AIVORY_LLM_MESSAGE_TOKEN_MEMO_CACHE_BOUND` | `int` | `100000` | Maximum entries allowed in the per-message token estimation memo cache map before it is reset in place to bound memory. |
+| `AIVORY_LLM_SUMMARY_TOKENS_CLAMP_FLOOR` | `int` | `256` | Lower bound for the admin-side summary_max_tokens setting; configured values below this floor reset to the default summary budget. |
+| `AIVORY_LLM_SUMMARY_TARGET_MIN_TOKENS` | `int` | `384` | Minimum detail target for new compaction summary requests when allowed by the administrator-configured hard output cap. |
+| `AIVORY_LLM_SUMMARY_TARGET_PER_ROUND_TOKENS` | `int` | `96` | Per-user-turn token contribution to the adaptive summary target, preventing many brief decisions from being collapsed into one generic paragraph. |
+| `AIVORY_LLM_SUMMARY_TARGET_HEADROOM_NUM` | `int` | `5` | Numerator of the output headroom ratio above the adaptive summary target (default 5/4). |
+| `AIVORY_LLM_SUMMARY_TARGET_HEADROOM_DEN` | `int` | `4` | Denominator of the output headroom ratio above the adaptive summary target (default 5/4). |
+| `AIVORY_LLM_SUMMARY_SHORT_RETRY_THRESHOLD_NUM` | `int` | `1` | Numerator of the length ratio below which a summary draft is judged clearly too short and a retry is triggered (default below 1/4 of the target). |
+| `AIVORY_LLM_SUMMARY_SHORT_RETRY_THRESHOLD_DEN` | `int` | `4` | Denominator of the clearly-too-short summary retry threshold (default 1/4 of the target). |
+| `AIVORY_LLM_SUMMARY_SHORT_RETRY_SOURCE_FACTOR` | `int` | `2` | Minimum required "source content / target" multiple before retrying a short summary, avoiding forced padding of content that is inherently sparse. |
+| `AIVORY_LLM_BIG_TOKEN_OVERFLOW_NUM` | `int` | `5` | Numerator of the token trigger-threshold multiple (num/den, default 5/4 = 1.25x) that triggers inline summarization within the current round. |
+| `AIVORY_LLM_BIG_TOKEN_OVERFLOW_DEN` | `int` | `4` | Denominator of the token trigger-threshold multiple (num/den, default 5/4 = 1.25x) that triggers inline summarization within the current round. |
+| `AIVORY_LLM_INLINE_COMPACTION_BACKLOG_FACTOR` | `int` | `3` | Multiple of the un-summarized tail length relative to keepRounds*2; above it the current round forces inline (rather than asynchronous) compaction. The planner additionally keeps one batch of buffer above the asynchronous high-water mark. |
+| `AIVORY_LLM_ATTEMPT` | `int` | `4` | Maximum compare-and-swap (CAS) retry attempts when appending a new summary block to the conversation's summary_blocks. |
+| `AIVORY_LLM_TOOL_OUTPUT_TOKENS` | `int` | `2048` | Per-item token cap used when normalizing internal tool result blocks, if a complete and recognizable native tool result cannot be recovered from the provider Raw output. Fully recovered, recognized results are no longer truncated here; lossless map-reduce chunking bounds each model request size instead. The short preview shown in the UI is unchanged. |
+| `AIVORY_LLM_TOOL_INPUT_TOKENS` | `int` | `2048` | Per-tool-call input token cap when rendering tool-call arguments into compaction requests. |
+| `AIVORY_LLM_COMPACTION_METADATA_TOKENS` | `int` | `512` | Token cap per referenced item when rendering attachment, citation, document, and artifact metadata into compaction requests. |
+| `AIVORY_LLM_COMPACTION_MEDIA_INLINE_BYTES` | `int64` | `20971520` | Total byte budget when recovering compaction images for vision models; all image references are persisted, and references that are not recovered are marked in metadata form. |
+| `AIVORY_LLM_CHUNK_SIZE` | `int` | `400` | Message-ID batch size per SQL IN(...) query when re-validating that summarized messages still exist (chunked to stay under driver placeholder limits). |
+| `AIVORY_LLM_COMPACTION_LEASE_TTL` | `duration` | `2h` | Lifetime of the database-backed per-session compaction lease, preventing inline, asynchronous, and manual summarization from running concurrently; provides mutual exclusion across replicas even without Redis configured. Values below `AIVORY_API_MAX_GEN_DURATION` plus the final-persistence margin are automatically raised. |
+| `AIVORY_LLM_DR_MAX_ROUNDS` | `int` | `4` | Hard cap on the number of search-then-verify rounds in a deep research engine run. |
+| `AIVORY_LLM_DR_QUERIES_PER_ROUND` | `int` | `6` | Maximum number of search queries dispatched per deep research round. |
+| `AIVORY_LLM_DR_FETCH_PER_ROUND` | `int` | `5` | Maximum number of new source candidates picked and read per deep research round. |
+| `AIVORY_LLM_DR_MIN_DEEP_READS` | `int` | `5` | Minimum number of deeply read sources deep research must reach before it is allowed to wrap up (even if coverage gaps already look sufficient). |
+| `AIVORY_LLM_DR_SEARCH_TOP_K` | `int` | `8` | Number of results requested per deep research search call (top_k). |
+| `AIVORY_LLM_DR_WALL_CLOCK` | `duration` | `5m` | Total wall-clock timeout bounding an entire deep research engine run. |
+| `AIVORY_LLM_DR_CALL_TIMEOUT` | `duration` | `30s` | Per-call timeout for a single deep research search or fetch request. |
+| `AIVORY_LLM_DEEP_RESEARCH_VALIDATE_TIMEOUT` | `duration` | `75s` | Timeout for the deep research validate phase, which reviews weak / single-source claims before writing. |
+| `AIVORY_LLM_SCORE_A` | `float` | `9` | Ranking score added for candidate sources whose URL trust level is A (trust dominates ranking). |
+| `AIVORY_LLM_SCORE_B` | `float` | `6` | Ranking score added for candidate sources whose URL trust level is B. |
+| `AIVORY_LLM_SCORE_C` | `float` | `3` | Ranking score added for candidate sources whose URL trust level is C. |
+| `AIVORY_LLM_SCORE_KW` | `float` | `1` | Ranking score added for each question keyword hit (length > 3) in a candidate source's title or snippet. |
+| `AIVORY_LLM_SCORE_FRESH_DOMAIN` | `float` | `2` | Ranking bonus added for candidate sources from domains not yet seen in this research run. |
+| `AIVORY_LLM_MAX_ITER_4` | `int` | `20` | Hard cap on native tool-call rounds (generateContent calls) in the Gemini streaming loop. |
+| `AIVORY_LLM_GEMINI_MAX_TOK` | `int` | `64000` | Default generationConfig.maxOutputTokens per request in the Gemini streaming loop (unless the request overrides it). |
+| `AIVORY_LLM_GEMINI_MAX_TOK_2` | `int` | `64000` | Default generationConfig.maxOutputTokens in Gemini prompt-tool mode calls (unless the request overrides it). |
+| `AIVORY_LLM_CONF` | `float` | `0.7` | Fallback confidence assigned to extracted memories when the extractor returns a confidence outside (0,1]. |
+| `AIVORY_STORE_M_CONFIDENCE` | `float` | `0.8` | Fallback value written only when the confidence passed to CreateMemory is exactly 0; it is a default, not a confidence filter or retrieval threshold. |
+| `AIVORY_STORE_LIST_MEMORIES_ACTIVE` | `int` | `20` | Combined cap on ACTIVE and QUERY_DEPENDENT memories returned when injecting into the system prompt, selected by most recently updated first. |
+| `AIVORY_LLM_OFFICIAL_TOOL_SPEC` | `string` | `"medium"` | Used only as the `search_context_size` when converting legacy OpenAI Responses `"web_search"` string configurations to the current object format; new models no longer default to any provider-hosted tools, and request JSON explicitly filled in by administrators is stored verbatim. |
+| `AIVORY_LLM_MAX_ITER_2` | `int` | `20` | Hard cap on native tool-call rounds in the OpenAI streamChat (Chat Completions) loop. |
+| `AIVORY_LLM_MAX_ITER_3` | `int` | `20` | Hard cap on native tool-call rounds in the OpenAI streamResponses (Responses API) loop. |
+| `AIVORY_LLM_INLINE_QUOTE_SOURCE_INJECTION_CAP` | `int` | `8000` | Maximum characters (runes) of source message text injected alongside the highlighted excerpt in an inline-quote sub-conversation, before truncation. |
+| `AIVORY_LLM_ATTACHMENT_IMAGE_INLINE_BYTES` | `int64` | `20971520` | Standalone hard cap for a single validated image attachment before it is base64-encoded into a channel request; reads are bounded the same way, so stale incorrect size metadata cannot bypass the limit. |
+| `AIVORY_LLM_TOOL_ROUTE_TIMEOUT` | `duration` | `5s` | End-to-end latency budget for waiting on the dedicated routing model in automatic tool mode; on timeout, tools are enabled per the fail-open rule. |
+| `AIVORY_LLM_TOOL_ROUTE_SCHEMA_TOKEN_THRESHOLD` | `int` | `512` | When tool declarations estimate at or below this many tokens, automatic mode skips the extra routing request and lets the main model decide natively. Set to 0 to route every ambiguous request through classification. |
+| `AIVORY_LLM_SANDBOX_EXEC_TIMEOUT_CLAMP_RANGE_MAX` | `int` | `600` | Upper bound (seconds) to which the administrator-configured sandbox_exec_timeout_sec is clamped when timing the python_execute call context. |
+| `AIVORY_LLM_SANDBOX_EXEC_TIMEOUT_CLAMP_RANGE_MIN` | `int` | `10` | Lower bound (seconds) to which the administrator-configured sandbox_exec_timeout_sec is clamped when timing the python_execute call context. |
+| `AIVORY_LLM_SANDBOX_EXEC_CTX_SAFETY_MARGIN` | `duration` | `150s` | Extra margin added on top of the clamped sandbox exec timeout when timing the python_execute context, so the context times out later than the sandbox HTTP client. |
+| `AIVORY_LLM_PER_TURN_TOOL_LIMITS_WEB_SEARCH` | `int` | `16` | Per-message cap on `aivory_web_search` calls allowed in normal mode; calls beyond it fail. |
+| `AIVORY_LLM_PER_TURN_TOOL_LIMITS_WEB_FETCH` | `int` | `12` | Per-message cap on web_fetch calls allowed in normal mode; calls beyond it fail. |
+| `AIVORY_LLM_PER_TURN_TOOL_LIMITS_IMAGE_GENERATE` | `int` | `8` | Per-message cap on image_generate calls allowed in normal mode; calls beyond it fail. |
+| `AIVORY_LLM_PER_TURN_TOOL_LIMITS_PYTHON_EXECUTE` | `int` | `16` | Per-message cap on python_execute sandbox executions allowed in normal mode; calls beyond it fail. |
+| `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_WEB_SEARCH` | `int` | `40` | Per-message cap on `aivory_web_search` calls allowed during deep research runs; calls beyond it fail. |
+| `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_WEB_FETCH` | `int` | `25` | Per-message cap on web_fetch calls allowed during deep research runs; calls beyond it fail. |
+| `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_IMAGE_GENERATE` | `int` | `4` | Per-message cap on image_generate calls allowed during deep research runs; calls beyond it fail. |
+| `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_PYTHON_EXECUTE` | `int` | `8` | Per-message cap on python_execute sandbox executions allowed during deep research runs; calls beyond it fail. |
+| `AIVORY_LLM_MAX_TOOL_CALLS_PER_TURN` | `int` | `48` | Global per-message cap on total tool calls across all tools in normal mode, layered on top of the per-tool limits. |
+| `AIVORY_LLM_MAX_TOOL_CALLS_PER_TURN_DEEP` | `int` | `150` | Global per-message cap on total tool calls across all tools during deep research runs. |
+| `AIVORY_LLM_MAX_TOOL_TIME_PER_TURN` | `duration` | `15m` | Cumulative wall-clock time budget for all tool executions in a normal message. Once exhausted, all tools are removed and the model is allowed a single tool-free wrap-up request. Set to a non-positive value to disable the time budget. |
+| `AIVORY_LLM_MAX_TOOL_TIME_PER_TURN_DEEP` | `duration` | `4m` | Cumulative tool-execution time budget for deep research, reserving time within the five-minute research window for one tool-free report-writing request. Set to a non-positive value to disable the time budget. |
+| `AIVORY_LLM_MAX_TOOL_TIME_PER_TURN_FAST` | `duration` | `3m` | Cumulative tool-execution time budget for fast mode; once exhausted, only a single tool-free wrap-up request runs. Set to a non-positive value to disable the time budget. |
+| `AIVORY_LLM_TOOL_TIMEOUTS` | `duration` | `10s` | Per-call timeout cap for a single `aivory_web_search` tool call. |
+| `AIVORY_LLM_TOOL_TIMEOUTS_2` | `duration` | `30s` | Per-call timeout cap for a single web_fetch tool call. |
+| `AIVORY_LLM_TOOL_TIMEOUTS_3` | `duration` | `600s` | Per-call timeout cap for a single image_generate tool call (a generous window for slow third-party image gateways). |
+| `AIVORY_LLM_TOOL_TIMEOUT_DEFAULT` | `duration` | `100s` | Fallback per-call timeout for tools not listed in the per-type toolTimeouts map. |
+| `AIVORY_LLM_PROMPT_MAX_ITER` | `int` | `10` | Maximum iterations in the prompt-mode tool loop before the round ends (each iteration = one model generation plus optional tool calls). |
+| `AIVORY_LLM_PROMPT_MAX_RETRY` | `int` | `2` | Maximum retries for resending malformed `<tool_call>` JSON or retrying failed tool executions in prompt mode. |
+| `AIVORY_LLM_PROVIDER_REQUEST_BODY_MAX_BYTES` | `int` | `131072` | Maximum length to which the captured provider request body/header JSON snapshot used for diagnostics is clamped. |
+| `AIVORY_LLM_PROVIDER_REQUEST_VALUE_MAX_BYTES` | `int` | `8192` | Maximum length to which each individually captured provider request value (URL, header value) is clamped. |
+| `AIVORY_LLM_IMAGE_DOCUMENT_FLAT_TOKEN_ALLOWANCE` | `int` | `1024` | Fixed number of tokens counted per image/document block when estimating request tokens, since base64 cannot be tokenized as text. |
+| `AIVORY_LLM_OUTPUT_RESERVE` | `int` | `2000` | Fixed output-token reserve added on top of estimated input tokens when computing the pre-flight credit-affordability estimate. |
+| `AIVORY_LLM_MAX_CONCURRENT_TOOLS` | `int` | `4` | Cap on concurrently executed tools within one round (semaphore capacity bounding concurrent executor fan-out). |
+| `AIVORY_LLM_VCTX` | `duration` | `45s` | Timeout bounding the post-answer validation/audit LLM call, so slow cross-vendor audits do not hold up the round. |
 
 
 
 
 
-## 2. RAG 文档解析 / 向量检索
+## 2. RAG Document Parsing / Vector Search
 
-文档分块、Embedding 批量与并发、Qdrant 客户端、MinerU OCR 轮询等。
+Document chunking, embedding batching and concurrency, the Qdrant client, MinerU OCR polling, and more.
 
-| 环境变量 | 类型 | 默认值 | 说明 |
+| Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `AIVORY_RAG_EMBEDDING_RETRY_DELAY` | `duration` | `1s` | 嵌入批次重试之间指数退避的基础延迟，按 2^min(尝试次数,4) 放大。 |
-| `AIVORY_RAG_EMBEDDING_RETRY_DELAY_2` | `duration` | `30s` | 计算出的嵌入重试退避延迟的上限。 |
-| `AIVORY_RAG_EMBEDDING_RETRY_DELAY_3` | `duration` | `1000ms` | 为每次嵌入重试退避延迟添加的随机抖动范围，用于打散并发批次的同步性。 |
-| `AIVORY_RAG_DASH_SCOPE_EMBED_CONCURRENCY` | `int` | `2` | 当供应商为 DashScope 时，每个文档并发的上游嵌入批次数上限。 |
-| `AIVORY_RAG_DASH_SCOPE_GLOBAL_EMBED_CONCURRENCY` | `int` | `2` | 进程级并发 DashScope 嵌入请求数上限（共享槽位信号量的容量）。 |
-| `AIVORY_RAG_DASH_SCOPE_EMBED_ATTEMPT_TIMEOUT` | `duration` | `60s` | DashScope 嵌入调用的单次尝试请求超时，设在客户端 3 分钟上限之下，使卡住的调用可见地失败。 |
-| `AIVORY_RAG_EMBED_CONCURRENCY` | `int` | `4` | 非 DashScope 供应商每个文档并发的上游嵌入批次数上限。 |
-| `AIVORY_RAG_MAX_ATTEMPTS` | `int` | `2` | 单个嵌入批次 POST 在放弃前的最大尝试次数（瞬时失败时带退避重试）。 |
-| `AIVORY_RAG_PDF_INSPECTION_TIMEOUT` | `duration` | `8s` | 父进程对子进程 PDF 文本层检测探针强制施加的截止时间，到期即将其杀掉。 |
-| `AIVORY_RAG_OFFICE_XML_ZIP_ENTRY_READ_CAP` | `int64` | `16777216` | Office 纯文本提取时，读取每个 DOCX/PPTX zip 条目（正文/页眉/页脚/幻灯片 XML）的字节上限。 |
-| `AIVORY_RAG_PDF_INSPECTION_SAMPLE_LIMIT` | `int` | `3` | 探测 PDF 是扫描件还是原生数字文本时，均匀抽样的最大页数。 |
-| `AIVORY_RAG_PDF_THIN_CHARS_PER_PAGE` | `int` | `200` | 低于此每抽样页字符数阈值时，含图 PDF 被标记为“文字稀疏”并转交 OCR。 |
-| `AIVORY_RAG_CMD_WAIT_DELAY` | `duration` | `500ms` | PDF 检测子进程上下文超时后，强制杀死前的宽限期（cmd.WaitDelay）。 |
-| `AIVORY_RAG_PDF_RAW_SIGNALS_STRONG_SCAN_IMAGE` | `int` | `5` | 原始字节“强扫描件”判定 imageCount*N >= pages*M 中的图像数乘子，用于判定 PDF 为纯图像件。 |
-| `AIVORY_RAG_PDF_RAW_SIGNALS_STRONG_SCAN_PAGE` | `int` | `4` | 原始字节“强扫描件”判定 imageCount*N >= pages*M 中的页数乘子，用于判定 PDF 为纯图像件。 |
-| `AIVORY_RAG_MINERU_SOURCE_OBJECT_CLEANUP_TIMEOUT` | `duration` | `30s` | 解析后尽力删除为 MinerU OCR 上传的桶内源对象时的超时时限。 |
-| `AIVORY_RAG_MINERU_POLL_DEADLINE` | `duration` | `20m` | 轮询 MinerU 抽取任务等待 done/failed 状态整个循环的总时限上限。 |
-| `AIVORY_RAG_MINERUZIPCLIENT_TIMEOUT` | `duration` | `5m` | 经 SSRF 防护下载 MinerU 结果 zip 的 HTTP 客户端超时。 |
-| `AIVORY_RAG_FULL_MD_READ_CAP_INSIDE_ZIP` | `int64` | `33554432` | 从 MinerU 结果 zip 内读取 full.md markdown 正文的字节上限。 |
-| `AIVORY_RAG_MAX_ZIP` | `int64` | `524288000` | 下载 MinerU 结果 zip 的字节上限；超出则拒绝而不缓冲进内存。 |
-| `AIVORY_RAG_MINERUCLIENT_TIMEOUT` | `duration` | `5m` | 调用 MinerU 云 API 提交、轮询、下载各次往返的 http.Client 超时。 |
-| `AIVORY_RAG_MINERU_SOURCE_TTLSECONDS` | `int` | `3600` | 交给 MinerU 的源文档预签名 GET URL 的有效期（秒）。 |
-| `AIVORY_RAG_SPREADSHEET_PREVIEW_MAX_FILE_BYTES` | `int64` | `31457280` | `python_execute` 未向模型开放时，进程内解析表格并生成有限内联预览所接受的最大文件大小；更大的文件会被跳过。 |
-| `AIVORY_RAG_RAG_FAST_QUEUE_CONCURRENCY` | `int` | `4` | 服务文本/表格文档的“rag-fast”摄取通道的 asynq 工作并发数。 |
-| `AIVORY_RAG_RAG_SLOW_QUEUE_CONCURRENCY` | `int` | `4` | 服务 OCR/重型文档的“rag”慢速摄取通道的 asynq 工作并发数。 |
-| `AIVORY_RAG_INGEST_PIPELINE_TIMEOUT` | `duration` | `70m` | 每个文档的完整解析/嵌入摄取流水线（runIngestWithRetries）运行的上下文时限。 |
-| `AIVORY_RAG_INGEST_TASK_TIMEOUT` | `duration` | `75m` | rag.ingest 任务的 asynq 单任务处理超时（asynq.Timeout）。 |
-| `AIVORY_RAG_INGEST_UNIQUE_TTL` | `duration` | `80m` | asynq 唯一性锁 TTL（asynq.Unique），抑制同一文档的重复入队。 |
-| `AIVORY_RAG_INGEST_HEARTBEAT_INTERVAL` | `duration` | `30s` | 摄取心跳写入（TouchDocumentIngest）的间隔，使运行中的文档不被判为过期。 |
-| `AIVORY_RAG_INGEST_STALE_AFTER` | `duration` | `4m` | 解析/嵌入中的文档心跳超过此时长即视为被遗弃并回收重新入队。 |
-| `AIVORY_RAG_INGEST_PENDING_STALE_AFTER` | `duration` | `ingestUniqueTTL` | 仍处于“pending”的文档超过此时长即视为卡住并回收重新入队。 |
-| `AIVORY_RAG_INGEST_RECOVERY_INTERVAL` | `duration` | `1m` | 回收过期被遗弃摄取文档的恢复循环的扫描间隔。 |
-| `AIVORY_RAG_INGEST_FINALIZE_TIMEOUT` | `duration` | `30s` | 终结失败摄取时，向量库 DeleteByDocument 清理的超时时限。 |
-| `AIVORY_RAG_INGEST_ASYNQ_LEASE_MAX_RETRIES` | `int` | `1` | 为租约/进程丢失预留的 asynq MaxRetry 次数；处理器失败在流水线内单独重试。 |
-| `AIVORY_RAG_INGEST_ASYNQ_RETRY_DELAY` | `duration` | `2m` | asynq 在重跑租约丢失的摄取任务前等待的延迟（RetryDelayFunc）。 |
-| `AIVORY_RAG_INGEST_QUEUE_NAME` | `duration` | `2s` | 用于将文档分入快/慢摄取队列的 GetDocument 查询超时时限。 |
-| `AIVORY_RAG_RUN_INGEST_WITH_RETRIES` | `int` | `3` | 文档被终结为失败前，整条流水线摄取的最大尝试次数。 |
-| `AIVORY_RAG_RUN_INGEST_WITH_RETRIES_2` | `duration` | `3s` | 整条流水线摄取重试之间的基础退避，按尝试次数递乘。 |
-| `AIVORY_RAG_START_INGEST_HEARTBEAT` | `duration` | `5s` | 每次摄取心跳写入（TouchDocumentIngest）的超时时限。 |
-| `AIVORY_RAG_FINALIZE_CHUNK_CLEANUP_TIMEOUT` | `duration` | `10s` | 终结失败摄取时，DeleteChunksByDocument 清理的超时时限。 |
-| `AIVORY_RAG_FINALIZE_STATUS_TIMEOUT` | `duration` | `10s` | 将失败文档标记为“failed”的终态 UpdateDocumentStatus 写入的超时时限。 |
-| `AIVORY_RAG_DENSE_SEARCH_LEG_LIMIT` | `int` | `30` | 混合检索中稠密/向量分支（vec.Search）请求的 Top-N 命中数。 |
-| `AIVORY_RAG_KEYWORD_SEARCH_LEG_LIMIT` | `int` | `30` | 混合检索中关键词分支（vec.SearchKeyword）请求的 Top-N 命中数。 |
-| `AIVORY_RAG_SNIPPET_OF` | `int` | `240` | 调用方未指定上限时，结果摘要的默认字节长度上限（按 rune 安全截断）。 |
-| `AIVORY_RAG_SPLIT_PARAGRAPHS_AND_TABLES` | `int` | `800` | 低于此字节长度的图像 markdown 段落被作为单个原子块保留而不再拆分。 |
-| `AIVORY_RAG_ROUTER_CALL_TIMEOUT` | `duration` | `12s` | 首 token 热路径上任务路由 JSON LLM 调用（task.router）在回退到普通检索前的超时时限。 |
-| `AIVORY_RAG_MAP_REDUCE_SUMMARISE` | `int` | `200` | map-reduce 分组摘要提示中向任务模型要求的中文字数上限（≤N 字）。 |
-| `AIVORY_RAG_COLLECT_DOC_HINTS` | `int` | `120` | 路由器文档提示行中为消解指代而保留的每个文档正文的前导字节数。 |
-| `AIVORY_RAG_COLLECT_DOC_HINTS_2` | `int` | `12` | 为检索路由器收集的每文档提示行的最大数量。 |
-| `AIVORY_RAG_RETRIEVAL_NEIGHBOR_CHUNKS` | `int` | `1` | 每个检索命中的子块，从同一父块按文档顺序额外带入的相邻子块数量。 |
-| `AIVORY_RAG_FUSE_RECIPROCAL_RANK` | `int` | `60` | 融合向量与关键词两路检索的倒数排名融合公式 1/(rank+k) 中的排名常数 k。 |
-| `AIVORY_RAG_RETRIEVED_SNIPPET_CHARS` | `int` | `2000` | expandHit 在注入前围绕每个检索命中块构建的上下文窗口字节预算。 |
-| `AIVORY_RAG_CHILD_TARGET_CHARS` | `int` | `2000` | 合并切分原子单元时每个嵌入子块所趋向的目标字节长度。 |
-| `AIVORY_RAG_PARENT_TARGET_CHARS` | `int` | `4800` | 父级章节正文为检索时上下文而被截断的字节长度。 |
-| `AIVORY_RAG_CHUNK_OVERLAP_CHARS` | `int` | `250` | 作为滑动窗口重叠而加到下一个子块前面的上一子块尾部字节数。 |
-| `AIVORY_RAG_MAPREDUCE_GROUPTOKENS` | `int` | `6000` | 对超预算语料做 map-reduce 摘要时每个块分组的估算 token 预算。 |
-| `AIVORY_RAG_MAPREDUCE_MAXGROUPS` | `int` | `8` | map-reduce 摘要器对单次查询处理的块分组最大数量。 |
-| `AIVORY_RAG_BATCH_SIZE` | `int` | `64` | 管理端重建向量时每次 Embed 调用嵌入的块数量。 |
-| `AIVORY_VECTOR_QDRANT_SCROLL_PAGE_SIZE_EXISTINGCHUNKIDS` | `int` | `256` | 列出索引中已存在的块 ID 时每个 Qdrant scroll 页获取的点数量。 |
-| `AIVORY_VECTOR_QDRANT_SCROLL_PAGE_SIZE_VECTORCHUNKSTATUSES` | `int` | `256` | 为管理端向量状态审计扫描载荷与向量时每个 Qdrant scroll 页获取的点数量。 |
-| `AIVORY_VECTOR_DELETE_CONCURRENCY` | `int` | `4` | 跨所有维度清除某文档的点时按集合并发删除请求的最大数量。 |
+| `AIVORY_RAG_EMBEDDING_RETRY_DELAY` | `duration` | `1s` | Base delay of the exponential backoff between embedding batch retries, scaled by 2^min(attempts,4). |
+| `AIVORY_RAG_EMBEDDING_RETRY_DELAY_2` | `duration` | `30s` | Cap on the computed embedding retry backoff delay. |
+| `AIVORY_RAG_EMBEDDING_RETRY_DELAY_3` | `duration` | `1000ms` | Random jitter range added to each embedding retry backoff delay, to de-synchronize concurrent batches. |
+| `AIVORY_RAG_DASH_SCOPE_EMBED_CONCURRENCY` | `int` | `2` | Per-document cap on concurrent upstream embedding batches when the provider is DashScope. |
+| `AIVORY_RAG_DASH_SCOPE_GLOBAL_EMBED_CONCURRENCY` | `int` | `2` | Process-wide cap on concurrent DashScope embedding requests (capacity of the shared-slot semaphore). |
+| `AIVORY_RAG_DASH_SCOPE_EMBED_ATTEMPT_TIMEOUT` | `duration` | `60s` | Single-attempt request timeout for DashScope embedding calls, set below the client's 3-minute cap so stuck calls fail visibly. |
+| `AIVORY_RAG_EMBED_CONCURRENCY` | `int` | `4` | Per-document cap on concurrent upstream embedding batches for non-DashScope providers. |
+| `AIVORY_RAG_MAX_ATTEMPTS` | `int` | `2` | Maximum attempts for a single embedding batch POST before giving up (retrying with backoff on transient failures). |
+| `AIVORY_RAG_PDF_INSPECTION_TIMEOUT` | `duration` | `8s` | Deadline the parent process enforces on the child-process PDF text-layer detection probe, killing it when the deadline expires. |
+| `AIVORY_RAG_OFFICE_XML_ZIP_ENTRY_READ_CAP` | `int64` | `16777216` | Byte cap when reading each DOCX/PPTX zip entry (body/header/footer/slide XML) during Office plain-text extraction. |
+| `AIVORY_RAG_PDF_INSPECTION_SAMPLE_LIMIT` | `int` | `3` | Maximum number of uniformly sampled pages when probing whether a PDF is a scan or native digital text. |
+| `AIVORY_RAG_PDF_THIN_CHARS_PER_PAGE` | `int` | `200` | Below this per-sampled-page character threshold, a PDF containing images is flagged as "text-sparse" and routed to OCR. |
+| `AIVORY_RAG_CMD_WAIT_DELAY` | `duration` | `500ms` | Grace period before a force kill after the PDF detection subprocess context timeout (cmd.WaitDelay). |
+| `AIVORY_RAG_PDF_RAW_SIGNALS_STRONG_SCAN_IMAGE` | `int` | `5` | Image-count multiplier in the raw-byte "strong scan" rule imageCount*N >= pages*M, used to classify a PDF as image-only. |
+| `AIVORY_RAG_PDF_RAW_SIGNALS_STRONG_SCAN_PAGE` | `int` | `4` | Page-count multiplier in the raw-byte "strong scan" rule imageCount*N >= pages*M, used to classify a PDF as image-only. |
+| `AIVORY_RAG_MINERU_SOURCE_OBJECT_CLEANUP_TIMEOUT` | `duration` | `30s` | Timeout for the best-effort deletion of the bucket source object uploaded for MinerU OCR after parsing. |
+| `AIVORY_RAG_MINERU_POLL_DEADLINE` | `duration` | `20m` | Total time cap for the whole loop polling a MinerU extraction task while waiting for done/failed status. |
+| `AIVORY_RAG_MINERUZIPCLIENT_TIMEOUT` | `duration` | `5m` | HTTP client timeout when downloading the MinerU result zip through the SSRF-protected client. |
+| `AIVORY_RAG_FULL_MD_READ_CAP_INSIDE_ZIP` | `int64` | `33554432` | Byte cap on reading the full.md markdown body from inside the MinerU result zip. |
+| `AIVORY_RAG_MAX_ZIP` | `int64` | `524288000` | Byte cap on the downloaded MinerU result zip; larger downloads are rejected rather than buffered into memory. |
+| `AIVORY_RAG_MINERUCLIENT_TIMEOUT` | `duration` | `5m` | http.Client timeout for each round trip (submit, poll, download) when calling the MinerU cloud API. |
+| `AIVORY_RAG_MINERU_SOURCE_TTLSECONDS` | `int` | `3600` | Validity period (seconds) of the presigned GET URL for the source document handed to MinerU. |
+| `AIVORY_RAG_SPREADSHEET_PREVIEW_MAX_FILE_BYTES` | `int64` | `31457280` | Maximum file size accepted for in-process spreadsheet parsing that produces a bounded inline preview when `python_execute` is not exposed to the model; larger files are skipped. |
+| `AIVORY_RAG_RAG_FAST_QUEUE_CONCURRENCY` | `int` | `4` | asynq worker concurrency for the "rag-fast" ingestion channel serving text/table documents. |
+| `AIVORY_RAG_RAG_SLOW_QUEUE_CONCURRENCY` | `int` | `4` | asynq worker concurrency for the slow "rag" ingestion channel serving OCR/heavy documents. |
+| `AIVORY_RAG_INGEST_PIPELINE_TIMEOUT` | `duration` | `70m` | Context deadline for the full parse/embed ingestion pipeline (runIngestWithRetries) of one document. |
+| `AIVORY_RAG_INGEST_TASK_TIMEOUT` | `duration` | `75m` | asynq per-task processing timeout (asynq.Timeout) for the rag.ingest task. |
+| `AIVORY_RAG_INGEST_UNIQUE_TTL` | `duration` | `80m` | asynq uniqueness lock TTL (asynq.Unique), suppressing duplicate enqueue of the same document. |
+| `AIVORY_RAG_INGEST_HEARTBEAT_INTERVAL` | `duration` | `30s` | Interval of ingestion heartbeat writes (TouchDocumentIngest), keeping running documents from being judged stale. |
+| `AIVORY_RAG_INGEST_STALE_AFTER` | `duration` | `4m` | A document mid parse/embed whose heartbeat is older than this is considered abandoned, reclaimed, and re-enqueued. |
+| `AIVORY_RAG_INGEST_PENDING_STALE_AFTER` | `duration` | `ingestUniqueTTL` | A document still "pending" longer than this is considered stuck, reclaimed, and re-enqueued. |
+| `AIVORY_RAG_INGEST_RECOVERY_INTERVAL` | `duration` | `1m` | Scan interval of the recovery loop that reclaims stale abandoned ingestion documents. |
+| `AIVORY_RAG_INGEST_FINALIZE_TIMEOUT` | `duration` | `30s` | Timeout for the vector-store DeleteByDocument cleanup when finalizing a failed ingestion. |
+| `AIVORY_RAG_INGEST_ASYNQ_LEASE_MAX_RETRIES` | `int` | `1` | asynq MaxRetry reserved for lease/process loss; handler failures are retried separately inside the pipeline. |
+| `AIVORY_RAG_INGEST_ASYNQ_RETRY_DELAY` | `duration` | `2m` | Delay asynq waits before rerunning an ingestion task that lost its lease (RetryDelayFunc). |
+| `AIVORY_RAG_INGEST_QUEUE_NAME` | `duration` | `2s` | Timeout for the GetDocument query used to sort documents into the fast/slow ingestion queues. |
+| `AIVORY_RAG_RUN_INGEST_WITH_RETRIES` | `int` | `3` | Maximum whole-pipeline ingestion attempts before a document is finalized as failed. |
+| `AIVORY_RAG_RUN_INGEST_WITH_RETRIES_2` | `duration` | `3s` | Base backoff between whole-pipeline ingestion retries, multiplied by attempt count. |
+| `AIVORY_RAG_START_INGEST_HEARTBEAT` | `duration` | `5s` | Timeout for each ingestion heartbeat write (TouchDocumentIngest). |
+| `AIVORY_RAG_FINALIZE_CHUNK_CLEANUP_TIMEOUT` | `duration` | `10s` | Timeout for DeleteChunksByDocument cleanup when finalizing a failed ingestion. |
+| `AIVORY_RAG_FINALIZE_STATUS_TIMEOUT` | `duration` | `10s` | Timeout for the final UpdateDocumentStatus write marking a failed document as "failed". |
+| `AIVORY_RAG_DENSE_SEARCH_LEG_LIMIT` | `int` | `30` | Top-N hits requested from the dense/vector leg (vec.Search) of hybrid retrieval. |
+| `AIVORY_RAG_KEYWORD_SEARCH_LEG_LIMIT` | `int` | `30` | Top-N hits requested from the keyword leg (vec.SearchKeyword) of hybrid retrieval. |
+| `AIVORY_RAG_SNIPPET_OF` | `int` | `240` | Default byte-length cap for result snippets when the caller specifies no limit (truncated rune-safely). |
+| `AIVORY_RAG_SPLIT_PARAGRAPHS_AND_TABLES` | `int` | `800` | Image markdown paragraphs shorter than this byte length are kept as a single atomic chunk and not split further. |
+| `AIVORY_RAG_ROUTER_CALL_TIMEOUT` | `duration` | `12s` | Timeout for the task-routing JSON LLM call (task.router) on the first-token hot path, before falling back to plain retrieval. |
+| `AIVORY_RAG_MAP_REDUCE_SUMMARISE` | `int` | `200` | Character-count cap (≤N characters) requested from the task model in map-reduce grouped summary prompts. |
+| `AIVORY_RAG_COLLECT_DOC_HINTS` | `int` | `120` | Leading bytes of each document body kept in router document hint lines, to resolve pronoun references. |
+| `AIVORY_RAG_COLLECT_DOC_HINTS_2` | `int` | `12` | Maximum number of per-document hint lines collected for the retrieval router. |
+| `AIVORY_RAG_RETRIEVAL_NEIGHBOR_CHUNKS` | `int` | `1` | Number of adjacent child chunks additionally pulled from the same parent chunk, in document order, per retrieved child-chunk hit. |
+| `AIVORY_RAG_FUSE_RECIPROCAL_RANK` | `int` | `60` | Rank constant k in the reciprocal-rank fusion formula 1/(rank+k) that merges the vector and keyword retrieval legs. |
+| `AIVORY_RAG_RETRIEVED_SNIPPET_CHARS` | `int` | `2000` | Context-window byte budget expandHit builds around each retrieved child-chunk hit before injection. |
+| `AIVORY_RAG_CHILD_TARGET_CHARS` | `int` | `2000` | Target byte length each embedded child chunk trends toward when merging split atomic units. |
+| `AIVORY_RAG_PARENT_TARGET_CHARS` | `int` | `4800` | Byte length to which parent section bodies are truncated to provide retrieval-time context. |
+| `AIVORY_RAG_CHUNK_OVERLAP_CHARS` | `int` | `250` | Trailing bytes of the previous child chunk prepended to the next one as sliding-window overlap. |
+| `AIVORY_RAG_MAPREDUCE_GROUPTOKENS` | `int` | `6000` | Estimated token budget per chunk group when map-reduce summarizing an over-budget corpus. |
+| `AIVORY_RAG_MAPREDUCE_MAXGROUPS` | `int` | `8` | Maximum number of chunk groups the map-reduce summarizer processes for a single query. |
+| `AIVORY_RAG_BATCH_SIZE` | `int` | `64` | Number of chunks embedded per Embed call when rebuilding vectors from the admin console. |
+| `AIVORY_VECTOR_QDRANT_SCROLL_PAGE_SIZE_EXISTINGCHUNKIDS` | `int` | `256` | Points fetched per Qdrant scroll page when listing chunk IDs already present in an index. |
+| `AIVORY_VECTOR_QDRANT_SCROLL_PAGE_SIZE_VECTORCHUNKSTATUSES` | `int` | `256` | Points fetched per Qdrant scroll page when scanning payloads and vectors for the admin vector status audit. |
+| `AIVORY_VECTOR_DELETE_CONCURRENCY` | `int` | `4` | Maximum number of concurrent per-collection delete requests when clearing a document's points across all dimensions. |
 
 
 
 
 
-## 3. 沙盒代码执行
+## 3. Sandbox Code Execution
 
-`python_execute` 沙盒。Go 侧变量需重启 API 进程生效；`SANDBOX_*` 变量作用于 `sandbox-service` 进程，需重启该服务生效。Runner 网络不是可配置项：每个 session 都固定使用 Docker `--network none`。所需 Python 依赖必须预装进 runner 镜像，不提供 `SANDBOX_NETWORK` 作为运行时下载的逃生开关。
+The `python_execute` sandbox. Go-side variables take effect after restarting the API process; `SANDBOX_*` variables apply to the `sandbox-service` process and require restarting that service. The runner network is not configurable: every session always uses Docker `--network none`. Required Python dependencies must be preinstalled into the runner image; there is no `SANDBOX_NETWORK` escape hatch for runtime downloads.
 
-| 环境变量 | 类型 | 默认值 | 说明 |
+| Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `SANDBOX_MAX_OUTPUT_BYTES` | `int` | `32768` | 沙箱截断所捕获的 exec stdout/stderr 流的字节上限。 |
-| `SANDBOX_MAX_ARTIFACT_BYTES` | `int` | `20971520` | 沙箱收集单个产出文件的最大字节大小。 |
-| `SANDBOX_S3_MAX_ATTEMPTS` | `int` | `3` | 限定每次 S3 存储 SDK 调用的 botocore max_attempts 重试次数。 |
-| `SANDBOX_S3_CONNECT_TIMEOUT_S` | `float` | `10` | 应用于每次 S3 存储 SDK 调用的连接超时（秒）。 |
-| `SANDBOX_S3_READ_TIMEOUT_S` | `float` | `120` | 应用于每次 S3 存储 SDK 调用的读取超时（秒）。 |
-| `SANDBOX_OSS_CONNECT_TIMEOUT_S` | `float` | `30` | 阿里云 OSS bucket 客户端的连接超时（秒）。 |
-| `AIVORY_SANDBOX_MAX_SANDBOX_RESP_BYTES` | `int64` | `268435456` | 每次 exec 调用解码的 sidecar HTTP 响应体字节上限，防止 API 进程 OOM。 |
-| `AIVORY_SANDBOX_EXEC_CLIENT_OVERHEAD` | `duration` | `120s` | 在每次 exec 上限之上追加的时长，用于设定沙箱 HTTP 客户端超时，以覆盖 sidecar 截止后的收尾工作。 |
-| `AIVORY_SANDBOX_SANDBOX_ERROR_BODY_READ_CAP` | `int64` | `65536` | 读取 4xx/5xx sidecar 错误响应体用于错误信息的字节上限。 |
+| `SANDBOX_MAX_OUTPUT_BYTES` | `int` | `32768` | Byte cap at which the sandbox truncates the captured exec stdout/stderr streams. |
+| `SANDBOX_MAX_ARTIFACT_BYTES` | `int` | `20971520` | Maximum byte size of a single output artifact file collected by the sandbox. |
+| `SANDBOX_S3_MAX_ATTEMPTS` | `int` | `3` | botocore max_attempts retry count bounding each S3 storage SDK call. |
+| `SANDBOX_S3_CONNECT_TIMEOUT_S` | `float` | `10` | Connect timeout (seconds) applied to each S3 storage SDK call. |
+| `SANDBOX_S3_READ_TIMEOUT_S` | `float` | `120` | Read timeout (seconds) applied to each S3 storage SDK call. |
+| `SANDBOX_OSS_CONNECT_TIMEOUT_S` | `float` | `30` | Connect timeout (seconds) of the Aliyun OSS bucket client. |
+| `AIVORY_SANDBOX_MAX_SANDBOX_RESP_BYTES` | `int64` | `268435456` | Byte cap on each sidecar HTTP response body decoded per exec call, preventing an API-process OOM. |
+| `AIVORY_SANDBOX_EXEC_CLIENT_OVERHEAD` | `duration` | `120s` | Duration appended on top of each exec cap to set the sandbox HTTP client timeout, covering post-deadline cleanup on the sidecar. |
+| `AIVORY_SANDBOX_SANDBOX_ERROR_BODY_READ_CAP` | `int64` | `65536` | Byte cap when reading 4xx/5xx sidecar error response bodies for error messages. |
 
 
 
 
 
-## 4. 内置工具（搜索 / Python / 网络安全）
+## 4. Built-in Tools (Search / Python / Web Security)
 
-`aivory_web_search` 结果条数与超时、Python 安全模式、SSRF / 网络安全护栏等。
+`aivory_web_search` result counts and timeouts, Python safe mode, SSRF / web security guardrails, and more.
 
-| 环境变量 | 类型 | 默认值 | 说明 |
+| Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `AIVORY_TOOLS_IN_TOP_K` | `int` | `5` | 模型调用未指定 top_k 时 `aivory_web_search` 工具的默认结果数量。 |
-| `AIVORY_TOOLS_WEB_FETCH_RESPONSE_BODY_READ_CAP` | `int64` | `262144` | web_fetch 在剥离 HTML 前读取的 HTTP 响应体字节上限。 |
-| `AIVORY_TOOLS_WEB_FETCH_EXTRACTED_TEXT_CHAR_CAP` | `int` | `32000` | web_fetch 剥离 HTML 后的文本在以省略标记截断前的字符上限。 |
-| `AIVORY_TOOLS_PYTHON_EXECUTE_UPLOAD_STAGING_FILE_SIZE` | `int64` | `41943040` | 向 python 沙箱暂存文件时，超过该值则跳过某个会话上传文件的单文件大小上限。调高时还需确保 sidecar 的 `SANDBOX_MAX_UPLOAD_BYTES` 与 `SANDBOX_MAX_BODY_BYTES` 足够大。 |
-| `AIVORY_TOOLS_PYTHON_EXECUTE_STDOUT_STDERR_TRUNCATION_CAP` | `int` | `32768` | python_execute 的 stdout/stderr 在呈现给模型前截断的字符上限。 |
-| `AIVORY_TOOLS_IN_N` | `int` | `4` | 单次 image_generate 调用可请求的最大图像数量。 |
-| `AIVORY_TOOLS_IN_SIZE` | `string` | `""` | image_generate 未指定尺寸时使用的可选覆盖值。留空则由供应商自动决定；GPT 图片编辑会在可解析时推断最接近的受支持比例。 |
-| `AIVORY_TOOLS_DAILY_IMAGE_LIMIT_RESET_WINDOW` | `duration` | `24h` | 计算每用户图像生成配额账本起始边界时对 Now() 取整的时间窗口。 |
-| `AIVORY_TOOLS_IMAGE_IMAGE_INPUT_IMAGE_CAP` | `int` | `0` | 图生图参考图片数量的全局覆盖值。`0` 表示按模型选择上限（DALL-E 1 张、OpenAI 16 张、Gemini 3 系列 14 张、其他 Gemini 3 张）。 |
-| `AIVORY_TOOLS_FETCHREMOTEIMAGE_DOWNLOAD_CAP` | `int64` | `33554432` | 通过 SSRF 安全客户端下载图像 API 响应中返回的图像 URL 的字节上限。 |
-| `AIVORY_TOOLS_CONFIDENCE` | `float` | `0.95` | save_memory 工具创建的每条记忆记录上存储的置信度分数。 |
+| `AIVORY_TOOLS_IN_TOP_K` | `int` | `5` | Default result count for the `aivory_web_search` tool when the model call does not specify top_k. |
+| `AIVORY_TOOLS_WEB_FETCH_RESPONSE_BODY_READ_CAP` | `int64` | `262144` | Byte cap on the HTTP response body web_fetch reads before stripping HTML. |
+| `AIVORY_TOOLS_WEB_FETCH_EXTRACTED_TEXT_CHAR_CAP` | `int` | `32000` | Character cap on web_fetch text after HTML stripping, before truncation with an ellipsis marker. |
+| `AIVORY_TOOLS_PYTHON_EXECUTE_UPLOAD_STAGING_FILE_SIZE` | `int64` | `41943040` | Per-file size cap above which a session's uploaded file is skipped when staging files into the Python sandbox. When raising it, also make sure the sidecar's `SANDBOX_MAX_UPLOAD_BYTES` and `SANDBOX_MAX_BODY_BYTES` are large enough. |
+| `AIVORY_TOOLS_PYTHON_EXECUTE_STDOUT_STDERR_TRUNCATION_CAP` | `int` | `32768` | Character cap on python_execute stdout/stderr truncation before presenting them to the model. |
+| `AIVORY_TOOLS_IN_N` | `int` | `4` | Maximum number of images a single image_generate call may request. |
+| `AIVORY_TOOLS_IN_SIZE` | `string` | `""` | Optional override used when image_generate specifies no size. Leave empty to let the provider decide automatically; GPT image editing infers the nearest supported aspect ratio when it can be parsed. |
+| `AIVORY_TOOLS_DAILY_IMAGE_LIMIT_RESET_WINDOW` | `duration` | `24h` | Time window used to round Now() when computing the start boundary of each user's image-generation quota ledger. |
+| `AIVORY_TOOLS_IMAGE_IMAGE_INPUT_IMAGE_CAP` | `int` | `0` | Global override for the number of reference images in image-to-image generation. `0` means per-model caps apply (DALL-E 1, OpenAI 16, the Gemini 3 series 14, other Gemini 3). |
+| `AIVORY_TOOLS_FETCHREMOTEIMAGE_DOWNLOAD_CAP` | `int64` | `33554432` | Byte cap when downloading image URLs returned in image API responses through the SSRF-safe client. |
+| `AIVORY_TOOLS_CONFIDENCE` | `float` | `0.95` | Confidence score stored on each memory record created by the save_memory tool. |
 
 
 
 
 
-## 5. 会话 / 消息 / 流式 API
+## 5. Sessions / Messages / Streaming API
 
-SSE 心跳、流恢复窗口、生成时长上限、分页与搜索上限、消息路径缓存等。
+SSE heartbeats, stream recovery windows, generation duration caps, pagination and search limits, message-path caching, and more.
 
-| 环境变量 | 类型 | 默认值 | 说明 |
+| Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `AIVORY_API_LIMIT_2` | `int` | `200` | list-conversations 接口在请求未提供 limit 参数时的默认分页大小。 |
-| `AIVORY_API_LIMIT_3` | `int` | `500` | 会话列表接口 ?limit 查询参数的硬性上限，超出即钳制到此值。 |
-| `AIVORY_API_SEARCH_MESSAGE_HIT_LIMIT` | `int` | `40` | 会话搜索接口返回的消息正文命中数上限（标题命中另有单独上限）。 |
-| `AIVORY_API_IMPORT_MAX_CONVERSATIONS` | `int` | `1000` | 单次导入请求可创建的会话数上限，超出则拒绝导入。 |
-| `AIVORY_API_IMPORT_MAX_MESSAGES_PER_CONV` | `int` | `10000` | 导入请求中单个会话允许的消息数上限，超出则拒绝导入。 |
-| `AIVORY_API_IMPORT_MAX_CONTENT_BYTES` | `int` | `204800` | 导入时单条消息正文的字节上限，超出部分按此字节数截断。 |
-| `AIVORY_API_INLINE_THREAD_QUOTE_CAP` | `int` | `4000` | 创建行内子话题时引用文本的最大字符（rune）长度，超出则截断。 |
-| `AIVORY_API_GETCONVERSATION_ACTIVE_PATH_LIMIT` | `int` | `200` | 获取会话时活动路径分页 ?limit 参数的上限；超过则返回完整路径。 |
-| `AIVORY_API_LIMIT_4` | `int` | `30` | 消息列表接口未提供 ?limit 时的默认尾部窗口分页大小。 |
-| `AIVORY_API_LISTMESSAGES_PAGE_LIMIT` | `int` | `200` | 消息列表接口 ?limit 参数可接受的最大值；超出则沿用默认分页大小。 |
-| `AIVORY_API_RATE_LIMIT_USER` | `int` | `20` | 每用户限流额度：每分钟允许的知识库文档上传次数上限，超出返回 429。 |
-| `AIVORY_API_CONFIDENCE` | `float` | `0.95` | 用户手动创建的记忆条目所存储的置信度分值（0-1 区间）。 |
-| `AIVORY_API_MAX_GEN_DURATION` | `duration` | `90m` | 单次分离式生成回合的挂钟超时上限，超时后取消其上下文。 |
-| `AIVORY_API_SSE_PING_HEARTBEAT_POST` | `duration` | `15s` | 发送消息流式接口上 SSE 保活 ping 的发送间隔。 |
-| `AIVORY_API_SSE_PING_HEARTBEAT_REGENERATE` | `duration` | `15s` | 重新生成消息流式接口上 SSE 保活 ping 的发送间隔。 |
-| `AIVORY_API_SSE_PING_HEARTBEAT_STREAM` | `duration` | `15s` | 流重连（attach）接口上 SSE 保活 ping 的发送间隔。 |
-| `AIVORY_API_STREAM_STATUS_RECHECK_INTERVAL` | `duration` | `5s` | 流重连处理器重新轮询消息生成状态以检测终态的间隔。 |
-| `AIVORY_API_STREAM_REPLAY_BATCH_SIZE` | `int` | `200` | 重连 SSE 流回放/追赶时每批读取的缓冲流事件数量。 |
-| `AIVORY_API_ONLINE_PRESENCE_TOUCH_THROTTLE` | `duration` | `1m` | 用户在线状态 seen 触达之间的节流间隔，即 seen 缓存标记的 TTL。 |
-| `AIVORY_API_CONCURRENT_GEN_SLOT_SAFETY_TTL` | `duration` | `30m` | 每用户并发生成槽计数器的安全 TTL，使失效的占用槽自动过期。 |
-| `AIVORY_API_REQUEST_SIGNATURE_REPLAY_WINDOW_FUTURE` | `int64` | `300` | 请求签名防重放：X-Req-Ts 时间戳落后服务器时间的最大秒数，超出则视为过期拒绝。 |
-| `AIVORY_API_REQUEST_SIGNATURE_REPLAY_WINDOW_PAST` | `int64` | `60` | 请求签名防重放：X-Req-Ts 时间戳领先服务器时间的最大秒数（时钟偏移容忍），超出则拒绝。 |
-| `AIVORY_API_CREDIT_MULTIPLIER` | `float` | `5.0` | 将模型输入+输出合计价格换算为选择器中相对积分倍率的除数。 |
-| `AIVORY_API_JSON_REQUEST_BODY_SIZE_CAP` | `int64` | `4194304` | JSON 请求体可接受的最大字节数，超出由 MaxBytesReader 拒绝。 |
-| `AIVORY_API_PROJECT_DETAIL_CONVERSATIONS_PAGE_SIZE` | `int` | `200` | 项目详情响应中加载的活动会话数量（获取上限，偏移为 0）。 |
-| `AIVORY_API_RATE_LIMIT_USER_2` | `int` | `20` | 每用户限流额度：每分钟允许的项目文档上传次数上限，超出返回 429。 |
-| `AIVORY_API_RATE_LIMIT_REGISTER_MAX` | `int` | `5` | POST /api/auth/register 的每 IP 限流额度：每个窗口内允许的最大注册尝试次数，超出返回 429。 |
-| `AIVORY_API_RATE_LIMIT_REGISTER_WINDOW` | `duration` | `60s` | POST /api/auth/register 每 IP 限流的滚动窗口时长。 |
-| `AIVORY_API_RATE_LIMIT_LOGIN_MAX` | `int` | `10` | POST /api/auth/login 的每 IP 限流额度：每个窗口内允许的最大登录尝试次数，超出返回 429。 |
-| `AIVORY_API_RATE_LIMIT_LOGIN_WINDOW` | `duration` | `60s` | POST /api/auth/login 每 IP 限流的滚动窗口时长。 |
-| `AIVORY_API_RATE_LIMIT_LOGIN_2FA_MAX` | `int` | `10` | POST /api/auth/login/2fa 的每 IP 限流额度：每个窗口内允许的最大两步验证尝试次数，超出返回 429。 |
-| `AIVORY_API_RATE_LIMIT_LOGIN_2FA_WINDOW` | `duration` | `60s` | POST /api/auth/login/2fa 每 IP 限流的滚动窗口时长。 |
-| `AIVORY_API_RATE_LIMIT_LOGOUT_MAX` | `int` | `30` | POST /api/auth/logout 的每 IP 限流额度：每个窗口内允许的最大登出请求次数，超出返回 429。 |
-| `AIVORY_API_RATE_LIMIT_LOGOUT_WINDOW` | `duration` | `60s` | POST /api/auth/logout 每 IP 限流的滚动窗口时长。 |
-| `AIVORY_API_RATE_LIMIT_REFRESH_MAX` | `int` | `30` | POST /api/auth/refresh 的每 IP 限流额度：每个窗口内允许的最大令牌刷新请求次数，超出返回 429。 |
-| `AIVORY_API_RATE_LIMIT_REFRESH_WINDOW` | `duration` | `60s` | POST /api/auth/refresh 每 IP 限流的滚动窗口时长。 |
-| `AIVORY_API_RATE_LIMIT_VERIFY_EMAIL_MAX` | `int` | `10` | POST /api/auth/verify-email 的每 IP 限流额度：每个窗口内允许的最大邮箱验证尝试次数，超出返回 429。 |
-| `AIVORY_API_RATE_LIMIT_VERIFY_EMAIL_WINDOW` | `duration` | `5m` | POST /api/auth/verify-email 每 IP 限流的滚动窗口时长。 |
-| `AIVORY_API_RATE_LIMIT_SEND_CODE_MAX` | `int` | `3` | 每 IP 在窗口内对 POST /api/auth/send-code（发送登录/验证码邮件）接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_SEND_CODE_WINDOW` | `duration` | `60s` | 统计每 IP 对 /api/auth/send-code 发码接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_FORGOT_PASSWORD_MAX` | `int` | `5` | 每 IP 在窗口内对 POST /api/auth/forgot-password（触发密码重置邮件）接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_FORGOT_PASSWORD_WINDOW` | `duration` | `15m` | 统计每 IP 对 /api/auth/forgot-password 接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_RESET_PASSWORD_MAX` | `int` | `5` | 每 IP 在窗口内对 POST /api/auth/reset-password（凭码重置密码）接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_RESET_PASSWORD_WINDOW` | `duration` | `60s` | 统计每 IP 对 /api/auth/reset-password 接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_CAPTCHA_ISSUE_MAX` | `int` | `20` | 每 IP 在窗口内对 GET /api/public/captcha（签发滑块验证码挑战）接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_CAPTCHA_ISSUE_WINDOW` | `duration` | `60s` | 统计每 IP 对 GET /api/public/captcha 挑战签发接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_CAPTCHA_VERIFY_MAX` | `int` | `20` | 每 IP 在窗口内对 POST /api/public/captcha/verify（校验验证码答案）接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_CAPTCHA_VERIFY_WINDOW` | `duration` | `60s` | 统计每 IP 对 /api/public/captcha/verify 答案校验接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_FIRST_RUN_SETUP_MAX` | `int` | `10` | 每 IP 在窗口内对 POST /api/setup（首次运行创建首个管理员）接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_FIRST_RUN_SETUP_WINDOW` | `duration` | `60s` | 统计每 IP 对 POST /api/setup 首次运行引导接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_PUBLIC_SHARED_CONVERSATION_MAX` | `int` | `60` | 每 IP 在窗口内对 GET /api/public/shared/:token（免登录查看分享会话）接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_PUBLIC_SHARED_CONVERSATION_WINDOW` | `duration` | `60s` | 统计每 IP 对 /api/public/shared/:token 分享查看接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_SHARED_ASSETS_FILES_ARTIFACTS_MAX` | `int` | `240` | 每 IP 在窗口内对分享会话的文件与产物（artifact）资源路由的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_SHARED_ASSETS_FILES_ARTIFACTS_WINDOW` | `duration` | `60s` | 统计每 IP 对分享会话文件/产物资源路由请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_OAUTH_START_CALLBACK_HANDOFF_MAX` | `int` | `20` | 每 IP 在窗口内对 OAuth 发起、回调与跨域交接路由的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_OAUTH_START_CALLBACK_HANDOFF_WINDOW` | `duration` | `60s` | 统计每 IP 对 OAuth 发起/回调/交接路由请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_PASSWORD_CHANGE_SET_MAX` | `int` | `5` | 每 IP 在窗口内对 /api/me/password 改密与 /api/me/password/set 设密接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_PASSWORD_CHANGE_SET_WINDOW` | `duration` | `60s` | 统计每 IP 对 /api/me/password 改密/设密接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_IDENTITY_LINK_START_MAX` | `int` | `20` | 每 IP 在窗口内对 POST /api/me/identities/:id/link（发起 OAuth 账号关联）接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_IDENTITY_LINK_START_WINDOW` | `duration` | `60s` | 统计每 IP 对 OAuth 身份关联发起接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_2FA_SETUP_ENABLE_DISABLE_MAX` | `int` | `10` | 每 IP 在窗口内对 /api/me/2fa 的 setup、enable、disable 各接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_2FA_SETUP_ENABLE_DISABLE_WINDOW` | `duration` | `5m` | 统计每 IP 对 2FA setup/enable/disable 接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_REDEEM_CODE_MAX` | `int` | `10` | 每 IP 在窗口内对 POST /api/me/redeem（兑换码兑换）接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_REDEEM_CODE_WINDOW` | `duration` | `60s` | 统计每 IP 对 /api/me/redeem 兑换接口请求数的固定时间窗。 |
-| `AIVORY_API_RATE_LIMIT_WORKSPACE_JOIN_MAX` | `int` | `30` | 每 IP 在窗口内对 /api/workspaces/join/:token（邀请信息与加入）接口的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_WORKSPACE_JOIN_WINDOW` | `duration` | `60s` | 统计每 IP 对 /api/workspaces/join/:token 接口请求数的固定时间窗。 |
-| `AIVORY_API_SELF_USAGE_LOOKBACK_WINDOW` | `int` | `30` | GET /api/me/usage 统计调用者自身消息数时回溯的天数。 |
-| `AIVORY_API_LIMIT` | `int` | `200` | 管理端工作区列表接口在请求未带 ?limit 时返回的默认最大工作区数。 |
-| `AIVORY_API_ADMIN_WORKSPACE_DETAIL_CONVERSATIONS_PAGE_SIZE` | `int` | `500` | 管理端工作区详情（triage）视图加载的会话数量上限。 |
-| `AIVORY_QUEUE_IN_PROCESS_WORKERS` | `int` | `8` | 进程内后台任务池的并发 worker 协程数量。 |
-| `AIVORY_QUEUE_PROCESS_JOB_BUFFER` | `int` | `256` | 进程内任务通道的缓冲槽位数；缓冲满时 Enqueue 将新任务转入退避回退路径执行。 |
-| `AIVORY_QUEUE_QUEUE_BACKPRESSURE_JOB_TIMEOUT` | `duration` | `30m` | 进程内任务缓冲满时经退避回退协程执行的任务的上下文超时。 |
-| `AIVORY_QUEUE_QUEUE_WORKER_JOB_TIMEOUT` | `duration` | `30m` | 进程内队列 worker 执行每个任务时施加的上下文超时。 |
+| `AIVORY_API_LIMIT_2` | `int` | `200` | Default page size for the list-conversations endpoint when the request omits the limit parameter. |
+| `AIVORY_API_LIMIT_3` | `int` | `500` | Hard cap on the ?limit query parameter for the conversation list endpoint; larger values are clamped to it. |
+| `AIVORY_API_SEARCH_MESSAGE_HIT_LIMIT` | `int` | `40` | Maximum number of message-body hits returned by the conversation search endpoint (title hits have a separate cap). |
+| `AIVORY_API_IMPORT_MAX_CONVERSATIONS` | `int` | `1000` | Maximum number of conversations a single import request may create; imports beyond it are rejected. |
+| `AIVORY_API_IMPORT_MAX_MESSAGES_PER_CONV` | `int` | `10000` | Maximum messages allowed for a single conversation in an import request; imports beyond it are rejected. |
+| `AIVORY_API_IMPORT_MAX_CONTENT_BYTES` | `int` | `204800` | Byte cap on a single message body during import; the excess is truncated to this many bytes. |
+| `AIVORY_API_INLINE_THREAD_QUOTE_CAP` | `int` | `4000` | Maximum character (rune) length of quoted text when creating an inline sub-thread; longer text is truncated. |
+| `AIVORY_API_GETCONVERSATION_ACTIVE_PATH_LIMIT` | `int` | `200` | Cap on the ?limit parameter for active-path pagination when fetching a conversation; beyond it the full path is returned. |
+| `AIVORY_API_LIMIT_4` | `int` | `30` | Default tail-window page size for the message list endpoint when no ?limit is provided. |
+| `AIVORY_API_LISTMESSAGES_PAGE_LIMIT` | `int` | `200` | Maximum accepted value for the ?limit parameter of the message list endpoint; larger values fall back to the default page size. |
+| `AIVORY_API_RATE_LIMIT_USER` | `int` | `20` | Per-user rate-limit allowance: maximum knowledge base document uploads per minute before returning 429. |
+| `AIVORY_API_CONFIDENCE` | `float` | `0.95` | Confidence score (0-1 range) stored on memory entries created manually by users. |
+| `AIVORY_API_MAX_GEN_DURATION` | `duration` | `90m` | Wall-clock timeout cap for a single detached generation turn; after it the context is canceled. |
+| `AIVORY_API_SSE_PING_HEARTBEAT_POST` | `duration` | `15s` | Send interval of SSE keep-alive pings on the send-message streaming endpoint. |
+| `AIVORY_API_SSE_PING_HEARTBEAT_REGENERATE` | `duration` | `15s` | Send interval of SSE keep-alive pings on the regenerate-message streaming endpoint. |
+| `AIVORY_API_SSE_PING_HEARTBEAT_STREAM` | `duration` | `15s` | Send interval of SSE keep-alive pings on the stream reconnect (attach) endpoint. |
+| `AIVORY_API_STREAM_STATUS_RECHECK_INTERVAL` | `duration` | `5s` | Interval at which the stream reconnect handler re-polls message generation status to detect terminal states. |
+| `AIVORY_API_STREAM_REPLAY_BATCH_SIZE` | `int` | `200` | Number of buffered stream events read per batch when replaying/catching up a reconnected SSE stream. |
+| `AIVORY_API_ONLINE_PRESENCE_TOUCH_THROTTLE` | `duration` | `1m` | Throttle interval between user online-presence seen touches, i.e. the TTL of the seen-cache marker. |
+| `AIVORY_API_CONCURRENT_GEN_SLOT_SAFETY_TTL` | `duration` | `30m` | Safety TTL for the per-user concurrent-generation slot counter, letting stale held slots expire automatically. |
+| `AIVORY_API_REQUEST_SIGNATURE_REPLAY_WINDOW_FUTURE` | `int64` | `300` | Request-signature replay protection: maximum seconds by which the X-Req-Ts timestamp may lag the server time before it is rejected as expired. |
+| `AIVORY_API_REQUEST_SIGNATURE_REPLAY_WINDOW_PAST` | `int64` | `60` | Request-signature replay protection: maximum seconds by which the X-Req-Ts timestamp may lead the server time (clock-skew tolerance); larger values are rejected. |
+| `AIVORY_API_CREDIT_MULTIPLIER` | `float` | `5.0` | Divisor converting a model's combined input+output price into the relative credit multiplier shown in the selector. |
+| `AIVORY_API_JSON_REQUEST_BODY_SIZE_CAP` | `int64` | `4194304` | Maximum accepted bytes for a JSON request body; larger bodies are rejected by MaxBytesReader. |
+| `AIVORY_API_PROJECT_DETAIL_CONVERSATIONS_PAGE_SIZE` | `int` | `200` | Number of active conversations loaded in the project detail response (fetch cap, offset 0). |
+| `AIVORY_API_RATE_LIMIT_USER_2` | `int` | `20` | Per-user rate-limit allowance: maximum project document uploads per minute before returning 429. |
+| `AIVORY_API_RATE_LIMIT_REGISTER_MAX` | `int` | `5` | Per-IP allowance for POST /api/auth/register: maximum registration attempts per window before returning 429. |
+| `AIVORY_API_RATE_LIMIT_REGISTER_WINDOW` | `duration` | `60s` | Rolling window of the per-IP rate limit on POST /api/auth/register. |
+| `AIVORY_API_RATE_LIMIT_LOGIN_MAX` | `int` | `10` | Per-IP allowance for POST /api/auth/login: maximum login attempts per window before returning 429. |
+| `AIVORY_API_RATE_LIMIT_LOGIN_WINDOW` | `duration` | `60s` | Rolling window of the per-IP rate limit on POST /api/auth/login. |
+| `AIVORY_API_RATE_LIMIT_LOGIN_2FA_MAX` | `int` | `10` | Per-IP allowance for POST /api/auth/login/2fa: maximum two-factor attempts per window before returning 429. |
+| `AIVORY_API_RATE_LIMIT_LOGIN_2FA_WINDOW` | `duration` | `60s` | Rolling window of the per-IP rate limit on POST /api/auth/login/2fa. |
+| `AIVORY_API_RATE_LIMIT_LOGOUT_MAX` | `int` | `30` | Per-IP allowance for POST /api/auth/logout: maximum logout requests per window before returning 429. |
+| `AIVORY_API_RATE_LIMIT_LOGOUT_WINDOW` | `duration` | `60s` | Rolling window of the per-IP rate limit on POST /api/auth/logout. |
+| `AIVORY_API_RATE_LIMIT_REFRESH_MAX` | `int` | `30` | Per-IP allowance for POST /api/auth/refresh: maximum token refresh requests per window before returning 429. |
+| `AIVORY_API_RATE_LIMIT_REFRESH_WINDOW` | `duration` | `60s` | Rolling window of the per-IP rate limit on POST /api/auth/refresh. |
+| `AIVORY_API_RATE_LIMIT_VERIFY_EMAIL_MAX` | `int` | `10` | Per-IP allowance for POST /api/auth/verify-email: maximum email verification attempts per window before returning 429. |
+| `AIVORY_API_RATE_LIMIT_VERIFY_EMAIL_WINDOW` | `duration` | `5m` | Rolling window of the per-IP rate limit on POST /api/auth/verify-email. |
+| `AIVORY_API_RATE_LIMIT_SEND_CODE_MAX` | `int` | `3` | Maximum requests per IP within the window to POST /api/auth/send-code (sends login/verification code emails). |
+| `AIVORY_API_RATE_LIMIT_SEND_CODE_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the /api/auth/send-code code-sending endpoint. |
+| `AIVORY_API_RATE_LIMIT_FORGOT_PASSWORD_MAX` | `int` | `5` | Maximum requests per IP within the window to POST /api/auth/forgot-password (triggers the password-reset email). |
+| `AIVORY_API_RATE_LIMIT_FORGOT_PASSWORD_WINDOW` | `duration` | `15m` | Fixed time window counting per-IP requests to the /api/auth/forgot-password endpoint. |
+| `AIVORY_API_RATE_LIMIT_RESET_PASSWORD_MAX` | `int` | `5` | Maximum requests per IP within the window to POST /api/auth/reset-password (resets the password with a code). |
+| `AIVORY_API_RATE_LIMIT_RESET_PASSWORD_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the /api/auth/reset-password endpoint. |
+| `AIVORY_API_RATE_LIMIT_CAPTCHA_ISSUE_MAX` | `int` | `20` | Maximum requests per IP within the window to GET /api/public/captcha (issues a slider CAPTCHA challenge). |
+| `AIVORY_API_RATE_LIMIT_CAPTCHA_ISSUE_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the GET /api/public/captcha challenge-issuance endpoint. |
+| `AIVORY_API_RATE_LIMIT_CAPTCHA_VERIFY_MAX` | `int` | `20` | Maximum requests per IP within the window to POST /api/public/captcha/verify (validates a CAPTCHA answer). |
+| `AIVORY_API_RATE_LIMIT_CAPTCHA_VERIFY_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the /api/public/captcha/verify answer-validation endpoint. |
+| `AIVORY_API_RATE_LIMIT_FIRST_RUN_SETUP_MAX` | `int` | `10` | Maximum requests per IP within the window to POST /api/setup (first-run creation of the first administrator). |
+| `AIVORY_API_RATE_LIMIT_FIRST_RUN_SETUP_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the POST /api/setup first-run bootstrap endpoint. |
+| `AIVORY_API_RATE_LIMIT_PUBLIC_SHARED_CONVERSATION_MAX` | `int` | `60` | Maximum requests per IP within the window to GET /api/public/shared/:token (viewing a shared conversation without login). |
+| `AIVORY_API_RATE_LIMIT_PUBLIC_SHARED_CONVERSATION_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the /api/public/shared/:token shared-view endpoint. |
+| `AIVORY_API_RATE_LIMIT_SHARED_ASSETS_FILES_ARTIFACTS_MAX` | `int` | `240` | Maximum requests per IP within the window to shared-conversation file and artifact resource routes. |
+| `AIVORY_API_RATE_LIMIT_SHARED_ASSETS_FILES_ARTIFACTS_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to shared-conversation file/artifact resource routes. |
+| `AIVORY_API_RATE_LIMIT_OAUTH_START_CALLBACK_HANDOFF_MAX` | `int` | `20` | Maximum requests per IP within the window to the OAuth start, callback, and cross-domain handoff routes. |
+| `AIVORY_API_RATE_LIMIT_OAUTH_START_CALLBACK_HANDOFF_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the OAuth start/callback/handoff routes. |
+| `AIVORY_API_RATE_LIMIT_PASSWORD_CHANGE_SET_MAX` | `int` | `5` | Maximum requests per IP within the window to the /api/me/password change-password and /api/me/password/set set-password endpoints. |
+| `AIVORY_API_RATE_LIMIT_PASSWORD_CHANGE_SET_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the /api/me/password change/set password endpoints. |
+| `AIVORY_API_RATE_LIMIT_IDENTITY_LINK_START_MAX` | `int` | `20` | Maximum requests per IP within the window to POST /api/me/identities/:id/link (starts an OAuth account link). |
+| `AIVORY_API_RATE_LIMIT_IDENTITY_LINK_START_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the OAuth identity-link start endpoint. |
+| `AIVORY_API_RATE_LIMIT_2FA_SETUP_ENABLE_DISABLE_MAX` | `int` | `10` | Maximum requests per IP within the window to the setup, enable, and disable endpoints of /api/me/2fa. |
+| `AIVORY_API_RATE_LIMIT_2FA_SETUP_ENABLE_DISABLE_WINDOW` | `duration` | `5m` | Fixed time window counting per-IP requests to the 2FA setup/enable/disable endpoints. |
+| `AIVORY_API_RATE_LIMIT_REDEEM_CODE_MAX` | `int` | `10` | Maximum requests per IP within the window to POST /api/me/redeem (redeem-code exchange). |
+| `AIVORY_API_RATE_LIMIT_REDEEM_CODE_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the /api/me/redeem exchange endpoint. |
+| `AIVORY_API_RATE_LIMIT_WORKSPACE_JOIN_MAX` | `int` | `30` | Maximum requests per IP within the window to /api/workspaces/join/:token (invite info and join). |
+| `AIVORY_API_RATE_LIMIT_WORKSPACE_JOIN_WINDOW` | `duration` | `60s` | Fixed time window counting per-IP requests to the /api/workspaces/join/:token endpoint. |
+| `AIVORY_API_SELF_USAGE_LOOKBACK_WINDOW` | `int` | `30` | Days of lookback when GET /api/me/usage counts the caller's own messages. |
+| `AIVORY_API_LIMIT` | `int` | `200` | Default maximum number of workspaces returned by the admin workspace list endpoint when the request has no ?limit. |
+| `AIVORY_API_ADMIN_WORKSPACE_DETAIL_CONVERSATIONS_PAGE_SIZE` | `int` | `500` | Maximum number of conversations loaded in the admin workspace detail (triage) view. |
+| `AIVORY_QUEUE_IN_PROCESS_WORKERS` | `int` | `8` | Number of concurrent worker goroutines in the in-process background job pool. |
+| `AIVORY_QUEUE_PROCESS_JOB_BUFFER` | `int` | `256` | Buffered slots of the in-process job channel; when the buffer is full, Enqueue hands new jobs to the backpressure fallback path. |
+| `AIVORY_QUEUE_QUEUE_BACKPRESSURE_JOB_TIMEOUT` | `duration` | `30m` | Context timeout for jobs run on the backpressure fallback goroutine when the in-process job buffer is full. |
+| `AIVORY_QUEUE_QUEUE_WORKER_JOB_TIMEOUT` | `duration` | `30m` | Context timeout applied per job by the in-process queue workers. |
 
 
 
 
 
-## 6. 认证 / 会话 / 验证码
+## 6. Authentication / Sessions / CAPTCHA
 
-令牌缓存、验证码有效期与尝试次数、TOTP 时窗、OAuth state TTL 等（不含约定俗成的格式常量，如验证码位数）。
+Token caches, verification-code validity and attempt limits, TOTP time windows, OAuth state TTLs, and more (excluding conventional format constants such as verification-code length).
 
-| 环境变量 | 类型 | 默认值 | 说明 |
+| Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `AIVORY_API_MAX_CODE_ATTEMPTS` | `int` | `5` | 对邮寄的验证/重置验证码允许的错误尝试次数，达到后即作废该码。 |
-| `AIVORY_API_CODE_FAILURE_COUNTER_TTL` | `duration` | `10m` | 按邮箱记录验证/重置码错误尝试次数的计数器的存活时长（TTL）。 |
-| `AIVORY_API_MINIMUM_PASSWORD_LENGTH` | `int` | `8` | 注册及修改密码时用户自选账户密码所需的最小字符长度。 |
-| `AIVORY_API_EMAIL_VERIFICATION_CODE_TTL` | `duration` | `10m` | 邮件发送的账户邮箱验证码的有效期。 |
-| `AIVORY_API_PASSWORD_RESET_CODE_TTL` | `duration` | `10m` | 邮件发送的密码重置验证码的有效期。 |
-| `AIVORY_API_CAP_TOL` | `float` | `0.025` | 滑块验证码通过时，提交的滑动比例与真实缺口比例之间允许的误差。 |
-| `AIVORY_API_CAPTCHA_CHALLENGE_CACHE_TTL` | `duration` | `2m` | 未解答的滑块拼图验证码挑战在缓存中保持有效的时长。 |
-| `AIVORY_API_CAPTCHA_PASS_TTL` | `duration` | `10m` | 证明近期已通过验证码的签名通行令牌的有效期。 |
-| `AIVORY_API_OAUTH_2FA_HANDOFF_COOKIE_TTL` | `duration` | `300s` | OAuth 登录后将两步验证登录票据传给前端的短时 HttpOnly Cookie 的 Max-Age。 |
-| `AIVORY_API_OAUTH_STATE_CACHE_TTL` | `duration` | `10m` | 作为 CSRF 防护的 OAuth 授权流程 state 缓存条目的有效期。 |
-| `AIVORY_API_OAUTH_TOKEN_EXCHANGE_CONTEXT_TIMEOUT` | `duration` | `40s` | OAuth 回调中授权码换取令牌（包括一次瞬时网络故障重试）及拉取用户信息的超时上限。 |
-| `AIVORY_API_OAUTH_CROSS_DOMAIN_HANDOFF_TOKEN_TTL` | `duration` | `60s` | 前端用以换取会话的一次性跨域 OAuth 交接令牌的有效期。 |
-| `AIVORY_API_2FA_LOGIN_TICKET_BURN_THRESHOLD` | `int64` | `5` | 针对某个两步验证登录票据允许的错误 TOTP 验证码次数，达到即作废该票据。 |
-| `AIVORY_API_ISSUE_TWOFA_TICKET` | `duration` | `5m` | 密码正确后、待输入 TOTP 验证码期间所签发的两步验证登录票据的有效期。 |
-| `AIVORY_OAUTH_APPLE_CLIENT_SECRET_JWT_EXPIRY` | `duration` | `30m` | 生成的 Apple OAuth 客户端密钥 JWT 的有效期。 |
+| `AIVORY_API_MAX_CODE_ATTEMPTS` | `int` | `5` | Allowed wrong attempts against an emailed verification/reset code before the code is invalidated. |
+| `AIVORY_API_CODE_FAILURE_COUNTER_TTL` | `duration` | `10m` | Lifetime (TTL) of the per-email counter tracking wrong verification/reset code attempts. |
+| `AIVORY_API_MINIMUM_PASSWORD_LENGTH` | `int` | `8` | Minimum character length required for user-chosen account passwords at registration and password change. |
+| `AIVORY_API_EMAIL_VERIFICATION_CODE_TTL` | `duration` | `10m` | Validity period of account email verification codes sent by email. |
+| `AIVORY_API_PASSWORD_RESET_CODE_TTL` | `duration` | `10m` | Validity period of password reset codes sent by email. |
+| `AIVORY_API_CAP_TOL` | `float` | `0.025` | Tolerance allowed between the submitted slide position and the actual gap position for a slider CAPTCHA to pass. |
+| `AIVORY_API_CAPTCHA_CHALLENGE_CACHE_TTL` | `duration` | `2m` | Time an unanswered slider CAPTCHA challenge stays valid in cache. |
+| `AIVORY_API_CAPTCHA_PASS_TTL` | `duration` | `10m` | Validity of the signed pass token attesting a recent CAPTCHA pass. |
+| `AIVORY_API_OAUTH_2FA_HANDOFF_COOKIE_TTL` | `duration` | `300s` | Max-Age of the short-lived HttpOnly cookie that hands the two-factor login ticket to the frontend after OAuth login. |
+| `AIVORY_API_OAUTH_STATE_CACHE_TTL` | `duration` | `10m` | Validity of the OAuth flow state cache entry used as CSRF protection. |
+| `AIVORY_API_OAUTH_TOKEN_EXCHANGE_CONTEXT_TIMEOUT` | `duration` | `40s` | Timeout cap for exchanging the authorization code for tokens (including one retry for a transient network failure) and fetching user info in an OAuth callback. |
+| `AIVORY_API_OAUTH_CROSS_DOMAIN_HANDOFF_TOKEN_TTL` | `duration` | `60s` | Validity of the one-time cross-domain OAuth handoff token the frontend uses to exchange for a session. |
+| `AIVORY_API_2FA_LOGIN_TICKET_BURN_THRESHOLD` | `int64` | `5` | Allowed wrong TOTP codes against a two-factor login ticket before the ticket is invalidated. |
+| `AIVORY_API_ISSUE_TWOFA_TICKET` | `duration` | `5m` | Validity of the two-factor login ticket issued after a correct password, while the TOTP code is pending. |
+| `AIVORY_OAUTH_APPLE_CLIENT_SECRET_JWT_EXPIRY` | `duration` | `30m` | Validity of the generated Apple OAuth client-secret JWT. |
 
 
 
 
 
-## 7. 上传 / 文件 / 分享
+## 7. Uploads / Files / Sharing
 
-图片处理、存储清理周期、直传分片、分享令牌、下载缓存 TTL 等。
+Image processing, storage cleanup cycles, direct-upload parts, share tokens, download cache TTLs, and more.
 
-| 环境变量 | 类型 | 默认值 | 说明 |
+| Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `AIVORY_API_ADMIN_ICON_UPLOAD_SIZE` | `int64` | `262144` | 管理员上传的模型图标图片所接受的最大字节数。 |
-| `AIVORY_API_AUDIO_TRANSCRIPTION_UPSTREAM_HTTP_TIMEOUT` | `duration` | `120s` | 将音频转发至上游转写 API 的 HTTP 请求的超时时间。 |
-| `AIVORY_API_AUDIO_TRANSCRIPTION_USER_RATE_LIMIT` | `int` | `20` | 单个用户每分钟可发起的音频转写请求数上限。 |
-| `AIVORY_API_TRANSCRIPTION_UPSTREAM_RESPONSE_READ_CAP` | `int64` | `1048576` | 读取上游转写响应到内存的字节上限。 |
-| `AIVORY_API_AUDIO_STREAM_USER_RATE_LIMIT` | `int` | `30` | 单个用户每分钟可发起的实时语音流式（WebSocket）会话数上限。 |
-| `AIVORY_API_AUDIO_STREAM_MAX_BYTES` | `int64` | `25165824` | 单次实时语音流式会话允许中继的音频字节数上限，超出即断开连接。 |
-| `AIVORY_API_AUDIO_STREAM_MAX_SESSION` | `duration` | `15m` | 单次实时语音流式会话（麦克风 → 火山 ASR 中继）的硬性时长上限。 |
-| `AIVORY_ASR_DEBUG` | `bool` | `false` | 记录每个解码后的火山 ASR 返回帧（消息码、末包标记、转写文本长度、原始 JSON 负载），用于排查实时转写问题。默认关闭——原始负载含用户语音内容，需显式开启。 |
-| `AIVORY_API_UPLOAD_RATE_LIMIT_MAX` | `int` | `20` | 上传限流窗口内单个用户可进行的文件上传次数上限。 |
-| `AIVORY_API_UPLOAD_RATE_LIMIT_WINDOW` | `duration` | `1m` | 对用户文件上传进行限流计数的时间窗口。 |
-| `AIVORY_API_OBJECT_STORAGE_DELETE_TIMEOUT_CLEANUP` | `duration` | `30s` | 存储清理时从对象存储删除单个孤立文件的超时时间。 |
-| `AIVORY_STORAGE_S3_DIRECT_UPLOAD_MIN_CLIENT_TIMEOUT` | `duration` | `20m` | 直传 S3/OSS 上传所需的最小 HTTP 客户端超时；复用的客户端低于此值时会新建一个。 |
-| `AIVORY_STORAGE_DIRECT_S3_OSS_UPLOAD_HTTP_CLIENT` | `duration` | `20m` | 复用客户端超时过短时，为直传 S3/OSS 上传新建的 HTTP 客户端的超时时间。 |
-| `AIVORY_STORAGE_ALIYUN_OSS_CLIENT_CONNECT_READ_TIMEOUTS_CONNECT` | `int64` | `30` | 直传所用阿里云 OSS 客户端的连接超时（秒）。 |
-| `AIVORY_STORAGE_ALIYUN_OSS_CLIENT_CONNECT_READ_TIMEOUTS_RW` | `int64` | `300` | 直传所用阿里云 OSS 客户端的读写超时（秒）。 |
-| `AIVORY_STORAGE_PRESIGN_URL_TTL` | `duration` | `1h` | 调用方未指定有效期时，为直传预签名 GET URL 应用的过期时间。 |
-| `AIVORY_STORAGE_PRESIGN_URL_TTL_CLAMP_CEILING` | `duration` | `24h` | 钳制调用方请求的直传预签名 GET URL 有效期的上限。 |
-| `AIVORY_STORAGE_SIDECAR_STORAGE_CLIENT_HTTP_TIMEOUT` | `duration` | `5m` | 调用沙箱 sidecar 对象存储 put/delete 接口的 HTTP 往返超时。 |
+| `AIVORY_API_ADMIN_ICON_UPLOAD_SIZE` | `int64` | `262144` | Maximum bytes accepted for a model icon image uploaded by an administrator. |
+| `AIVORY_API_AUDIO_TRANSCRIPTION_UPSTREAM_HTTP_TIMEOUT` | `duration` | `120s` | HTTP request timeout when forwarding audio to the upstream transcription API. |
+| `AIVORY_API_AUDIO_TRANSCRIPTION_USER_RATE_LIMIT` | `int` | `20` | Maximum audio transcription requests a single user may start per minute. |
+| `AIVORY_API_TRANSCRIPTION_UPSTREAM_RESPONSE_READ_CAP` | `int64` | `1048576` | Byte cap on reading an upstream transcription response into memory. |
+| `AIVORY_API_AUDIO_STREAM_USER_RATE_LIMIT` | `int` | `30` | Maximum real-time voice streaming (WebSocket) sessions a single user may start per minute. |
+| `AIVORY_API_AUDIO_STREAM_MAX_BYTES` | `int64` | `25165824` | Maximum audio bytes allowed to be relayed in a single real-time voice streaming session; the connection is closed when exceeded. |
+| `AIVORY_API_AUDIO_STREAM_MAX_SESSION` | `duration` | `15m` | Hard duration cap for a single real-time voice streaming session (microphone → Volcano ASR relay). |
+| `AIVORY_ASR_DEBUG` | `bool` | `false` | Logs every decoded Volcano ASR response frame (message code, final-packet flag, transcript text length, raw JSON payload) to troubleshoot real-time transcription. Off by default — raw payloads contain user speech content and must be explicitly enabled. |
+| `AIVORY_API_UPLOAD_RATE_LIMIT_MAX` | `int` | `20` | Maximum file uploads a single user may perform within the upload rate-limit window. |
+| `AIVORY_API_UPLOAD_RATE_LIMIT_WINDOW` | `duration` | `1m` | Time window used to count user file uploads for rate limiting. |
+| `AIVORY_API_OBJECT_STORAGE_DELETE_TIMEOUT_CLEANUP` | `duration` | `30s` | Timeout for deleting a single orphaned file from object storage during storage cleanup. |
+| `AIVORY_STORAGE_S3_DIRECT_UPLOAD_MIN_CLIENT_TIMEOUT` | `duration` | `20m` | Minimum HTTP client timeout required for direct S3/OSS uploads; if a reused client is below this, a new one is created. |
+| `AIVORY_STORAGE_DIRECT_S3_OSS_UPLOAD_HTTP_CLIENT` | `duration` | `20m` | Timeout of the freshly created HTTP client for direct S3/OSS uploads when the reused client's timeout is too short. |
+| `AIVORY_STORAGE_ALIYUN_OSS_CLIENT_CONNECT_READ_TIMEOUTS_CONNECT` | `int64` | `30` | Connect timeout (seconds) of the Aliyun OSS client used for direct uploads. |
+| `AIVORY_STORAGE_ALIYUN_OSS_CLIENT_CONNECT_READ_TIMEOUTS_RW` | `int64` | `300` | Read/write timeout (seconds) of the Aliyun OSS client used for direct uploads. |
+| `AIVORY_STORAGE_PRESIGN_URL_TTL` | `duration` | `1h` | Expiration applied to direct-upload presigned GET URLs when the caller specifies no validity period. |
+| `AIVORY_STORAGE_PRESIGN_URL_TTL_CLAMP_CEILING` | `duration` | `24h` | Ceiling for clamping the validity period of caller-requested direct-upload presigned GET URLs. |
+| `AIVORY_STORAGE_SIDECAR_STORAGE_CLIENT_HTTP_TIMEOUT` | `duration` | `5m` | HTTP round-trip timeout when calling the sandbox sidecar's object-storage put/delete endpoints. |
 
 
 
 
 
-## 8. 管理后台任务（备份 / 向量维护 / 兑换码）
+## 8. Admin Background Jobs (Backup / Vector Maintenance / Redeem Codes)
 
-备份大小上限与异步轮询、向量维护批量、兑换码上限等。
+Backup size caps and asynchronous polling, vector maintenance batches, redeem-code limits, and more.
 
-| 环境变量 | 类型 | 默认值 | 说明 |
+| Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `AIVORY_API_BACKUP_EXPORT_JOB_HISTORY_RETENTION` | `int` | `20` | 内存历史中保留的过往备份导出任务记录数量，超出后修剪最旧的记录。 |
-| `AIVORY_API_BACKUP_EXPORT_JOB_RUNTIME` | `duration` | `12h` | 后台备份导出任务被取消前允许的最长实际运行时间。 |
-| `AIVORY_API_CONFIG_IMPORT_MULTIPART_MEMORY_BUFFER` | `int64` | `16777216` | 解析管理员配置导入 multipart 上传的内存缓冲区；超出部分溢写到临时文件。 |
-| `AIVORY_API_BACKUP_IMPORT_MULTIPART_MEMORY_BUFFER` | `int64` | `33554432` | 解析完整备份导入 multipart 上传的内存缓冲区；超出部分溢写到临时文件。 |
-| `AIVORY_API_MAX_CONFIG_SIZE` | `int64` | `536870912` | 导入管理员配置归档时接受的最大请求体大小。 |
-| `AIVORY_API_QDRANT_ARCHIVE_REQUEST_TIMEOUT` | `duration` | `5m` | 导出或导入备份归档时调用 Qdrant 的单次 HTTP 请求超时。 |
-| `AIVORY_API_QDRANT_EXPORT_SCROLL_PAGE_SIZE` | `int` | `256` | 导出 Qdrant 集合到归档时每个 /points/scroll 页拉取的点数。 |
-| `AIVORY_API_QDRANT_IMPORT_UPSERT_FLUSH_BATCH_SIZE` | `int` | `128` | 导入 Qdrant 集合时，每批累积到该点数即刷写一次 upsert。 |
-| `AIVORY_API_ADMIN_USER_LIST_PAGE_SIZE_CAP` | `int` | `50` | 管理员用户列表接口在请求未显式指定 limit 时的默认返回条数。 |
-| `AIVORY_API_ADMIN_CREATED_USER_MIN_PASSWORD_LENGTH` | `int` | `8` | 管理员创建用户账户时强制的最小密码长度。 |
-| `AIVORY_API_ADMIN_PASSWORD_RESET_MIN_LENGTH` | `int` | `8` | 管理员重置用户密码接口中新密码所需的最小字符长度。 |
-| `AIVORY_API_ADMIN_USER_CONVERSATIONS_LISTING_CAP` | `int` | `500` | 管理员查看单个用户会话（用于支持/滥用排查）时返回的最大会话数。 |
-| `AIVORY_API_USAGE_REPORT_PAGE_SIZE_CAP` | `int` | `50` | 管理员用量记录报表在请求的 page_size 缺失或超出 1-200 范围时采用的默认每页条数。 |
-| `AIVORY_API_ANALYTICS_WINDOW` | `int` | `30` | 管理员分析看板在未提供 days 查询参数时的默认回溯窗口（天）。 |
-| `AIVORY_API_ANALYTICS_WINDOW_2` | `int` | `365` | 管理员分析窗口 days 查询参数可接受的天数上限，超出范围的值将被忽略。 |
-| `AIVORY_STORE_ADMIN_USAGE_RECORDS_LIMIT` | `int` | `500` | AdminUsageRecords 接受的最大正数分页 limit；超过该值时回退到 AIVORY_STORE_ADMIN_USAGE_RECORDS_LIMIT_2，而不是钳制到上限。 |
-| `AIVORY_STORE_ADMIN_USAGE_RECORDS_LIMIT_2` | `int` | `50` | AdminUsageRecords 收到 limit 小于等于 0 或超过 AIVORY_STORE_ADMIN_USAGE_RECORDS_LIMIT 时使用的回退分页大小。 |
-| `AIVORY_STORE_USAGE_TREND_WINDOW` | `int` | `7` | 仅当 days 小于等于 0 时 AdminUsageTrend 使用的默认回溯天数；调用 AdminUsageTrendBetween 时由调用方明确传入边界。 |
-| `AIVORY_STORE_USAGE_TREND_HOURLY_BUCKET_THRESHOLD` | `int` | `2` | UsageBucketWidth 对小于等于该阈值的天数窗口按小时分桶；其余窗口中，超过 90 天按周分桶，剩余按天分桶。 |
-| `AIVORY_STORE_USAGE_TOTALS_WINDOW` | `int` | `7` | 仅当 days 小于等于 0 时 AdminUsageTotals 使用的默认回溯天数；调用 AdminUsageTotalsBetween 时由调用方明确传入边界。 |
-| `AIVORY_STORE_USAGE_BREAKDOWN_TOP_N` | `int` | `8` | 仅当 limit 等于 0 时 AdminUsageBreakdownBetween 使用的默认返回条数；负数 limit 返回全部。当前主管理员分析路由传入 -1，因此绕过此上限。 |
-| `AIVORY_STORE_USAGE_BREAKDOWN_WINDOW` | `int` | `7` | 仅当 days 小于等于 0 时 AdminUsageBreakdown 使用的默认回溯天数；调用 AdminUsageBreakdownBetween 时由调用方明确传入边界。 |
-| `AIVORY_STORE_USAGE_SERIES_WINDOW` | `int` | `7` | 仅当 days 小于等于 0 时 AdminUsageSeries 使用的默认回溯天数；当前主管理员分析路由不调用这一旧时间序列包装函数。 |
-| `AIVORY_API_BULK_REDEEM_CODE_GENERATION_QUANTITY` | `int` | `1000` | 单次批量生成请求可铸造的最大兑换码数量。 |
-| `AIVORY_API_MAX_SKILL_ASSET_BYTES` | `int64` | `20971520` | 单个技能资源文件（模板/脚本/小型数据）上传的最大字节数。 |
-| `AIVORY_API_VECTOR_MAINTENANCE_JOB_HISTORY_RETENTION` | `int` | `20` | 向量维护任务历史在内存中保留的最近任务数，更早的会被丢弃。 |
-| `AIVORY_API_VECTOR_MAINTENANCE_JOB_RUNTIME` | `duration` | `12h` | 单次向量维护任务运行（索引审计或重建）在被取消前的上下文超时时间。 |
+| `AIVORY_API_BACKUP_EXPORT_JOB_HISTORY_RETENTION` | `int` | `20` | Number of past backup export job records kept in the in-memory history before the oldest are pruned. |
+| `AIVORY_API_BACKUP_EXPORT_JOB_RUNTIME` | `duration` | `12h` | Maximum wall-clock runtime allowed for a background backup export job before it is canceled. |
+| `AIVORY_API_CONFIG_IMPORT_MULTIPART_MEMORY_BUFFER` | `int64` | `16777216` | In-memory buffer for parsing admin config import multipart uploads; excess spills to a temporary file. |
+| `AIVORY_API_BACKUP_IMPORT_MULTIPART_MEMORY_BUFFER` | `int64` | `33554432` | In-memory buffer for parsing full backup import multipart uploads; excess spills to a temporary file. |
+| `AIVORY_API_MAX_CONFIG_SIZE` | `int64` | `536870912` | Maximum request body size accepted when importing an admin configuration archive. |
+| `AIVORY_API_QDRANT_ARCHIVE_REQUEST_TIMEOUT` | `duration` | `5m` | Single HTTP request timeout for calls to Qdrant when exporting or importing backup archives. |
+| `AIVORY_API_QDRANT_EXPORT_SCROLL_PAGE_SIZE` | `int` | `256` | Points pulled per /points/scroll page when exporting a Qdrant collection to an archive. |
+| `AIVORY_API_QDRANT_IMPORT_UPSERT_FLUSH_BATCH_SIZE` | `int` | `128` | Points accumulated per batch before flushing an upsert when importing a Qdrant collection. |
+| `AIVORY_API_ADMIN_USER_LIST_PAGE_SIZE_CAP` | `int` | `50` | Default number of rows returned by the admin user list endpoint when the request does not explicitly specify limit. |
+| `AIVORY_API_ADMIN_CREATED_USER_MIN_PASSWORD_LENGTH` | `int` | `8` | Minimum password length enforced when an administrator creates a user account. |
+| `AIVORY_API_ADMIN_PASSWORD_RESET_MIN_LENGTH` | `int` | `8` | Minimum character length required for the new password in the admin password-reset endpoint. |
+| `AIVORY_API_ADMIN_USER_CONVERSATIONS_LISTING_CAP` | `int` | `500` | Maximum number of conversations returned when an administrator views a single user's conversations (for support/abuse triage). |
+| `AIVORY_API_USAGE_REPORT_PAGE_SIZE_CAP` | `int` | `50` | Default page size used by the admin usage-record report when the requested page_size is missing or outside the 1-200 range. |
+| `AIVORY_API_ANALYTICS_WINDOW` | `int` | `30` | Default lookback window (days) for the admin analytics dashboard when no days query parameter is provided. |
+| `AIVORY_API_ANALYTICS_WINDOW_2` | `int` | `365` | Maximum days accepted for the admin analytics window days query parameter; out-of-range values are ignored. |
+| `AIVORY_STORE_ADMIN_USAGE_RECORDS_LIMIT` | `int` | `500` | Maximum positive pagination limit accepted by AdminUsageRecords; above it, the code falls back to AIVORY_STORE_ADMIN_USAGE_RECORDS_LIMIT_2 instead of clamping to the cap. |
+| `AIVORY_STORE_ADMIN_USAGE_RECORDS_LIMIT_2` | `int` | `50` | Fallback page size used by AdminUsageRecords when the limit is ≤ 0 or exceeds AIVORY_STORE_ADMIN_USAGE_RECORDS_LIMIT. |
+| `AIVORY_STORE_USAGE_TREND_WINDOW` | `int` | `7` | Default lookback days used by AdminUsageTrend only when days ≤ 0; callers of AdminUsageTrendBetween pass explicit bounds. |
+| `AIVORY_STORE_USAGE_TREND_HOURLY_BUCKET_THRESHOLD` | `int` | `2` | UsageBucketWidth buckets day windows of at most this threshold by hour; in the remaining windows, ranges over 90 days bucket by week and the rest by day. |
+| `AIVORY_STORE_USAGE_TOTALS_WINDOW` | `int` | `7` | Default lookback days used by AdminUsageTotals only when days ≤ 0; callers of AdminUsageTotalsBetween pass explicit bounds. |
+| `AIVORY_STORE_USAGE_BREAKDOWN_TOP_N` | `int` | `8` | Default number of rows returned by AdminUsageBreakdownBetween only when limit equals 0; a negative limit returns everything. The current main admin analytics route passes -1, bypassing this cap. |
+| `AIVORY_STORE_USAGE_BREAKDOWN_WINDOW` | `int` | `7` | Default lookback days used by AdminUsageBreakdown only when days ≤ 0; callers of AdminUsageBreakdownBetween pass explicit bounds. |
+| `AIVORY_STORE_USAGE_SERIES_WINDOW` | `int` | `7` | Default lookback days used by AdminUsageSeries only when days ≤ 0; the current main admin analytics route does not call this legacy time-series wrapper. |
+| `AIVORY_API_BULK_REDEEM_CODE_GENERATION_QUANTITY` | `int` | `1000` | Maximum number of redeem codes a single bulk-generation request may mint. |
+| `AIVORY_API_MAX_SKILL_ASSET_BYTES` | `int64` | `20971520` | Maximum bytes for a single skill asset file (template/script/small data) upload. |
+| `AIVORY_API_VECTOR_MAINTENANCE_JOB_HISTORY_RETENTION` | `int` | `20` | Number of recent vector maintenance jobs kept in the in-memory history; older ones are dropped. |
+| `AIVORY_API_VECTOR_MAINTENANCE_JOB_RUNTIME` | `duration` | `12h` | Context timeout for a single vector maintenance job run (index audit or rebuild) before cancellation. |
 
 
 
 
 
-## 9. 服务器启动 / 配置加载
+## 9. Server Startup / Configuration Loading
 
-HTTP server 超时、优雅关闭、启动流程常量等。
+HTTP server timeouts, graceful shutdown, startup-flow constants, and more.
 
-| 环境变量 | 类型 | 默认值 | 说明 |
+| Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `VECTOR_BACKEND` | `string` | `"auto"` | 选择进程启动时使用的向量后端。`auto` 保持兼容行为：设置了 `QDRANT_URL` 就使用 Qdrant，否则关闭向量检索并使用全文上下文回退；`qdrant` 要求同时设置 `QDRANT_URL`；`sqlite` 要求 `DATABASE_URL` 不是 PostgreSQL，并启用 SQLite 内嵌精确余弦检索；`disabled` 始终关闭向量检索。值或组合无效时会输出明确错误并拒绝启动。 |
-| `AIVORY_CMD_ARCHIVE_GC_BOOT_SETTLE_DELAY` | `duration` | `2m` | 服务器启动后到首次归档工作区 GC 清扫之间的延迟，避免冷启动时立即清扫。 |
-| `AIVORY_CMD_RUN_PRUNE` | `duration` | `5m` | 单次归档工作区 GC 清理（针对对象存储）运行的上下文超时时间。 |
-| `AIVORY_CMD_ARCHIVE_GC_SWEEP_INTERVAL` | `duration` | `6h` | 归档工作区 GC 清扫之间的间隔，用于从对象存储删除过期的 /workspace 归档包。 |
+| `VECTOR_BACKEND` | `string` | `"auto"` | Selects the vector backend used at process start. `auto` preserves compatible behavior: use Qdrant when `QDRANT_URL` is set, otherwise disable vector search and use the full-text context fallback; `qdrant` requires `QDRANT_URL` to be set; `sqlite` requires `DATABASE_URL` to not be PostgreSQL and enables SQLite embedded exact-cosine search; `disabled` always turns off vector search. Invalid values or combinations print a clear error and refuse to start. |
+| `AIVORY_CMD_ARCHIVE_GC_BOOT_SETTLE_DELAY` | `duration` | `2m` | Delay between server start and the first archived-workspace GC sweep, avoiding an immediate sweep on a cold start. |
+| `AIVORY_CMD_RUN_PRUNE` | `duration` | `5m` | Context timeout for a single archived-workspace GC prune run (against object storage). |
+| `AIVORY_CMD_ARCHIVE_GC_SWEEP_INTERVAL` | `duration` | `6h` | Interval between archived-workspace GC sweeps, which delete expired /workspace archive bundles from object storage. |
 
-## 当前版本补充变量
+## Variables Added in the Current Version
 
-以下变量属于当前运行时支持范围，但不在早期调优表中。除网页抓取的 Jina 回退开关和地址在每次抓取时读取外，它们均在 `app` 启动时读取并在重启后生效。
+The following variables are part of the current supported runtime but were not in the earlier tuning tables. Except for the web-fetch Jina fallback switch and base address, which are read on every fetch, they are all read at `app` startup and take effect after a restart.
 
-| 环境变量 | 类型 | 默认值 | 说明 |
+| Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `AIVORY_API_EVENTS_HEARTBEAT` | `duration` | `25s` | 实时 SSE 连接发送保活注释的间隔；过长可能被代理断开，过短会增加连接开销。 |
-| `AIVORY_API_EVENTS_MAX_CONNS_PER_USER` | `int` | `16` | 单个用户可同时保留的实时事件连接数；达到上限时会淘汰最旧连接。 |
-| `AIVORY_API_EVENTS_CONN_BUFFER` | `int` | `16` | 每个实时事件连接的缓冲消息数；缓冲满时事件会丢弃，客户端会在下一次刷新或重连时补偿。 |
-| `AIVORY_API_RATE_LIMIT_PAYMENT_CHECKOUT_MAX` | `int` | `15` | 每 IP 在支付结算限流窗口内允许的最大请求数。 |
-| `AIVORY_API_RATE_LIMIT_PAYMENT_CHECKOUT_WINDOW` | `duration` | `60s` | 支付结算限流窗口。 |
-| `AIVORY_API_RATE_LIMIT_PAYMENT_WEBHOOK_MAX` | `int` | `600` | 每 IP 在支付 webhook 限流窗口内允许的最大请求数；应同时依赖服务商签名校验。 |
-| `AIVORY_API_RATE_LIMIT_PAYMENT_WEBHOOK_WINDOW` | `duration` | `60s` | 支付 webhook 限流窗口。 |
-| `AIVORY_API_USER_DELETE_JOB_RUNTIME` | `duration` | `2h` | 异步删除用户任务的总运行上限。 |
-| `AIVORY_API_USER_DELETE_FINAL_CLEANUP_TIMEOUT` | `duration` | `1h` | 用户删除阶段对文件、对象和其他物理资源清理的独立时间预算。 |
-| `AIVORY_API_USER_DELETE_CONV_BATCH` | `int` | `200` | 异步删除用户时每批处理的会话数量；调大可提高吞吐，也会增加 SQLite/数据库锁定压力。 |
-| `AIVORY_API_USER_DELETE_USAGE_BATCH` | `int` | `10000` | 异步删除用户时每批清理的用量记录数量。 |
-| `AIVORY_API_USER_DELETE_JOB_HISTORY_RETENTION` | `int` | `20` | 内存中保留的已完成用户删除任务记录数。 |
-| `AIVORY_API_USER_DELETE_PROGRESS_EVERY` | `int` | `50` | 用户删除任务更新进度的处理间隔。 |
-| `AIVORY_LLM_PER_TURN_TOOL_LIMITS_FETCH_IMAGE` | `int` | `16` | 普通模式下每条消息最多调用 `fetch_image` 的次数。 |
-| `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_FETCH_IMAGE` | `int` | `12` | 深度研究模式下每条消息最多调用 `fetch_image` 的次数。 |
-| `AIVORY_LLM_TOOL_TIMEOUTS_FETCH_IMAGE` | `duration` | `45s` | 单次 `fetch_image` 工具调用的超时上限。 |
-| `AIVORY_RAG_SPREADSHEET_INDEX_MAX_FILE_BYTES` | `int64` | `31457280` | 进入知识库索引的 CSV/TSV/XLSX/XLSM 文件最大大小，默认 30 MiB。 |
-| `AIVORY_RAG_SPREADSHEET_INDEX_MAX_ROWS` | `int` | `2000` | 单个表格索引时最多读取的行数。 |
-| `AIVORY_RAG_SPREADSHEET_INDEX_MAX_COLS` | `int` | `128` | 单个表格索引时最多读取的列数。 |
-| `AIVORY_RAG_SPREADSHEET_INDEX_MAX_SHEETS` | `int` | `32` | 单个工作簿最多处理的工作表数。 |
-| `AIVORY_RAG_SPREADSHEET_INDEX_MAX_TEXT_BYTES` | `int` | `4194304` | 表格提取文本写入索引前的最大字节数，默认 4 MiB；超出部分会明确标记为截断。 |
-| `AIVORY_TOOLS_WEB_FETCH_DIRECT_TIMEOUT` | `duration` | `12s` | 网页抓取直连目标站点的单次尝试超时。 |
-| `AIVORY_TOOLS_WEB_FETCH_JINA_FALLBACK` | `bool` | `true` | 直连网页抓取失败时是否使用 Jina Reader 回退；关闭可减少向第三方发送 URL 的范围。 |
-| `AIVORY_TOOLS_WEB_FETCH_JINA_BASE` | `string` | `https://r.jina.ai` | Jina Reader 回退服务基础地址；只应指向受控、可信的兼容服务。 |
-| `AIVORY_PDF_INSPECTION_TEST_SLEEP` | `string` | 未设置 | 仅用于自动化测试中模拟 PDF 检查延迟；生产运行不应设置，也不会改善解析性能。 |
+| `AIVORY_API_EVENTS_HEARTBEAT` | `duration` | `25s` | Interval at which live SSE connections send keep-alive comments; too long may get the connection cut by proxies, too short adds connection overhead. |
+| `AIVORY_API_EVENTS_MAX_CONNS_PER_USER` | `int` | `16` | Number of live event connections a single user may hold at once; when the cap is reached, the oldest connection is evicted. |
+| `AIVORY_API_EVENTS_CONN_BUFFER` | `int` | `16` | Buffered messages per live event connection; when the buffer fills, events are dropped and the client catches up on the next refresh or reconnect. |
+| `AIVORY_API_RATE_LIMIT_PAYMENT_CHECKOUT_MAX` | `int` | `15` | Maximum requests per IP allowed within the payment checkout rate-limit window. |
+| `AIVORY_API_RATE_LIMIT_PAYMENT_CHECKOUT_WINDOW` | `duration` | `60s` | Payment checkout rate-limit window. |
+| `AIVORY_API_RATE_LIMIT_PAYMENT_WEBHOOK_MAX` | `int` | `600` | Maximum requests per IP allowed within the payment webhook rate-limit window; you should still rely on provider signature verification. |
+| `AIVORY_API_RATE_LIMIT_PAYMENT_WEBHOOK_WINDOW` | `duration` | `60s` | Payment webhook rate-limit window. |
+| `AIVORY_API_USER_DELETE_JOB_RUNTIME` | `duration` | `2h` | Total runtime cap for an asynchronous user-deletion job. |
+| `AIVORY_API_USER_DELETE_FINAL_CLEANUP_TIMEOUT` | `duration` | `1h` | Separate time budget for cleaning up files, objects, and other physical resources in the user-deletion final phase. |
+| `AIVORY_API_USER_DELETE_CONV_BATCH` | `int` | `200` | Conversations processed per batch during asynchronous user deletion; larger values improve throughput but increase SQLite/database lock pressure. |
+| `AIVORY_API_USER_DELETE_USAGE_BATCH` | `int` | `10000` | Usage records cleaned per batch during asynchronous user deletion. |
+| `AIVORY_API_USER_DELETE_JOB_HISTORY_RETENTION` | `int` | `20` | Completed user-deletion job records kept in memory. |
+| `AIVORY_API_USER_DELETE_PROGRESS_EVERY` | `int` | `50` | Processing interval at which the user-deletion job updates its progress. |
+| `AIVORY_LLM_PER_TURN_TOOL_LIMITS_FETCH_IMAGE` | `int` | `16` | Per-message cap on `fetch_image` calls in normal mode. |
+| `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_FETCH_IMAGE` | `int` | `12` | Per-message cap on `fetch_image` calls in deep research mode. |
+| `AIVORY_LLM_TOOL_TIMEOUTS_FETCH_IMAGE` | `duration` | `45s` | Timeout cap for a single `fetch_image` tool call. |
+| `AIVORY_RAG_SPREADSHEET_INDEX_MAX_FILE_BYTES` | `int64` | `31457280` | Maximum size of CSV/TSV/XLSX/XLSM files entering knowledge base indexing, 30 MiB by default. |
+| `AIVORY_RAG_SPREADSHEET_INDEX_MAX_ROWS` | `int` | `2000` | Maximum number of rows read per spreadsheet during indexing. |
+| `AIVORY_RAG_SPREADSHEET_INDEX_MAX_COLS` | `int` | `128` | Maximum number of columns read per spreadsheet during indexing. |
+| `AIVORY_RAG_SPREADSHEET_INDEX_MAX_SHEETS` | `int` | `32` | Maximum number of worksheets processed per workbook. |
+| `AIVORY_RAG_SPREADSHEET_INDEX_MAX_TEXT_BYTES` | `int` | `4194304` | Maximum bytes of extracted spreadsheet text written into the index, 4 MiB by default; the excess is explicitly marked as truncated. |
+| `AIVORY_TOOLS_WEB_FETCH_DIRECT_TIMEOUT` | `duration` | `12s` | Single-attempt timeout for web fetch connecting directly to the target site. |
+| `AIVORY_TOOLS_WEB_FETCH_JINA_FALLBACK` | `bool` | `true` | Whether to fall back to Jina Reader when direct web fetch fails; disabling it reduces the set of URLs sent to a third party. |
+| `AIVORY_TOOLS_WEB_FETCH_JINA_BASE` | `string` | `https://r.jina.ai` | Base address of the Jina Reader fallback service; it should only point to a controlled, trusted compatible service. |
+| `AIVORY_PDF_INSPECTION_TEST_SLEEP` | `string` | Not set | Only used in automated tests to simulate PDF inspection delay; it should not be set in production and does not improve parsing performance. |

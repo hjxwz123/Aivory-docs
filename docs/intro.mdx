@@ -1,33 +1,33 @@
 ---
 id: intro
-title: Aivory 文档
+title: Aivory Documentation
 sidebar_position: 1
-description: Aivory 自托管 AI 工作空间的部署、配置和使用入口。
+description: The entry point for deploying, configuring, and using the Aivory self-hosted AI workspace.
 ---
 
-# Aivory 文档
+# Aivory Documentation
 
-Aivory 是一个可以部署在自己基础设施中的 AI 工作空间。它把多模型对话、文件和知识库、工具调用、团队工作区以及管理策略放在同一个控制面里。
+Aivory is an AI workspace you can deploy on your own infrastructure. It brings multi-model conversations, files and knowledge bases, tool calling, team workspaces, and administration policies into a single control plane.
 
-这套文档按任务组织：先让实例可用，再逐步启用更丰富的能力。
+These docs are organized by task: get an instance running first, then enable richer capabilities step by step.
 
-## 从哪里开始
+## Where to Start
 
-- **个人部署**：一台服务器、一个应用容器，使用 SQLite 和内嵌向量，适合个人使用和演示。
-- **完整部署**：PostgreSQL、Redis、Qdrant 和沙盒组成的完整栈，适合团队和长期运行。
-- **第一次对话**：启动之后，从添加渠道到选择默认模型的最短路径。
+- **Personal deployment**: one server, one application container, using SQLite and embedded vectors. A good fit for personal use and demos.
+- **Full deployment**: a complete stack of PostgreSQL, Redis, Qdrant, and a sandbox. A good fit for teams and long-running instances.
+- **First conversation**: after startup, the shortest path from adding a channel to selecting a default model.
 
-## 运行模型
+## Runtime Model
 
-Aivory 的应用容器同时提供网页和 API。模型服务商的 API Key 保存在管理员后台的渠道配置中，不需要写入前端构建变量。
+The Aivory application container serves both the web UI and the API. Model provider API keys are stored in channel configuration in the admin console; they never need to be baked into frontend build variables.
 
-向量后端可以按部署规模选择：
+The vector backend can be chosen to match your deployment scale:
 
-| 部署 | 业务数据 | 向量 | 缓存与队列 |
+| Deployment | Business data | Vectors | Cache and queue |
 | --- | --- | --- | --- |
-| 个人版 | SQLite | SQLite 内嵌向量 | 进程内 |
-| 完整版 | PostgreSQL | Qdrant | Redis |
+| Personal edition | SQLite | SQLite embedded vectors | In-process |
+| Full edition | PostgreSQL | Qdrant | Redis |
 
-## 文档约定
+## Documentation Conventions
 
-命令默认在项目的 <code>deploy/</code> 目录执行。除非特别说明，示例使用 Linux 服务器和 Docker Compose Plugin。公开部署时，请在应用前配置 HTTPS，并且不要把内部数据库服务暴露到公网。
+Unless stated otherwise, commands are expected to run from the project's <code>deploy/</code> directory. Examples assume a Linux server and Docker Compose Plugin. For public deployments, put HTTPS in front of the app and never expose internal database services to the internet.

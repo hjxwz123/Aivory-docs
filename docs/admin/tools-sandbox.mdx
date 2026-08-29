@@ -1,108 +1,108 @@
 ---
-title: 工具、MCP 与沙盒
+title: Tools, MCP, and sandbox
 sidebar_position: 4
-description: 管理内置工具、网页搜索、MCP 服务和可选的持久 Python 沙盒，并保持明确的安全边界。
+description: Manage built-in tools, web search, MCP services, and the optional persistent Python sandbox while keeping clear security boundaries.
 ---
 
-# 工具、MCP 与沙盒
+# Tools, MCP, and sandbox
 
-工具会把模型回复变成对外部系统、网络、文件或代码执行环境的操作。管理员应把它们视为独立的权限面：模型能调用工具，不等于所有用户、所有模型、所有工作区都应获得该能力。
+Tools turn a model's reply into operations against external systems, the network, files, or a code execution environment. Administrators should treat them as a separate permission surface: the model being able to call tools does not mean every user, every model, and every workspace should have that capability.
 
-建议从一个低风险、可观察的工具开始，确认调用日志、成本、超时和数据边界后再扩大范围。工具启用与模型的托管工具配置是两层控制：一个工具已存在，不代表每个模型都会请求它；一个模型支持原生工具，也不代表它被允许使用所有工具。
+Start with one low-risk, observable tool, and widen the scope only after you have confirmed call logs, cost, timeouts, and data boundaries. Tool enablement and a model's hosted-tool configuration are two layers of control: a tool existing doesn't mean every model will request it, and a model supporting native tools doesn't mean it is allowed to use every tool.
 
-## 内置工具与全局禁用
+## Built-in tools and global disabling
 
-“工具”页面列出可用的内置工具，并允许全局禁用。禁用适合处理安全事件、服务商故障、成本异常或维护窗口；恢复前应确认依赖服务已经可用。
+The "Tools" page lists the available built-in tools and allows global disabling. Disabling is appropriate for security incidents, provider outages, cost anomalies, or maintenance windows; before restoring a tool, confirm its dependencies are available again.
 
-常见内置能力包括网页搜索、网页抓取、Python 执行、图像或文件相关操作。用户是否能最终看到或使用它，还取决于模型能力、模型工具策略、工作区权限和上游服务状态。
+Common built-in capabilities include web search, web scraping, Python execution, and image- or file-related operations. Whether a user can ultimately see or use one also depends on model capabilities, model tool policies, workspace permissions, and upstream service status.
 
-建议：
+Recommendations:
 
-- 对公开演示站，默认关闭 Python 和高成本工具，先提供必要的聊天与搜索能力。
-- 对敏感数据工作区，避免让工具把未审查内容发送到不受控的第三方服务。
-- 工具配置变更后，使用测试账号和最小输入验证，不要先在真实客户数据上试错。
+- On public demo sites, keep Python and high-cost tools off by default; provide only the necessary chat and web search capabilities first.
+- In sensitive-data workspaces, avoid letting tools send unreviewed content to uncontrolled third-party services.
+- After tool configuration changes, validate with a test account and minimal input; don't trial and error on real customer data first.
 
-## 网页搜索与抓取
+## Web search and scraping
 
-在“工具”中配置搜索服务商、API Key，或需要时配置自托管搜索地址与搜索引擎列表。搜索未配置或被禁用时，工具应明确返回不可用状态，而不会伪造搜索结果。
+Configure the search provider and API Key in "Tools", and—when needed—the self-hosted search address and search engine list. When web search is unconfigured or disabled, the tool should clearly return an unavailable state rather than fabricate search results.
 
-推荐的上线顺序：
+Recommended rollout order:
 
-1. 选择能满足地区、隐私、额度和延迟要求的搜索提供方。
-2. 保存服务地址与密钥后，用一个确定的问题测试搜索结果。
-3. 检查模型是否被允许调用搜索，并为用户群设置合适的积分或配额。
-4. 观察外部搜索的费用、失败率和不当内容风险，再决定是否开放深度研究或网页抓取。
+1. Choose a search provider that meets your regional, privacy, quota, and latency requirements.
+2. After saving the service address and key, test search results with a definite question.
+3. Check that models are allowed to call web search, and set appropriate credits or quotas for user groups.
+4. Watch external search cost, failure rate, and the risk of inappropriate content before deciding whether to open deep research or web scraping.
 
-搜索 Key 需要视作服务端机密。不要把它放入前端变量或分享给普通用户。对于可访问内网、企业网或受限网络的实例，还要评估网页抓取目标的 SSRF 与数据外泄风险。
+Treat search Keys as server-side secrets. Never put them in frontend variables or share them with regular users. On instances that can reach intranets, corporate networks, or restricted networks, also assess the SSRF and data-exfiltration risks of web scraping targets.
 
-## MCP 服务
+## MCP services
 
-MCP 服务用于把模型连接到受控的外部能力。管理员在“MCP 服务”中添加 Streamable HTTP MCP 地址、必要请求头或认证信息，并可以测试、同步和启用/停用服务。
+MCP services connect models to controlled external capabilities. Administrators add Streamable HTTP MCP addresses, required request headers, or credentials in "MCP services", and can test, sync, and enable/disable services.
 
-添加 MCP 前先回答四个问题：
+Before adding an MCP service, answer four questions:
 
-1. 该服务可读取或修改哪些外部数据？
-2. 请求头、Bearer Key 或 OAuth 凭据是否只授予最小权限？
-3. 哪些模型、用户组或工作区应当看到这些工具？
-4. 服务不可用、工具输出异常或出现高频调用时如何降级？
+1. What external data can the service read or modify?
+2. Are request headers, Bearer Keys, or OAuth credentials granted only the minimum necessary permission?
+3. Which models, user groups, or workspaces should see these tools?
+4. How do you degrade when the service is unavailable, tool output is abnormal, or high-frequency calls appear?
 
-推荐流程是先添加一个只读、测试用的 MCP 服务，执行“测试”和“同步”，检查发现的方法列表及参数，再启用给少量管理员。将生产写入型 MCP、个人访问令牌和管理密钥直接公开给所有聊天模型，会把提示注入或模型误调用变成外部系统风险。
+The recommended flow is to add one read-only, test MCP service first, run "Test" and "Sync", review the discovered method list and parameters, then enable it for a small number of administrators. Exposing production write-capable MCP services, personal access tokens, and admin keys to all chat models turns prompt injection or model mis-calls into external system risk.
 
-每次 MCP 服务器更新、方法变化或凭据轮换后都应重新同步和测试。禁用或删除 MCP 前，先检查是否被技能、提示词、工作区或用户流程依赖。
+Re-sync and re-test after every MCP server update, method change, or credential rotation. Before disabling or deleting an MCP service, check whether skills, prompts, workspaces, or user flows depend on it.
 
-## 技能、提示词与工具授权
+## Skills, prompts, and tool authorization
 
-“技能”和“提示词库”用于把可复用的指令、参考文件和行为规则提供给模型。它们可以增强工具使用，但不能替代权限控制。
+"Skills" and "Prompt library" provide reusable instructions, reference files, and behavior rules to models. They can enhance tool usage but never replace permission controls.
 
-- 技能中不要写入长期 API Key、数据库密码、Cookie 或一次性登录链接。
-- 说明一个技能需要哪些工具、可访问的数据范围和失败时的安全行为。
-- 上传技能资产前检查版权、隐私和文件类型；管理员资产与用户附件的保存、备份和访问控制不同。
-- 对每个新技能建立可重复的测试对话，检查模型不会因模糊指令调用不该调用的写入型工具。
+- Don't embed long-lived API Keys, database passwords, cookies, or one-time login links in skills.
+- Document which tools a skill needs, what data scope it may access, and its safe behavior on failure.
+- Before uploading skill assets, check copyright, privacy, and file types; administrator assets and user attachments differ in storage, backup, and access control.
+- For every new skill, set up a repeatable test conversation and confirm the model doesn't call write-capable tools it shouldn't due to ambiguous instructions.
 
-## Python 沙盒可用性
+## Python sandbox availability
 
-Python 执行依赖可访问的沙盒服务。管理员工具页会根据当前有效配置显示状态：如果既没有本地 sidecar，也没有外部沙盒地址，页面会显示“请先配置沙盒”，Python 解释器开关保持关闭。
+Python execution depends on a reachable sandbox service. The administrator tools page shows status based on the current effective configuration: with neither a local sidecar nor an external sandbox address, the page shows "Configure a sandbox first" and the Python interpreter switch stays off.
 
-这项提示在个人版和完整版都适用：它反映的是当前实例能否安全连接到沙盒，而不是用户是否拥有管理员权限。不要试图通过强制打开解释器绕过它。
+This notice applies to both the Personal edition and the Full edition: it reflects whether the current instance can safely reach a sandbox, not whether the user has administrator permission. Don't try to bypass it by force-enabling the interpreter.
 
-### 三种运行方式
+### Three ways to run
 
-| 方式 | 适用 | 配置要点 |
+| Option | Best for | Configuration points |
 | --- | --- | --- |
-| 完整版内置 sidecar | 标准完整版 | Compose 已在内部网络连接 `http://sandbox:8000`，无需暴露端口 |
-| 个人版本机 profile | 可信单机 | 设置 `SANDBOX_BASE_URL=http://sandbox:8000` 和匹配密钥，再使用 `--profile sandbox` 启动 |
-| 外部沙盒 | 需要隔离或已有执行平台 | 在工具页或启动环境填写 HTTPS 地址和相同 Bearer Key |
+| Full edition built-in sidecar | Standard Full edition | Compose already connects `http://sandbox:8000` on the internal network; no port needs to be exposed |
+| Personal edition local profile | Trusted single machine | Set `SANDBOX_BASE_URL=http://sandbox:8000` and a matching key, then start with `--profile sandbox` |
+| External sandbox | Isolation required or an existing execution platform | Fill in the HTTPS address and the same Bearer Key on the tools page or in the startup environment |
 
-无论哪一种，沙盒 API 都不应无鉴权暴露到公网。沙盒密钥是 Bearer 凭据，泄露后可能被用于创建或访问执行会话。
+In all cases, the sandbox API must never be exposed to the public internet without authentication. The sandbox key is a Bearer credential; once leaked it could be used to create or access execution sessions.
 
-## 本机 sidecar 的安全边界
+## Security boundaries of the local sidecar
 
-官方 sidecar 通过宿主机 Docker socket 为每个会话创建受限容器。它尽量限制会话容器的 CPU、内存、进程数、只读根文件系统、临时可写目录、上传大小、空闲回收和执行时长，但 Docker socket 本身仍近似宿主机高权限。
+The official sidecar uses the host Docker socket to create a restricted container per session. It limits session-container CPU, memory, process count, a read-only root file system, temporary writable directories, upload size, idle reclamation, and execution duration as best it can, but the Docker socket itself still approximates high host privileges.
 
-因此：
+Therefore:
 
-- 只在完全受控的服务器启用本机 sidecar，不要将它放到不受信任共享宿主机。
-- 不给 `sandbox` 添加 `ports`，不通过反向代理暴露它。
-- 保留 `SANDBOX_READ_ONLY_ROOTFS=1`，除非你完全理解关闭后的磁盘和写入风险。
-- 用 `SANDBOX_MEMORY`、`SANDBOX_CPUS`、`SANDBOX_MAX_SESSIONS`、`SANDBOX_WORKSPACE_SIZE` 和执行时长上限给宿主机保留余量。
-- 公开产品默认限制哪些用户、哪些模型可以调用 Python；不要因为容器存在就视为无限可信的任意代码平台。
+- Enable the local sidecar only on a fully controlled server; never place it on an untrusted shared host.
+- Don't add `ports` to the `sandbox` service and don't expose it through a reverse proxy.
+- Keep `SANDBOX_READ_ONLY_ROOTFS=1` unless you fully understand the disk and write risks of turning it off.
+- Use `SANDBOX_MEMORY`, `SANDBOX_CPUS`, `SANDBOX_MAX_SESSIONS`, `SANDBOX_WORKSPACE_SIZE`, and execution-duration limits to leave headroom on the host.
+- In public products, limit which users and which models may call Python; don't treat the container as an infinitely trusted arbitrary-code platform.
 
-完整版和个人版可选 profile 都会启动镜像保活服务。它持有沙盒运行时镜像，避免运维脚本清理无引用镜像后，下一次 Python 调用需要冷拉取大镜像并因超时失败。不要把该服务当作多余容器随意删除。
+Both the Full edition and the Personal edition's optional profile start an image keep-alive service. It holds the sandbox runtime image so that, after an ops script prunes unreferenced images, the next Python call doesn't have to cold-pull a large image and fail on timeout. Don't casually delete this service as a redundant container.
 
-## 持久工作区与文件
+## Persistent workspaces and files
 
-沙盒会话通常按对话维度维护工作区，空闲后可回收。配置本地归档或兼容对象存储后，工作区可在会话回收后恢复；本地归档适合单节点，多个应用副本应使用共享对象存储。
+Sandbox sessions usually maintain a workspace per conversation, reclaimable after idle. With local archiving or compatible object storage configured, a workspace can be restored after its session is reclaimed; local archiving suits a single node, while multiple application replicas should use shared object storage.
 
-持久工作区不等于永久保留所有输出。管理员仍应制定文件保留、备份、删除和用户数据导出策略，并明确对话删除、工作区删除和备份保留之间的关系。包含机密或个人数据的文件不应被自动同步到不受控的对象存储。
+A persistent workspace does not mean every output is kept forever. Administrators should still define file retention, backup, deletion, and user data export policies, and make clear how conversation deletion, workspace deletion, and backup retention relate. Files containing confidential or personal data must not be synced automatically to uncontrolled object storage.
 
-## 运行与故障检查
+## Runtime and troubleshooting checks
 
-Python 不可用时，依次检查：
+When Python is unavailable, check in order:
 
-1. 工具页是否显示沙盒已配置，地址和密钥是否匹配。
-2. 完整版或本机 profile 的 `sandbox` 容器是否运行、是否健康。
-3. 宿主机 Docker daemon 与 Docker socket 是否可用，运行时镜像是否已拉取。
-4. 沙盒资源上限、并发会话上限、上传大小或执行超时是否过低。
-5. 目标模型是否被全局禁用工具、模型策略或工作区权限限制。
+1. Whether the tools page shows the sandbox as configured, and whether the address and key match.
+2. Whether the `sandbox` container of the Full edition or the local profile is running and healthy.
+3. Whether the host Docker daemon and Docker socket are available, and whether the runtime image has been pulled.
+4. Whether sandbox resource limits, concurrent session caps, upload size, or execution timeouts are too low.
+5. Whether the target model is restricted by globally disabled tools, model policies, or workspace permissions.
 
-不要通过公开沙盒端口、关闭鉴权或无限增大资源限制来解决错误。先读取脱敏后的应用与沙盒日志，确定是网络、鉴权、镜像、资源还是模型授权问题。
+Don't fix errors by exposing the sandbox port, disabling authentication, or raising resource limits without bound. First read the redacted application and sandbox logs to determine whether the issue is network, authentication, image, resource, or model authorization.

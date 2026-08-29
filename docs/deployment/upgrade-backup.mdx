@@ -1,56 +1,56 @@
 ---
-title: 升级、备份与恢复
+title: Upgrades, Backups, and Recovery
 sidebar_position: 4
-description: 使用固定镜像版本、安全备份、验证、回滚和恢复流程维护 Aivory 个人版与完整版。
+description: Maintain the Aivory Personal and Full editions with pinned image versions, safe backups, verification, rollback, and recovery procedures.
 ---
 
-# 升级、备份与恢复
+# Upgrades, Backups, and Recovery
 
-更新 Aivory 应包含四个阶段：确定目标版本、创建可恢复备份、部署并验收、必要时回滚。不要将拉取最新镜像、删除容器和删除数据卷混为一次操作。
+Updating Aivory should cover four phases: decide the target version, create a restorable backup, deploy and verify, and roll back if necessary. Do not mix pulling the latest image, deleting containers, and deleting data volumes into a single operation.
 
-## 固定发布版本
+## Pin Release Versions
 
-测试可以使用 `IMAGE_TAG=latest`，稳定环境应固定为已完整发布的语义版本，例如：
+Testing may use `IMAGE_TAG=latest`, but stable environments should pin a fully released semantic version, for example:
 
 ```dotenv
 IMAGE_TAG=3.0.0
 ```
 
-镜像标签不带 `v` 前缀。完整部署会让应用、沙盒 sidecar 和沙盒运行时使用同一个版本标签；升级前必须确认三张镜像都能获取，避免混用半发布版本。
+Image tags carry no `v` prefix. A full deployment makes the app, the sandbox sidecar, and the sandbox runtime share the same version tag; before upgrading, confirm all three images can be pulled, to avoid mixing partially published versions.
 
-渲染当前实际配置，而不是只检查模板：
+Render the actual current configuration rather than checking only the template:
 
 ```bash
 cd /opt/aivory/deploy
 docker compose --env-file .env -f docker-compose.prod.yml config --images
 ```
 
-个人版将 `.env` 和 Compose 文件替换为 `.env.personal`、`docker-compose.personal.yml`。若启用了个人版本地沙盒 profile，命令中还需要加入 `--profile sandbox`。
+For the Personal edition, replace `.env` and the Compose file with `.env.personal` and `docker-compose.personal.yml`. If the Personal edition's local sandbox profile is enabled, the commands also need `--profile sandbox`.
 
-历史版本早于统一沙盒版本标签时，可以显式使用兼容覆盖，例如：
+For historical versions predating unified sandbox version tags, you may explicitly use a compatibility override, for example:
 
 ```dotenv
 IMAGE_TAG=2.2.6
 SANDBOX_IMAGE_TAG=latest
 ```
 
-只在目标历史版本确实没有匹配沙盒镜像时使用它；新版本不要长期固定 `SANDBOX_IMAGE_TAG=latest`，否则可能悄悄混用不同版本的应用和沙盒。
+Use it only when the target historical version genuinely has no matching sandbox image; do not pin `SANDBOX_IMAGE_TAG=latest` long-term on newer versions, or you may silently mix different versions of the app and the sandbox.
 
-## 升级前检查
+## Pre-Upgrade Checks
 
-每次升级前完成以下事项：
+Before every upgrade, complete the following:
 
-1. 阅读目标版本的发布说明，确认数据库迁移、环境变量或功能弃用情况。
-2. 记录当前 `IMAGE_TAG`、部署模式、容器状态和关键功能的基线。
-3. 创建并确认可访问的备份；不要只相信“备份任务已提交”。
-4. 确认 `DATA_DIR` 和命名卷仍有足够磁盘空间，证书与域名正常。
-5. 对有真实用户的实例，在维护窗口或低峰期操作，并准备明确的回滚版本。
+1. Read the target version's release notes and check for database migrations, environment variable changes, or feature deprecations.
+2. Record the current `IMAGE_TAG`, the deployment mode, container status, and a baseline of key features.
+3. Create a backup and confirm it is accessible; do not rely solely on "the backup job was submitted".
+4. Confirm `DATA_DIR` and the named volumes still have enough free disk space, and that the certificates and domain are healthy.
+5. For instances with real users, work within a maintenance window or during off-peak hours, and have a definite rollback version ready.
 
-升级前不应执行 `docker compose down -v`。`-v` 会删除命名卷，可能删除 PostgreSQL、Redis、Qdrant 或沙盒归档数据。
+Do not run `docker compose down -v` before upgrading. `-v` deletes named volumes, which may delete PostgreSQL, Redis, Qdrant, or sandbox archive data.
 
-## 更新个人版
+## Updating the Personal Edition
 
-个人版默认只有应用容器：
+The Personal edition has only the app container by default:
 
 ```bash
 cd /opt/aivory/deploy
@@ -61,9 +61,9 @@ docker compose --env-file .env.personal -f docker-compose.personal.yml ps
 docker compose --env-file .env.personal -f docker-compose.personal.yml logs --tail=200 app
 ```
 
-若已启用本地沙盒，把每条 Compose 命令改为附带 `--profile sandbox`。个人版的数据在 `DATA_DIR`：SQLite 数据库、向量、上传文件、产物和后台备份都要整体保留。
+If the local sandbox is enabled, add `--profile sandbox` to every Compose command. The Personal edition's data lives in `DATA_DIR`: the SQLite database, vectors, uploaded files, artifacts, and background backups must all be preserved together.
 
-## 更新完整版
+## Updating the Full Edition
 
 ```bash
 cd /opt/aivory/deploy
@@ -74,61 +74,61 @@ docker compose --env-file .env -f docker-compose.prod.yml ps
 docker compose --env-file .env -f docker-compose.prod.yml logs --tail=200 app
 ```
 
-首次拉取或升级沙盒运行时镜像可能比较慢。`sandbox-image-keepalive` 的存在是为了让运行时镜像持续被引用，避免镜像清理任务使下一次 Python 调用冷拉取并超时；不要因为它看起来空闲而删除它。
+The first pull or an upgrade of the sandbox runtime image can be slow. `sandbox-image-keepalive` exists to keep the runtime image referenced so that image-pruning tasks do not leave the next Python call with a cold pull and a timeout; do not remove it just because it looks idle.
 
-## 升级后的验收
+## Post-Upgrade Acceptance
 
-容器显示运行中并不足够。至少做以下检查：
+Containers showing as running is not enough. Perform at least these checks:
 
 ```bash
 curl -fsS http://127.0.0.1/api/health
 ```
 
-然后用浏览器验证：
+Then verify in a browser:
 
-- 管理员和普通用户能登录，已有会话仍可访问。
-- 默认模型能够完成一条短对话；渠道和模型选择器正常。
-- 上传一个小文件并确认预览或下载正常。
-- 有知识库时，检索一条已知内容；完整版同时检查 Qdrant 状态。
-- 启用 Python 时，执行一个无害的小任务，确认沙盒可用。
-- 启用 OAuth、邮件或支付时，至少在测试账号上验证对应回调/发送/订单流程。
+- Administrators and regular users can log in and existing sessions are still accessible.
+- The default model completes a short conversation; channels and the model selector work normally.
+- Upload a small file and confirm the preview or download works.
+- With a knowledge base present, retrieve a known item; on the Full edition, also check Qdrant status.
+- With Python enabled, run a harmless small task to confirm the sandbox works.
+- With OAuth, email, or payments enabled, at least verify the corresponding callback/send/order flow on a test account.
 
-发现问题时先保存应用和相关服务的脱敏日志。若问题与新版本有关且无法快速修复，按下面的回滚流程恢复；不要在生产数据上反复试验删除、导入或强制重建。
+When you find a problem, first save redacted logs from the app and related services. If the issue is tied to the new version and cannot be fixed quickly, follow the rollback procedure below; do not experiment with deletions, imports, or forced rebuilds on production data.
 
-## 回滚
+## Rollback
 
-将实际 env 文件中的 `IMAGE_TAG` 改为上一个已经完整发布、且你已验证过的版本，再重复 `config --images`、`pull` 和 `up -d --no-build`。若回滚跨越包含数据迁移的版本，先查看发布说明：应用二进制可以回滚不代表新数据结构也能安全回退。
+Change `IMAGE_TAG` in the actual env file to the previous fully released version you have verified, then repeat `config --images`, `pull`, and `up -d --no-build`. If the rollback crosses versions that included data migrations, check the release notes first: a rollback-able application binary does not mean the new data structures safely roll back too.
 
-当升级后的数据写入已经发生且没有确认兼容性时，应优先在隔离环境恢复升级前备份，而不是盲目运行旧镜像。回滚完成后再次执行完整验收。
+When post-upgrade data writes have already occurred and compatibility is unconfirmed, prefer restoring the pre-upgrade backup in an isolated environment rather than blindly running the old image. After rolling back, run the full acceptance pass again.
 
-## 备份范围
+## Backup Scope
 
-| 部署模式 | 必须保护的内容 | 说明 |
+| Deployment mode | What must be protected | Notes |
 | --- | --- | --- |
-| 个人版 | 整个 `DATA_DIR` | 包含 `aivory.db`、内嵌向量、上传、产物、本地对象和备份归档 |
-| 完整版 | `pgdata`、`redisdata`、`qdrantdata`、`sandbox-archives`、`DATA_DIR` | 关系数据、向量、缓存持久化、持久工作区与文件必须保持一致 |
+| Personal edition | The entire `DATA_DIR` | Contains `aivory.db`, embedded vectors, uploads, artifacts, local objects, and backup archives |
+| Full edition | `pgdata`, `redisdata`, `qdrantdata`, `sandbox-archives`, `DATA_DIR` | Relational data, vectors, cache persistence, and durable workspaces and files must stay consistent |
 
-后台“备份与迁移”可创建面向迁移的完整归档，通常包含数据库逻辑备份、向量与可选文件；“配置导出”用于复制管理员设置。两者都可能含有 API Key、OAuth/SMTP/存储/支付凭据，必须加密存放、限制访问并避免上传到工单、公开仓库或聊天记录。
+The admin "Backup and Migration" page can create a migration-oriented full archive, typically including a logical database backup, vectors, and optional files; "Configuration Export" copies admin settings. Both may contain API keys and OAuth/SMTP/storage/payment credentials, so they must be encrypted at rest, access-restricted, and never uploaded to tickets, public repositories, or chat logs.
 
-物理备份和后台逻辑备份最好同时保留：前者用于完整灾难恢复，后者便于跨服务器或跨部署模式迁移。备份任务生成的归档本身也位于持久化位置，不应只保存在即将替换的临时容器中。
+Keep both physical backups and admin logical backups whenever possible: the former for full disaster recovery, the latter for easier cross-server or cross-deployment-mode migrations. Archives produced by backup jobs also live in persistent locations and should not be kept only inside temporary containers about to be replaced.
 
-## 恢复原则与流程
+## Recovery Principles and Procedure
 
-恢复是有破坏性的写入操作。开始前停止新写入、保存当前部署的独立副本、记录原版本与恢复目标，并在可能时先在隔离环境演练。
+Recovery is a destructive write operation. Before starting, stop new writes, save an independent copy of the current deployment, record the original version and the recovery target, and — if possible — rehearse in an isolated environment first.
 
-推荐顺序：
+Recommended order:
 
-1. 在目标主机准备与备份相匹配或兼容的空部署，确认可启动。
-2. 停止目标应用的写入，保留其现有数据目录和卷快照。
-3. 通过后台恢复完整归档，或按所用备份工具恢复数据目录和全部相关卷。
-4. 启动服务，查看数据库、向量、应用和沙盒日志。
-5. 验证健康接口、管理员登录、普通对话、文件下载、知识库检索、工作区权限和必要集成。
-6. 只有在验收完成后才更新 DNS、关闭旧实例或清理旧数据。
+1. Prepare an empty deployment on the target host that matches or is compatible with the backup, and confirm it can start.
+2. Stop writes on the target application and preserve its existing data directory and volume snapshots.
+3. Restore the full archive through the admin console, or restore the data directory and all relevant volumes using whatever backup tool you use.
+4. Start the services and review the database, vector, application, and sandbox logs.
+5. Verify the health endpoint, admin login, normal conversations, file downloads, knowledge base retrieval, workspace permissions, and any required integrations.
+6. Only after acceptance is complete should you update DNS, shut down the old instance, or clean up old data.
 
-不要将个人版正在使用的 SQLite 文件直接拿给多个容器或多台服务器使用；不要只恢复 PostgreSQL 而遗漏 Qdrant 和文件；不要把 Redis、Qdrant 或沙盒归档卷视为可以随意丢弃的“缓存”，除非你已评估恢复后果。
+Do not hand a SQLite file actively used by a Personal edition to multiple containers or multiple servers; do not restore PostgreSQL while leaving behind Qdrant and files; do not treat Redis, Qdrant, or sandbox archive volumes as disposable "cache" unless you have assessed the recovery consequences.
 
-## 备份演练与保留
+## Backup Drills and Retention
 
-至少定期在非生产环境恢复一份近期备份。记录恢复所需时间、所需磁盘、缺失项和验收结果；真正发生故障时，这些信息比“备份昨天成功”更有价值。
+At least periodically, restore a recent backup in a non-production environment. Record the time and disk space required, any missing items, and the acceptance results; when a real failure happens, that information is more valuable than "the backup succeeded yesterday".
 
-保留策略应同时满足业务、法规和成本要求：保留多个时间点、至少一份离机或跨区域副本、加密归档、访问审计和定期删除过期备份。删除用户或工作区的请求也应与备份保留规则明确协调。
+A retention policy should satisfy business, regulatory, and cost requirements at once: keep multiple points in time, at least one off-host or cross-region copy, encrypted archives, access auditing, and regular deletion of expired backups. Requests to delete users or workspaces must also be explicitly reconciled with backup retention rules.

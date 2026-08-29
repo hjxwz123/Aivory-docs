@@ -1,95 +1,95 @@
 ---
-title: 知识库、RAG 与存储
+title: Knowledge bases, RAG, and storage
 sidebar_position: 3
-description: 配置 embedding、文档解析、向量检索、对象存储和知识库的安全运维流程。
+description: Configure embeddings, document parsing, vector retrieval, object storage, and safe operational workflows for knowledge bases.
 ---
 
-# 知识库、RAG 与存储
+# Knowledge bases, RAG, and storage
 
-知识库让模型在回答前检索受限范围内的文档片段。可靠的 RAG 不是只上传文件：它依赖可用的 embedding、正确的维度、成功的解析和索引、适合的存储边界，以及对用户和工作区的访问控制。
+A knowledge base lets the model retrieve document snippets within an access-restricted scope before answering. Reliable RAG is more than uploading files: it depends on working embeddings, correct dimensions, successful parsing and indexing, appropriate storage boundaries, and access control for users and workspaces.
 
-## 工作流与验收点
+## Workflow and acceptance checkpoints
 
-典型流程如下：
+A typical flow:
 
-1. 用户上传文件或管理员创建知识库资源。
-2. 系统校验大小和类型，保存原始对象。
-3. 解析器提取文本、表格或图片相关内容。
-4. 文本被切分，embedding 模型生成向量。
-5. 向量和文档元数据写入当前部署的向量后端。
-6. 用户提问时，系统只检索其拥有访问权限的范围，并将相关片段作为上下文提供给模型。
+1. A user uploads a file, or an administrator creates a knowledge base resource.
+2. The system validates size and type, and stores the original object.
+3. The parser extracts text, tables, or image-related content.
+4. The text is chunked, and the embedding model generates vectors.
+5. Vectors and document metadata are written to the vector backend of the current deployment.
+6. When a user asks a question, the system retrieves only from scopes the user has permission to access and provides relevant snippets to the model as context.
 
-上传完成不等于已经可检索。应等待文档状态显示为已完成，再用文件中可精确验证的一句话进行检索测试。失败时保留原文件、查看任务错误和模型/服务日志，不要反复上传同一文件来掩盖根因。
+Upload completion does not mean the document is already searchable. Wait until the document status shows completed, then run a retrieval test with a sentence you can verify exactly in the file. On failure, keep the original file, check the task errors and model/service logs, and don't repeatedly re-upload the same file to mask the root cause.
 
-## Embedding 模型与维度
+## Embedding models and dimensions
 
-在渠道与模型中添加真正的 embedding 模型，或设置部署级 embedding 回退。无外部 embedding 时系统可以用基础本地 embedding 兜底，适合试用，但不应作为高质量语义检索的长期基线。
+Add a real embedding model under channels and models, or set a deployment-level embedding fallback. Without an external embedding model, the system can fall back to a basic local embedding; that is fine for trials, but it should not be the long-term baseline for high-quality semantic retrieval.
 
-最重要的约束是维度一致：`EMBEDDING_DIM`、模型设置中的维度和模型真实输出必须相同。维度不匹配会导致索引失败、检索不到结果或把不兼容向量隔离。
+The most important constraint is dimension consistency: `EMBEDDING_DIM`, the dimension in the model settings, and the model's real output must be identical. A dimension mismatch causes indexing failures, empty retrieval results, or the isolation of incompatible vectors.
 
-更换 embedding 模型、供应商或维度时按以下流程执行：
+When changing the embedding model, vendor, or dimension, follow this process:
 
-1. 记录旧模型、旧维度和当前知识库的业务范围。
-2. 添加并用小样本文档验证新 embedding 模型。
-3. 修改相关模型或部署设置。
-4. 在管理员后台触发受影响知识库的向量重建。
-5. 对旧内容和新上传内容分别做检索验收，确认全部索引完成后再下线旧模型。
+1. Record the old model, the old dimension, and the business scope of the current knowledge bases.
+2. Add the new embedding model and validate it with a small sample document.
+3. Update the relevant model or deployment settings.
+4. Trigger a vector rebuild of the affected knowledge bases in the admin backend.
+5. Run retrieval acceptance on both old content and newly uploaded content, and only retire the old model after confirming all indexes have finished building.
 
-不要在重建期间删除唯一的原始文件或备份。向量可以重建，原始文档和元数据丢失后通常无法准确恢复。
+Never delete the only copy of the original files or backups during a rebuild. Vectors can be rebuilt; original documents and metadata usually cannot be recovered accurately once lost.
 
-## 个人版与完整版的向量后端
+## Vector backends: Personal edition and Full edition
 
-| 部署 | 向量位置 | 运维影响 |
+| Deployment | Where vectors live | Operational impact |
 | --- | --- | --- |
-| 个人版 | SQLite 数据库中的内嵌向量 | `aivory.db` 和文件都在 `DATA_DIR`；单实例，不能放网络文件系统 |
-| 完整版 | Qdrant 数据卷 | Qdrant 与 PostgreSQL、文件应作为一致备份单元保护 |
+| Personal edition | Embedded vectors in the SQLite database | `aivory.db` and files are under `DATA_DIR`; single instance, must not live on a network file system |
+| Full edition | Qdrant data volume | Protect Qdrant together with PostgreSQL and files as one consistent backup unit |
 
-个人版已经具备向量检索，不需要为了 RAG 额外部署 Qdrant。完整版默认使用内部 Qdrant，除非有明确的外部服务设计，否则不要公开其端口或让应用连接到不受控的实例。
+The Personal edition already has vector retrieval; you don't need to deploy Qdrant separately for RAG. The Full edition uses its internal Qdrant by default; unless you have a deliberate external-service design, don't expose its port or let the application connect to an uncontrolled instance.
 
-`VECTOR_BACKEND` 属于部署级拓扑配置。官方个人版固定为 SQLite 向量，官方完整版固定为 Qdrant；仅在自定义部署并理解后果时修改它。详见[环境变量](/docs/deployment/environment)。
+`VECTOR_BACKEND` is deployment-level topology configuration. The official Personal edition is fixed to SQLite vectors, and the official Full edition is fixed to Qdrant; change it only for custom deployments and only if you understand the consequences. See [Environment variables](../deployment/environment.mdx).
 
-## 文档解析与 OCR
+## Document parsing and OCR
 
-普通文本、Office 文件、表格和带文字层的 PDF 可以通过本地解析链路处理。扫描件、图片型 PDF、复杂排版或高质量 OCR 场景通常需要 MinerU 等外部解析服务。
+Plain text, Office files, spreadsheets, and PDFs with a text layer can be handled by the local parsing pipeline. Scanned documents, image-only PDFs, complex layouts, or high-quality OCR scenarios usually require an external parsing service such as MinerU.
 
-配置 MinerU 时，填写可从应用访问的 API 地址和密钥，并先用一份非敏感的扫描 PDF 验证。没有配置时，不应期待图片和扫描件自动产生高质量文字；系统可能只保存占位内容或有限提取结果。
+When configuring MinerU, fill in an API address and key reachable from the application, and first validate with one non-sensitive scanned PDF. Without configuration, don't expect images and scanned documents to automatically produce high-quality text; the system may store only placeholder content or limited extraction results.
 
-解析失败的排查顺序：
+Troubleshooting order for parsing failures:
 
-1. 确认文件没有损坏、没有超出上传限制，也不是受密码保护或不可读格式。
-2. 检查对应解析服务的网络、鉴权、额度和超时。
-3. 确认对象存储地址可被解析服务访问。某些外部解析流程需要可下载的对象 URL。
-4. 查看文档任务错误、应用日志和服务商返回，确定是解析、embedding 还是向量写入失败。
+1. Confirm the file isn't corrupted, doesn't exceed the upload limit, and isn't password-protected or an unreadable format.
+2. Check network, authentication, quota, and timeouts of the corresponding parsing service.
+3. Confirm the object storage address is reachable by the parsing service; some external parsing flows require downloadable object URLs.
+4. Review document task errors, application logs, and provider responses to determine whether parsing, embedding, or the vector write failed.
 
-不要为了让 OCR 成功而将私有桶、内部文件服务器或数据库直接开放到公网。
+Never expose private buckets, internal file servers, or databases to the public internet just to make OCR succeed.
 
-## 存储与上传策略
+## Storage and upload policies
 
-“存储与上传”页面管理应用对象的存放方式、上传限制和保留边界。默认本地存储适合单机：头像等对象写入本地对象目录，用户上传和产物位于应用数据目录。它简单、可备份，但不适合多个应用副本同时共享。
+The "Storage & uploads" page manages where application objects are kept, upload limits, and retention boundaries. Local storage by default suits single machines: objects such as avatars are written to a local object directory, and user uploads and artifacts live under the application data directory. It is simple and easy to back up, but not suitable for multiple application replicas sharing it at the same time.
 
-需要多副本、跨节点或与外部解析服务协作时，使用受控对象存储并遵循最小权限：
+When you need multiple replicas, cross-node access, or collaboration with external parsing services, use controlled object storage and follow least privilege:
 
-- 使用单独的 bucket/prefix，不与其他业务共享管理员凭据。
-- 只授予必要的读、写、列举或预签名权限，避免全账号管理员密钥。
-- 设定生命周期、版本控制、加密、区域和访问日志策略。
-- 将对象存储的凭据和配置视为敏感信息；后台配置导出可能包含它们。
-- 先测试上传、下载、缩略图、解析、分享快照和删除，再迁移真实用户文件。
+- Use a separate bucket/prefix and don't share administrator credentials with other business systems.
+- Grant only the necessary read, write, list, or presign permissions; avoid an account-wide admin key.
+- Define lifecycle, versioning, encryption, region, and access-log policies.
+- Treat object storage credentials and configuration as sensitive; backend configuration exports may include them.
+- Test upload, download, thumbnails, parsing, share snapshots, and deletion before migrating real user files.
 
-上传上限、单文件大小、总配额与管理员图标/技能资产限制共同影响用户体验。提高限制前要同步评估反向代理的请求体上限、磁盘/对象存储成本、解析内存和备份体积。
+Upload caps, single-file size limits, total quotas, and administrator icon/skill asset limits jointly shape the user experience. Before raising limits, also assess the reverse proxy's request body cap, disk/object-storage cost, parsing memory, and backup size.
 
-## 权限、工作区与分享
+## Permissions, workspaces, and sharing
 
-知识库不是全局公开搜索。管理员应结合用户、用户组和工作区检查谁可以上传、查看、检索、编辑或删除文档。
+A knowledge base is not a globally public search. Administrators should combine users, user groups, and workspaces to check who can upload, view, retrieve, edit, or delete documents.
 
-- 将不同客户、团队或数据分类放进不同知识库和工作区。
-- 默认使用只读共享；仅给确实负责资料维护的人编辑或上传权限。
-- 分享对话前检查引用片段、附件、预览图和工具产物是否会被带入只读快照。
-- 用户删除、工作区移除或权限变更后，验证旧会话和旧知识库不会继续暴露不该访问的内容。
+- Put different customers, teams, or data classifications in different knowledge bases and workspaces.
+- Use read-only sharing by default; grant edit or upload permissions only to people genuinely responsible for maintaining the material.
+- Before sharing a conversation, check whether referenced snippets, attachments, preview images, and tool artifacts will be pulled into the read-only snapshot.
+- After user deletion, workspace removal, or permission changes, verify that old sessions and old knowledge bases no longer expose content they shouldn't.
 
-管理端的“文档与知识”“内容资源”“文件”页面适合排查状态、清理孤立资源和处理用户反馈。删除前先确认备份和保留策略，因为向量、原文件和产物的删除范围并不总是一致。
+The admin-side "Documents & knowledge", "Content resources", and "Files" pages are good for checking status, cleaning up orphaned resources, and handling user feedback. Confirm backup and retention policies before deleting, because the deletion scope of vectors, original files, and artifacts is not always identical.
 
-## 备份与恢复
+## Backup and recovery
 
-备份必须同时覆盖关系数据、向量和原始文件。个人版重点是整个 `DATA_DIR`；完整版重点是 PostgreSQL、Qdrant、Redis、沙盒归档卷和 `DATA_DIR` 的一致性。
+Backups must cover relational data, vectors, and original files together. For the Personal edition, focus on the whole `DATA_DIR`; for the Full edition, focus on the consistency of PostgreSQL, Qdrant, Redis, the sandbox archive volume, and `DATA_DIR`.
 
-后台完整备份可用于迁移和恢复，但恢复前应先停止写入、保存现有数据副本，并在隔离环境验证。恢复后检查管理员配置、附件、知识库状态、向量检索和对象存储访问。详细流程见[升级、备份与恢复](/docs/deployment/upgrade-backup)。
+The full backend backup can be used for migration and recovery, but before restoring, stop writes, save a copy of the current data, and validate in an isolated environment. After recovery, check administrator configuration, attachments, knowledge base states, vector retrieval, and object storage access. For the detailed process, see [Upgrades, backup, and recovery](../deployment/upgrade-backup.mdx).

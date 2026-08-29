@@ -1,33 +1,33 @@
 ---
-title: 域名、HTTPS 与 OAuth
+title: Domains, HTTPS, and OAuth
 sidebar_position: 3
-description: 使用反向代理或云负载均衡安全发布 Aivory，并正确配置 GitHub 等 OAuth 回调。
+description: Safely expose Aivory behind a reverse proxy or cloud load balancer, and configure OAuth callbacks such as GitHub correctly.
 ---
 
-# 域名、HTTPS 与 OAuth
+# Domains, HTTPS, and OAuth
 
-官方应用镜像在同一进程中提供网页和 `/api`。这意味着正常部署下浏览器和 API 始终同源：反向代理只需把整个请求转给应用，不需要分别部署前端、配置前端 API 地址或为单域名设置 CORS。
+The official application image serves both the web UI and `/api` from a single process. This means that in a normal deployment the browser and the API are always same-origin: the reverse proxy only needs to forward the entire request to the application — no separate frontend deployment, no frontend API address configuration, and no CORS setup for a single domain.
 
-## 三种访问方式
+## Three Ways to Access
 
-| 方式 | 适用场景 | 安全边界 |
+| Method | When to use | Security boundary |
 | --- | --- | --- |
-| 服务器 IP + HTTP | 首次短期验收 | 仅用于受控网络，不应承载真实账号或 OAuth |
-| 本机反向代理 | 一台服务器上运行 Caddy、Nginx 或 Traefik | 应用只监听回环地址，代理占用 80/443 并终止 TLS |
-| 云负载均衡/CDN | 云平台已有 HTTPS 入口 | 负载均衡终止 TLS，后端仅向负载均衡或私网开放 |
+| Server IP + HTTP | Short initial acceptance testing | Only on controlled networks; should not carry real accounts or OAuth |
+| Local reverse proxy | Running Caddy, Nginx, or Traefik on one server | The application listens only on the loopback address; the proxy owns 80/443 and terminates TLS |
+| Cloud load balancer/CDN | The cloud platform already provides an HTTPS entry point | The load balancer terminates TLS, and the backend is only exposed to the load balancer or the private network |
 
-无论哪种方式，都不要通过代理暴露 PostgreSQL、Redis、Qdrant 或 `sandbox`。它们只应留在 Docker 内部网络或私有网络中。
+In every case, never expose PostgreSQL, Redis, Qdrant, or `sandbox` through the proxy. They should stay only on the Docker internal network or a private network.
 
-## 同机反向代理
+## Same-Host Reverse Proxy
 
-默认 Compose 把应用映射为 `80:8787`。如果 Caddy、Nginx 或 Traefik 也运行在同一主机，先修改所用 Compose 文件中的 `app.ports`，改为只监听本机：
+The default Compose maps the app as `80:8787`. If Caddy, Nginx, or Traefik also runs on the same host, first change `app.ports` in the Compose file you use so it listens only on localhost:
 
 ```yaml
 ports:
   - "127.0.0.1:8787:8787"
 ```
 
-重新创建应用后，代理可以连接 `127.0.0.1:8787`。以 Caddy 为例，站点配置可保持很简单：
+After recreating the app, the proxy can connect to `127.0.0.1:8787`. With Caddy as an example, the site configuration can stay very simple:
 
 ```caddyfile
 aivory.example.com {
@@ -35,54 +35,54 @@ aivory.example.com {
 }
 ```
 
-DNS 将域名解析到服务器，防火墙只放行 80 与 443，然后验证：
+Point DNS at the server, allow only ports 80 and 443 through the firewall, then verify:
 
 ```bash
 curl -fsS http://127.0.0.1:8787/api/health
 curl -fsS https://aivory.example.com/api/health
 ```
 
-第二条命令应在证书签发完成后返回 `{"ok":true}`。反向代理必须转发正常的 `Host` 头；主流代理默认会这样做。
+Once the certificate has been issued, the second command should return `{"ok":true}`. The reverse proxy must forward a proper `Host` header; mainstream proxies do this by default.
 
-## CORS 与拆分前端
+## CORS and a Split Frontend
 
-官方镜像中没有 `PUBLIC_ORIGIN` 这类必填配置。只要网页和 API 由同一个 `app` 访问，用户通过哪个合法域名进入，应用就使用哪个域名工作。
+The official image has no required setting such as `PUBLIC_ORIGIN`. As long as the web UI and the API are served by the same `app`, the application works on whichever valid domain the user entered through.
 
-`ALLOWED_ORIGINS` 仅用于你刻意把前端放到另一个 origin、让浏览器跨域访问 API 的情形。它应填写精确的 `scheme://host[:port]` 列表，例如：
+`ALLOWED_ORIGINS` is only for cases where you deliberately place the frontend on another origin and have the browser access the API cross-origin. Fill in an exact list of `scheme://host[:port]` values, for example:
 
 ```dotenv
 ALLOWED_ORIGINS=https://console.example.com,https://staging-console.example.com
 ```
 
-不要用宽泛通配符来替代受控域名列表。正常单体部署不需要设置它。
+Do not replace a controlled domain list with broad wildcards. A normal monolithic deployment does not need to set it.
 
-## OAuth 回调：单域名
+## OAuth Callbacks: Single Domain
 
-在管理员后台创建 GitHub、Google、Apple、OAuth2 或 OIDC 身份源时，先让公开 HTTPS 域名可用。将后台显示的回调地址逐字复制到服务商控制台；协议、域名、端口和路径都必须一致。
+When creating a GitHub, Google, Apple, OAuth2, or OIDC identity provider in the admin console, first make the public HTTPS domain available. Copy the callback URL shown in the console verbatim into the provider's console; the scheme, domain, port, and path must all match exactly.
 
-对于单域名部署，通常不设置 `OAUTH_CALLBACK_BASE_URL`。应用会根据用户发起登录时的公开地址构造回调。身份源的 Client ID、Client Secret 和回调地址必须来自同一个服务商应用配置。
+For a single-domain deployment, you usually do not set `OAUTH_CALLBACK_BASE_URL`. The application constructs the callback URL from the public address the user initiated login on. The identity provider's Client ID, Client Secret, and callback URL must come from the same provider application configuration.
 
-## OAuth 回调：多个域名
+## OAuth Callbacks: Multiple Domains
 
-部分服务商只允许一个回调地址。如果 Aivory 同时由多个域名访问，应选一个固定的 HTTPS 主域名作为 OAuth 回调域名，并在环境中设置：
+Some providers allow only one callback URL. If Aivory is accessed through multiple domains at the same time, pick one fixed HTTPS primary domain as the OAuth callback domain and set in the environment:
 
 ```dotenv
 OAUTH_CALLBACK_BASE_URL=https://aivory.example.com
 OAUTH_RETURN_ORIGINS=https://aivory.example.com,https://team.example.com
 ```
 
-`OAUTH_CALLBACK_BASE_URL` 不带尾随 `/`，它决定发给服务商的固定回调 origin。`OAUTH_RETURN_ORIGINS` 是允许登录完成后返回的精确 origin 列表，也是防止开放重定向的安全边界；不要放入通配符、不受控预览域名或带路径的 URL。每个身份源控制台应只注册 canonical 域名对应的回调地址。
+`OAUTH_CALLBACK_BASE_URL` has no trailing `/` and determines the fixed callback origin sent to the provider. `OAUTH_RETURN_ORIGINS` is the exact list of origins allowed to return after login completes, and is the security boundary against open redirects; do not put wildcards, uncontrolled preview domains, or URLs with paths in it. Each provider console should register only the callback URL for the canonical domain.
 
-修改以上变量后重启 `app`，并用每个允许的域名分别完成一次登录测试。
+After changing these variables, restart `app` and complete one login test through each allowed domain.
 
-## GitHub 显示 `token_exchange_failed`
+## GitHub Shows `token_exchange_failed`
 
-账号已经可以绑定但登录时失败，或日志出现 `context deadline exceeded`、`github exchange failed`，通常表示应用服务器无法在时限内访问 GitHub 的 token endpoint，而不是用户 GitHub 身份已经损坏。按顺序检查：
+If the account can already be linked but login fails, or the logs show `context deadline exceeded` or `github exchange failed`, this usually means the application server cannot reach GitHub's token endpoint within the time limit — not that the user's GitHub identity is broken. Check in order:
 
-1. 服务器的 DNS、IPv4/IPv6 路由、出口防火墙和代理是否允许到 `github.com:443` 的 HTTPS 请求。
-2. 服务商控制台中的回调地址是否与公开 HTTPS 域名完全一致。
-3. `OAUTH_CALLBACK_BASE_URL`、Client ID 与 Client Secret 是否属于同一 GitHub OAuth App。
-4. 服务器时间是否正确；严重的时间偏差会使 OAuth state、Cookie 或签名校验失败。
-5. 若必须走企业代理，在应用运行环境设置标准 HTTP(S) 代理，并确认它没有拦截 GitHub 的 token 请求。
+1. Whether the server's DNS, IPv4/IPv6 routing, egress firewall, and proxy allow HTTPS requests to `github.com:443`.
+2. Whether the callback URL in the provider console matches the public HTTPS domain exactly.
+3. Whether `OAUTH_CALLBACK_BASE_URL`, the Client ID, and the Client Secret belong to the same GitHub OAuth App.
+4. Whether the server time is correct; significant clock skew makes OAuth state, cookies, or signature validation fail.
+5. If an enterprise proxy is required, set a standard HTTP(S) proxy in the application's runtime environment and confirm it is not intercepting GitHub's token requests.
 
-不要把 OAuth Client Secret、一次性回调参数、会话令牌或完整 `.env` 发到 issue、聊天记录或浏览器控制台。
+Do not send OAuth Client Secrets, one-time callback parameters, session tokens, or the full `.env` file to issues, chat logs, or browser consoles.

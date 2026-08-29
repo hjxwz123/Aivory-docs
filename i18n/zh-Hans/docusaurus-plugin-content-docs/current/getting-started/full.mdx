@@ -1,0 +1,142 @@
+---
+title: 完整版部署
+sidebar_position: 3
+description: 以 PostgreSQL、Redis、Qdrant 和内置沙盒部署适合多人长期使用的 Aivory 完整栈。
+---
+
+# 完整版部署
+
+完整版面向多人、长期运行和需要独立后端服务的实例。官方 Compose 会启动应用、PostgreSQL、Redis、Qdrant、内置 Python 沙盒和沙盒运行时镜像保活服务。
+
+| 服务 | 职责 | 是否对公网开放 |
+| --- | --- | --- |
+| `app` | 同时提供网页和 `/api` | 是，或仅供反向代理访问 |
+| `postgres` | 用户、对话、工作区、配置、用量等关系数据 | 否 |
+| `redis` | 缓存、限流、跨进程事件与停止流式输出 | 否 |
+| `qdrant` | RAG 向量索引 | 否 |
+| `sandbox` | 创建受限 Python 会话容器 | 否 |
+| `sandbox-image-keepalive` | 保留沙盒运行时镜像，避免冷拉取 | 否 |
+
+完整版本身不是多机集群编排方案，但它为更高并发、独立数据服务、完整备份和未来扩展提供了清晰边界。
+
+## 服务器与网络准备
+
+建议从 4 vCPU、8 GB 内存、80 GB SSD 起步；大量并发对话、文档解析、向量索引或 Python 执行需要更多内存、CPU 和磁盘。使用 64 位 Ubuntu 22.04/24.04 LTS 或 Debian 12，x86_64 和 ARM64 都可以。
+
+开始前确认：
+
+- Docker Engine 与 Docker Compose Plugin 已安装并可用。
+- 服务器可以访问镜像仓库、模型服务商，以及计划使用的邮件、OAuth、搜索、embedding 或对象存储服务。
+- 防火墙仅向用户开放 HTTP/HTTPS；PostgreSQL、Redis、Qdrant 和沙盒不应添加公网端口映射或安全组规则。
+- 数据磁盘足够容纳数据库、向量、上传文件、产物和备份。`DATA_DIR` 需要可被 Docker 写入。
+- 如果启用内置沙盒，接受该 sidecar 挂载宿主机 Docker socket 的风险。它必须是你完全控制的主机。
+
+只读预检示例：
+
+```bash
+uname -m
+docker version
+docker compose version
+df -h
+```
+
+## 创建部署配置
+
+```bash
+git clone --depth=1 https://github.com/hjxwz123/Aivory.git /opt/aivory
+cd /opt/aivory/deploy
+cp .env.example .env
+```
+
+编辑 `.env`，至少设置三个彼此不同的随机值和持久化目录：
+
+```dotenv
+POSTGRES_PASSWORD=替换为独立的强随机数据库密码
+REDIS_PASSWORD=替换为独立的强随机Redis密码
+JWT_SECRET=替换为独立的强随机会话签名密钥
+DATA_DIR=/opt/aivory/data
+IMAGE_TAG=latest
+```
+
+生成随机值：
+
+```bash
+openssl rand -hex 32
+```
+
+不要复用数据库密码、Redis 密码和 `JWT_SECRET`。生产环境的 `JWT_SECRET` 至少应有 32 个字符，保持稳定；修改它会使已有会话失效。稳定实例建议将 `IMAGE_TAG` 固定为完整发布的版本号，例如 `3.0.0`，并在升级前备份。
+
+完整版默认在内部网络使用 Qdrant。`QDRANT_API_KEY` 留空时，官方 Compose 使用内部共享默认值，服务不会发布端口；生产中仍建议为其设置与其他密钥不同的强随机值。只有你明确连接受控的外部 Qdrant 时，才修改 `QDRANT_URL` 与匹配的 API Key。
+
+## 启动前渲染配置
+
+实际部署读取的是 `.env`，不是模板 `.env.example`。先查看 Compose 的最终解析结果，尤其要确认应用、sidecar 和沙盒运行时镜像使用的是同一版本标签：
+
+```bash
+cd /opt/aivory/deploy
+docker compose --env-file .env -f docker-compose.prod.yml config
+docker compose --env-file .env -f docker-compose.prod.yml config --images
+```
+
+官方完整版明确固定应用与内置服务之间的 PostgreSQL、Redis、Qdrant 和沙盒连接。因此不要试图通过在 `.env` 填入 `DATABASE_URL`、`REDIS_URL` 或 `SANDBOX_BASE_URL` 改变默认拓扑；显式 Compose 环境值优先。需要自定义外部服务时，应先审查完整渲染结果和网络边界。
+
+## 拉取、启动与基础验收
+
+```bash
+cd /opt/aivory/deploy
+docker compose --env-file .env -f docker-compose.prod.yml pull
+docker compose --env-file .env -f docker-compose.prod.yml up -d
+docker compose --env-file .env -f docker-compose.prod.yml ps
+```
+
+`postgres` 与 `redis` 会先通过健康检查，随后应用启动。首次拉取内置沙盒时耗时可能较长，因为 Python 运行时镜像较大；不要在它下载期间反复删除容器或镜像。
+
+检查应用及内置服务的近期日志：
+
+```bash
+docker compose --env-file .env -f docker-compose.prod.yml logs --tail=200 app
+docker compose --env-file .env -f docker-compose.prod.yml logs --tail=100 postgres redis qdrant sandbox
+curl -fsS http://127.0.0.1/api/health
+```
+
+健康接口预期返回 `{"ok":true}`。容器状态应为运行中，沙盒在完成初次拉取后应显示健康。应用默认映射主机 `80` 到容器 `8787`；使用域名或反向代理前先确认本机健康检查通过。
+
+## 首次管理员与首个模型
+
+打开服务器 IP 或域名。新实例没有预置用户：第一个通过初始化页面创建的账号自动成为管理员。完成登录后按下列顺序建立可用聊天：
+
+1. 在“渠道”添加一个已启用的服务商连接，填入正确的 API 格式、Base URL 和 API Key。
+2. 在“模型”手动添加或自动导入至少一个已启用的聊天模型。
+3. 在“设置 → 模型策略”选择默认聊天模型。
+4. 新建对话并发送一条短消息，确认真实模型响应、用量记录和错误提示都符合预期。
+
+模型服务商 API Key 保存在管理员后台的持久化配置中，不应写入前端构建变量、浏览器本地配置或公开日志。更完整的后台配置顺序见[管理员首次配置](../admin/first-run.mdx)。
+
+## 域名、HTTPS 与访问边界
+
+单体部署中，网页和 `/api` 在同一 origin 上提供，因此普通域名部署不需要额外设置 CORS。应由 Caddy、Traefik、Nginx 或云负载均衡终止 HTTPS，并将请求转发给 `app`。
+
+若代理和 Compose 运行在同一主机，请将 Compose 的端口映射改为 `127.0.0.1:8787:8787`，再让代理连接 `127.0.0.1:8787`。不要让代理与应用同时占用主机 80/443，也不要通过反向代理公开 PostgreSQL、Redis、Qdrant 或沙盒。具体示例和 GitHub OAuth 的回调规则见[域名、HTTPS 与 OAuth](../deployment/domain-tls-oauth.mdx)。
+
+## 数据、沙盒与备份边界
+
+| 持久化位置 | 内容 | 处理原则 |
+| --- | --- | --- |
+| `pgdata` 命名卷 | 关系数据与后台配置 | 与其他数据一起备份 |
+| `redisdata` 命名卷 | Redis 追加日志与缓存相关数据 | 保留以获得完整恢复能力 |
+| `qdrantdata` 命名卷 | 向量索引 | 与数据库和文件同步备份 |
+| `sandbox-archives` 命名卷 | 本地持久沙盒工作区归档 | 使用本地持久工作区时一并备份 |
+| `DATA_DIR` | 上传、产物、本地对象和后台备份文件 | 使用宿主机备份策略保护 |
+
+内置沙盒不会对公网发布端口，但它通过 Docker socket 创建会话容器。不要把它当作不可信多租户代码执行的唯一防线；应继续限制可使用 Python 的用户、模型和场景，并为宿主机保留资源余量。`sandbox-image-keepalive` 用于避免镜像清理后下一次执行被迫冷拉取，不要把它作为无用容器删除。
+
+升级、回滚、完整备份、恢复验证和跨架构迁移请使用[升级、备份与恢复](../deployment/upgrade-backup.mdx)。
+
+## 运行故障时的首要检查
+
+- 网页打不开：检查 `app` 日志、主机 80/443 监听、防火墙与反向代理 upstream。
+- 应用未启动：检查 `POSTGRES_PASSWORD`、`REDIS_PASSWORD` 和 `JWT_SECRET` 是否真实填入 `.env`，再查看 `postgres`、`redis`、`app` 日志。
+- 知识库没有检索结果：检查 embedding 维度、文档索引状态和 Qdrant 日志。
+- Python 不可用：检查 `sandbox` 状态、Docker socket、沙盒镜像拉取和管理员工具设置。
+
+详见[常见故障排查](../troubleshooting/common-issues.mdx)。

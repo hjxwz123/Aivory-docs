@@ -1,36 +1,36 @@
 ---
-title: 环境变量总览
+title: Environment Variables Overview
 sidebar_position: 1
-description: Aivory 个人版、完整版与自定义部署的完整环境变量入口、优先级和核心配置参考。
+description: The complete environment variable entry points, precedence, and core configuration reference for Aivory Personal edition, Full edition, and custom deployments.
 ---
 
-# 环境变量总览
+# Environment Variables Overview
 
-本组页面覆盖 Aivory 支持的部署、应用、运行时调优、沙盒和前端构建环境变量。为保持可读性，变量按作用拆分：
+This group of pages covers the deployment, application, runtime tuning, sandbox, and frontend build environment variables supported by Aivory. For readability, the variables are split by purpose:
 
-- 本页：镜像、Compose、应用启动、存储、认证与外部集成的核心变量。
-- [高级运行时变量](/docs/deployment/environment-advanced)：全部 `AIVORY_*` 运行时调优、限流、RAG、队列和管理任务变量。
-- [沙盒变量](/docs/deployment/environment-sandbox)：全部 `SANDBOX_*` sidecar 与会话运行时变量。
-- [前端构建变量](/docs/deployment/environment-frontend)：全部 `VITE_*` 变量。
+- This page: core variables for images, Compose, application startup, storage, authentication, and external integrations.
+- [Advanced runtime variables](./environment-advanced.mdx): all `AIVORY_*` runtime tuning, rate limiting, RAG, queue, and admin task variables.
+- [Sandbox variables](./environment-sandbox.mdx): all `SANDBOX_*` sidecar and session runtime variables.
+- [Frontend build variables](./environment-frontend.mdx): all `VITE_*` variables.
 
-本文不列出任何源代码位置。所有密钥、密码、令牌、私有 URL 和备份归档都应视为高敏感信息：不要提交到 Git、不要发到工单、不要写入截图或浏览器前端环境变量。
+This document does not list any source code locations. All keys, passwords, tokens, private URLs, and backup archives should be treated as highly sensitive: do not commit them to Git, do not post them in support tickets, and do not write them into screenshots or browser frontend environment variables.
 
-## 变量的生效方式与优先级
+## How variables take effect and their precedence
 
-官方部署使用不同的 env 文件：个人版为 `.env.personal`，完整版为 `.env`。复制模板后编辑实际使用的文件，不要只改 `.env.example`。
+The official deployments use different env files: `.env.personal` for the Personal edition and `.env` for the Full edition. After copying the template, edit the file you actually use; do not only change `.env.example`.
 
-Compose 中显式写入的 `environment` 值优先于 `env_file`。这有两个重要结果：
+Explicit `environment` values written in Compose take precedence over `env_file`. This has two important consequences:
 
-- **个人版**固定 SQLite、`VECTOR_BACKEND=sqlite`，并清空 Redis/Qdrant 地址。因此在 `.env.personal` 写入 `DATABASE_URL`、`REDIS_URL`、`QDRANT_URL` 或 `QDRANT_API_KEY` 不会改变个人版拓扑。
-- **完整版**固定内部 PostgreSQL、Redis、Qdrant 和内置沙盒地址。因此在 `.env` 写入同名连接地址并不能把官方完整栈改为外部后端。
+- The **Personal edition** pins SQLite and `VECTOR_BACKEND=sqlite`, and clears the Redis/Qdrant addresses. Therefore, writing `DATABASE_URL`, `REDIS_URL`, `QDRANT_URL`, or `QDRANT_API_KEY` in `.env.personal` will not change the Personal edition topology.
+- The **Full edition** pins the internal PostgreSQL, Redis, Qdrant, and built-in sandbox addresses. Therefore, writing the same connection addresses in `.env` does not switch the official full stack to external backends.
 
-应用进程变量通常在容器启动时读取，修改后执行相应 Compose `up -d --no-build` 重新创建即可。沙盒变量需要重启 sandbox 服务；`VITE_*` 是构建期变量，对预构建镜像运行时新增 `.env` 无效。
+Application process variables are typically read at container startup; after changing them, recreate the container with the corresponding Compose `up -d --no-build`. Sandbox variables require restarting the sandbox service; `VITE_*` are build-time variables, and adding them to `.env` at runtime has no effect on prebuilt images.
 
-管理员后台的渠道、模型、SMTP、OAuth、搜索、对象存储、支付和许多工具设置会持久化保存。环境变量是其启动回退或部署边界，不应把二者当作能任意互相覆盖的表单。
+Channel, model, SMTP, OAuth, search, object storage, payment, and many tool settings in the admin backend are persisted. Environment variables serve as their startup fallback or deployment boundary; do not treat the two as forms that can arbitrarily override each other.
 
-## 最小生产配置
+## Minimal production configuration
 
-个人版至少需要稳定的 `JWT_SECRET` 和可写数据目录：
+The Personal edition needs at least a stable `JWT_SECRET` and a writable data directory:
 
 ```dotenv
 JWT_SECRET=替换为至少32字符的强随机密钥
@@ -38,7 +38,7 @@ DATA_DIR=/opt/aivory/data-personal
 IMAGE_TAG=latest
 ```
 
-完整版至少需要彼此不同的数据库、Redis 与会话密钥：
+The Full edition needs at least mutually distinct database, Redis, and session secrets:
 
 ```dotenv
 POSTGRES_PASSWORD=替换为强随机数据库密码
@@ -48,86 +48,86 @@ DATA_DIR=/opt/aivory/data
 IMAGE_TAG=latest
 ```
 
-生成随机值：
+Generate random values:
 
 ```bash
 openssl rand -hex 32
 ```
 
-模型服务商 API Key 不写在这些变量中，应在管理员后台的“渠道”中保存。启动后还需至少创建一个已启用聊天模型，并在模型策略中选为默认模型。
+Model provider API keys are not written in these variables; they should be stored under Channels in the admin backend. After startup, you must also create at least one enabled chat model and select it as the default model in the model policy.
 
-## 镜像、版本与 Compose 变量
+## Images, versions, and Compose variables
 
-| 变量 | 适用范围 | 默认值 | 作用与取值 | 敏感性 |
+| Variable | Applies to | Default | Purpose and values | Sensitivity |
 | --- | --- | --- | --- | --- |
-| `IMAGE_OWNER` | 个人版、完整版 | `hjxwz123` | 镜像命名空间；fork 或私有镜像仓库时改为自己的 owner。 | 普通 |
-| `IMAGE_REGISTRY` | 个人版、完整版 | 未设置时 `ghcr.io` | 镜像 registry 或受控镜像代理地址，不含镜像名称。代理返回不一致镜像时应移除它并回到官方 registry。 | 普通/内部网络 |
-| `IMAGE_TAG` | 个人版、完整版 | `latest` | 应用与当前发布的沙盒镜像版本；发布 tag 用 `3.0.0`，不要写 `v3.0.0`。 | 普通 |
-| `SANDBOX_IMAGE_TAG` | 使用内置沙盒时 | 继承 `IMAGE_TAG` | 仅历史版本没有对应沙盒 tag 时使用的兼容覆盖。新版保持未设置，避免应用和沙盒版本分离。 | 普通 |
-| `DATA_DIR` | 个人版、完整版 | 个人版 `./data-personal`；完整版 `./data` | 宿主机持久化根目录。个人版含 SQLite 和向量；完整版含上传、产物、本地对象和备份。建议绝对路径并整体备份。 | 高价值数据 |
-| `BACKUP_DIR` | 个人版、完整版 | `/app/data/backups` | 容器内全量备份归档目录，通常位于 `DATA_DIR/backups`。 | 高敏感数据 |
-| `MAX_BACKUP_BYTES` | 个人版、完整版 | `21474836480` | 后台导入完整备份允许的最大字节数，默认 20 GiB。提高前评估磁盘、临时空间和反向代理限制。 | 普通 |
-| `POSTGRES_USER` | 完整版 | `aivory` | 内置 PostgreSQL 用户名。通常保持默认即可。 | 普通 |
-| `POSTGRES_DB` | 完整版 | `aivory` | 内置 PostgreSQL 数据库名。通常保持默认即可。 | 普通 |
-| `POSTGRES_PASSWORD` | 完整版，必填 | 无安全默认值 | 内置 PostgreSQL 密码；必须为独立强随机值。 | 密钥 |
-| `REDIS_PASSWORD` | 完整版，必填 | 无安全默认值 | 内置 Redis 密码；不得与数据库或 JWT 密钥复用。 | 密钥 |
-| `QDRANT_URL` | 完整版/自定义部署 | 官方完整版为内部 `http://qdrant:6333` | Qdrant 服务地址。官方完整栈会固定内部地址；只在自定义部署连接受控外部 Qdrant。 | 内部网络 |
-| `QDRANT_API_KEY` | 完整版/自定义部署 | 官方完整版内部共享默认值 | Qdrant API 鉴权。官方服务不发布端口；生产仍建议设为独立强随机值并与 Qdrant 一致。 | 密钥 |
-| `ENABLE_MOCK_PROVIDER` | 历史兼容变量 | `false` | 当前官方发布运行时不再用它创建可用模型渠道。不要依赖它；首次可用请在后台添加真实渠道和模型。 | 普通 |
+| `IMAGE_OWNER` | Personal edition, Full edition | `hjxwz123` | Image namespace; change it to your own owner when forking or using a private image registry. | Normal |
+| `IMAGE_REGISTRY` | Personal edition, Full edition | `ghcr.io` when unset | Image registry or controlled image proxy address, without the image name. If a proxy returns inconsistent images, remove it and go back to the official registry. | Normal/Internal network |
+| `IMAGE_TAG` | Personal edition, Full edition | `latest` | Version of the application and the current release's sandbox images; use `3.0.0` for release tags, not `v3.0.0`. | Normal |
+| `SANDBOX_IMAGE_TAG` | When using the built-in sandbox | Inherits `IMAGE_TAG` | Compatibility override only when a historical version has no matching sandbox tag. Keep it unset in new versions to avoid application/sandbox version drift. | Normal |
+| `DATA_DIR` | Personal edition, Full edition | Personal edition `./data-personal`; Full edition `./data` | Host persistent root directory. The Personal edition holds SQLite and vectors; the Full edition holds uploads, artifacts, local objects, and backups. An absolute path is recommended, and back it up as a whole. | High-value data |
+| `BACKUP_DIR` | Personal edition, Full edition | `/app/data/backups` | In-container full backup archive directory, normally located at `DATA_DIR/backups`. | Highly sensitive data |
+| `MAX_BACKUP_BYTES` | Personal edition, Full edition | `21474836480` | Maximum bytes allowed when importing a full backup in the admin backend; default 20 GiB. Before raising it, evaluate disk, temporary space, and reverse proxy limits. | Normal |
+| `POSTGRES_USER` | Full edition | `aivory` | Built-in PostgreSQL username. Usually keep the default. | Normal |
+| `POSTGRES_DB` | Full edition | `aivory` | Built-in PostgreSQL database name. Usually keep the default. | Normal |
+| `POSTGRES_PASSWORD` | Full edition, required | No secure default | Built-in PostgreSQL password; must be a distinct strong random value. | Secret |
+| `REDIS_PASSWORD` | Full edition, required | No secure default | Built-in Redis password; must not be reused with the database or JWT secret. | Secret |
+| `QDRANT_URL` | Full edition/custom deployments | Internal `http://qdrant:6333` in the official Full edition | Qdrant service address. The official full stack pins the internal address; only point this at a controlled external Qdrant in custom deployments. | Internal network |
+| `QDRANT_API_KEY` | Full edition/custom deployments | Shared internal default in the official Full edition | Qdrant API authentication. The official service does not publish a port; in production, still set a distinct strong random value consistent with Qdrant. | Secret |
+| `ENABLE_MOCK_PROVIDER` | Legacy compatibility variable | `false` | The current official release runtime no longer uses it to create usable model channels. Do not rely on it; for first use, add a real channel and model in the admin backend. | Normal |
 
-## 应用启动、网络和后端
+## Application startup, network, and backends
 
-| 变量 | 适用范围 | 默认值 | 作用与取值 | 敏感性 |
+| Variable | Applies to | Default | Purpose and values | Sensitivity |
 | --- | --- | --- | --- | --- |
-| `AIVORY_LISTEN` | 自定义部署 | `:8787` | API/Web 监听地址，例如 `:8787` 或 `127.0.0.1:8787`。官方 Compose 已固定容器内端口。 | 普通 |
-| `AIVORY_ENV` | 自定义部署 | `development` | 运行环境标记。官方 Compose 固定为 `production`；生产环境会拒绝弱或空的 JWT 密钥。 | 普通 |
-| `AIVORY_HTTP_IDLE_TIMEOUT` | 自定义部署 | `20m` | HTTP keep-alive 空闲超时。需与反向代理、SSE 和负载均衡空闲超时协调。 | 普通 |
-| `DATABASE_URL` | 自定义部署 | `./data/aivory.db?...` | SQLite 路径或 PostgreSQL DSN。官方个人版/完整版均固定其各自后端，请勿在官方 env 文件中试图覆盖。 | 高价值数据 |
-| `REDIS_URL` | 自定义部署 | 空，使用进程内缓存 | Redis DSN。官方完整版固定内部 Redis；个人版明确清空。 | 密钥/内部网络 |
-| `VECTOR_BACKEND` | 自定义部署 | `auto` | `auto`、`qdrant`、`sqlite` 或 `disabled`。`qdrant` 必须有 Qdrant 地址，`sqlite` 必须是 SQLite 数据库。 | 普通 |
-| `STATIC_DIR` | 分离前端或自建镜像 | 空 | 内置 SPA 静态文件目录。官方应用镜像已提供网页；API-only/自建前端部署才需要设置。 | 普通 |
-| `ALLOWED_ORIGINS` | 前后端跨域部署 | 开发地址列表 | 逗号分隔的精确 `scheme://host[:port]` origin。官方同源 Compose 无需设置，不要用不受控通配符。 | 安全配置 |
-| `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY` | 有出站代理的部署 | 未设置 | 标准代理变量，用于模型服务、OAuth token 交换和其他出站 HTTP。`NO_PROXY` 应包含内部服务与本地地址。 | 内部网络/可能含凭据 |
+| `AIVORY_LISTEN` | Custom deployments | `:8787` | API/Web listen address, e.g. `:8787` or `127.0.0.1:8787`. The official Compose already pins the in-container port. | Normal |
+| `AIVORY_ENV` | Custom deployments | `development` | Runtime environment marker. The official Compose pins it to `production`; production rejects weak or empty JWT secrets. | Normal |
+| `AIVORY_HTTP_IDLE_TIMEOUT` | Custom deployments | `20m` | HTTP keep-alive idle timeout. Coordinate with reverse proxy, SSE, and load balancer idle timeouts. | Normal |
+| `DATABASE_URL` | Custom deployments | `./data/aivory.db?...` | SQLite path or PostgreSQL DSN. Both the official Personal and Full editions pin their respective backends; do not try to override this in official env files. | High-value data |
+| `REDIS_URL` | Custom deployments | Empty, uses in-process cache | Redis DSN. The official Full edition pins internal Redis; the Personal edition explicitly clears it. | Secret/Internal network |
+| `VECTOR_BACKEND` | Custom deployments | `auto` | `auto`, `qdrant`, `sqlite`, or `disabled`. `qdrant` requires a Qdrant address; `sqlite` requires a SQLite database. | Normal |
+| `STATIC_DIR` | Separated frontend or self-built images | Empty | Directory for the embedded SPA static files. The official application image already ships the web UI; set this only for API-only/self-built frontend deployments. | Normal |
+| `ALLOWED_ORIGINS` | Cross-origin frontend/backend deployments | Development address list | Comma-separated exact `scheme://host[:port]` origins. Not needed for the official same-origin Compose; do not use uncontrolled wildcards. | Security configuration |
+| `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` | Deployments with an outbound proxy | Not set | Standard proxy variables, used for model services, OAuth token exchange, and other outbound HTTP. `NO_PROXY` should include internal services and local addresses. | Internal network/May contain credentials |
 
-## 认证、会话与 OAuth
+## Authentication, sessions, and OAuth
 
-| 变量 | 适用范围 | 默认值 | 作用与取值 | 敏感性 |
+| Variable | Applies to | Default | Purpose and values | Sensitivity |
 | --- | --- | --- | --- | --- |
-| `JWT_SECRET` | 个人版、完整版，必填 | 非生产开发时临时生成；生产无安全默认值 | 会话令牌签名密钥。至少 32 字符，长期稳定且与所有密码不同；变更会使已有会话失效。 | 密钥 |
-| `ACCESS_TTL` | 所有部署 | `30m` | 访问令牌有效期，使用 `30m`、`1h` 等时长。降低可缩短泄露窗口，但会增加刷新频率。 | 安全配置 |
-| `REFRESH_TTL` | 所有部署 | `720h` | 刷新令牌有效期，默认 30 天。应与设备风险、撤销策略和用户体验共同决定。 | 安全配置 |
-| `OAUTH_CALLBACK_BASE_URL` | 多域名 OAuth | 空 | 固定 OAuth 回调 origin，例如 `https://aivory.example.com`，不带尾随 `/`。未设置时按请求域名推导。 | 安全配置 |
-| `OAUTH_RETURN_ORIGINS` | 多域名 OAuth | 空 | 逗号分隔的允许登录完成后返回的精确 origin 列表；是开放重定向防线，不能包含通配符或路径。 | 安全配置 |
+| `JWT_SECRET` | Personal edition, Full edition, required | Temporarily generated in non-production development; no secure default in production | Session token signing secret. At least 32 characters, long-term stable and different from all passwords; changing it invalidates existing sessions. | Secret |
+| `ACCESS_TTL` | All deployments | `30m` | Access token lifetime, using durations such as `30m` or `1h`. Lowering it shortens the exposure window but increases refresh frequency. | Security configuration |
+| `REFRESH_TTL` | All deployments | `720h` | Refresh token lifetime, default 30 days. Decide it together with device risk, revocation policy, and user experience. | Security configuration |
+| `OAUTH_CALLBACK_BASE_URL` | Multi-domain OAuth | Empty | Pin the OAuth callback origin, e.g. `https://aivory.example.com`, without a trailing `/`. When unset, it is derived from the request domain. | Security configuration |
+| `OAUTH_RETURN_ORIGINS` | Multi-domain OAuth | Empty | Comma-separated list of exact origins allowed to return after login completes; an open-redirect defense, and it must not contain wildcards or paths. | Security configuration |
 
-`SEED_ADMIN_EMAIL` 与 `SEED_ADMIN_PASSWORD` 是旧示例中的兼容项，当前发布流程不会使用它们创建管理员。全新实例第一个在初始化页面创建成功的账号自动成为管理员；不要把所谓默认管理员密码写进部署配置。
+`SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` are compatibility items from older examples; the current release process does not use them to create administrators. On a brand-new instance, the first account successfully created on the initialization page automatically becomes the administrator; do not put any so-called default admin password into deployment configuration.
 
-## 文件、对象和配额
+## Files, objects, and quotas
 
-| 变量 | 适用范围 | 默认值 | 作用与取值 | 敏感性 |
+| Variable | Applies to | Default | Purpose and values | Sensitivity |
 | --- | --- | --- | --- | --- |
-| `UPLOAD_DIR` | 自定义部署 | `./data/uploads` | 用户上传的本地目录。官方 Compose 通过 `DATA_DIR` 挂载其上级目录。 | 高价值数据 |
-| `ARTIFACT_DIR` | 自定义部署 | `./data/artifacts` | 生成文件和工具产物的本地目录。 | 高价值数据 |
-| `AIVORY_LOCAL_STORAGE_DIR` | 自定义部署 | `UPLOAD_DIR/object-storage` | API 自身对象（例如头像）的本地保存目录。单节点本地存储适用，多副本需使用受控对象存储方案。 | 高价值数据 |
-| `MAX_UPLOAD_BYTES` | 所有部署 | `52428800` | 应用接受的单文件硬上限，默认 50 MiB。后台较低配置不能超过它；同时检查代理限制。 | 普通 |
-| `DAILY_MESSAGE_LIMIT` | 所有部署 | `200` | 每用户每日消息上限的启动默认值。长期运营应在后台套餐/配额策略中统一管理。 | 普通 |
-| `IMAGE_DAILY_LIMIT` | 所有部署 | `30` | 每用户每日图像生成上限的启动默认值。 | 普通 |
+| `UPLOAD_DIR` | Custom deployments | `./data/uploads` | Local directory for user uploads. The official Compose mounts its parent directory via `DATA_DIR`. | High-value data |
+| `ARTIFACT_DIR` | Custom deployments | `./data/artifacts` | Local directory for generated files and tool artifacts. | High-value data |
+| `AIVORY_LOCAL_STORAGE_DIR` | Custom deployments | `UPLOAD_DIR/object-storage` | Local storage directory for API-owned objects (e.g. avatars). Suitable for single-node local storage; use a controlled object storage solution for multiple replicas. | High-value data |
+| `MAX_UPLOAD_BYTES` | All deployments | `52428800` | Hard per-file limit accepted by the application, default 50 MiB. Lower backend settings cannot exceed it; also check proxy limits. | Normal |
+| `DAILY_MESSAGE_LIMIT` | All deployments | `200` | Startup default for the per-user daily message cap. For long-term operations, manage this centrally in backend plan/quota policies. | Normal |
+| `IMAGE_DAILY_LIMIT` | All deployments | `30` | Startup default for the per-user daily image generation cap. | Normal |
 
-## 搜索、Embedding、文档解析与沙盒回退
+## Search, embedding, document parsing, and sandbox fallback
 
-这些变量提供启动回退。管理员后台已保存的相应配置通常优先用于实际功能；配置时请在后台完成测试和权限审查。
+These variables provide startup fallbacks. The corresponding settings already saved in the admin backend usually take precedence for actual features; when configuring them, complete testing and permission review in the admin backend.
 
-| 变量 | 适用范围 | 默认值 | 作用与取值 | 敏感性 |
+| Variable | Applies to | Default | Purpose and values | Sensitivity |
 | --- | --- | --- | --- | --- |
-| `SEARCH_PROVIDER` | 所有部署 | 空 | `serper`、`brave`、`searxng` 或 `auto`。未配置时网页搜索不可用；`searxng` 需要基础地址。 | 普通 |
-| `SEARCH_API_KEY` | Serper/Brave | 空 | 搜索服务商 API Key。自托管 SearXNG 通常不需要。 | 密钥 |
-| `SEARCH_BASE_URL` | SearXNG | 空 | 自托管 SearXNG 实例根 URL，不应包含具体 `/search` 路径。 | 内部网络 |
-| `EMBEDDING_BASE_URL` | 所有部署 | 空 | OpenAI 兼容 embedding API 基础地址。留空时使用基础本地 embedding 兜底。 | 内部网络 |
-| `EMBEDDING_API_KEY` | 外部 embedding | 空 | embedding 服务密钥。 | 密钥 |
-| `EMBEDDING_MODEL` | 外部 embedding | `text-embedding-3-small` | embedding 模型请求 ID；必须与服务商支持的模型一致。 | 普通 |
-| `EMBEDDING_DIM` | 外部 embedding | `1536` | 模型实际输出维度。改变模型或维度后必须重建相应知识库向量。 | 普通 |
-| `MINERU_API_URL` | OCR/复杂文档 | 空；模板可给出 `https://mineru.net` | MinerU 或兼容文档解析服务地址。 | 内部网络 |
-| `MINERU_API_KEY` | OCR/复杂文档 | 空 | MinerU 服务密钥。扫描件和图像型 PDF 常需要它。 | 密钥 |
-| `SANDBOX_BASE_URL` | 外部或个人版本地沙盒 | 空；官方完整版固定内部地址 | 沙盒 HTTP 服务地址。个人版本机 profile 用 `http://sandbox:8000`；不配置时 Python 保持不可用。 | 内部网络 |
-| `SANDBOX_API_KEY` | 启用沙盒 | 空；官方内置沙盒有内部共享值 | 沙盒 Bearer Key，必须与沙盒服务端一致。不要通过公网暴露沙盒。 | 密钥 |
+| `SEARCH_PROVIDER` | All deployments | Empty | `serper`, `brave`, `searxng`, or `auto`. Web search is unavailable when unconfigured; `searxng` requires a base URL. | Normal |
+| `SEARCH_API_KEY` | Serper/Brave | Empty | Search provider API key. Self-hosted SearXNG usually does not need one. | Secret |
+| `SEARCH_BASE_URL` | SearXNG | Empty | Root URL of a self-hosted SearXNG instance; it should not include the specific `/search` path. | Internal network |
+| `EMBEDDING_BASE_URL` | All deployments | Empty | Base URL of an OpenAI-compatible embedding API. When empty, a basic local embedding serves as the fallback. | Internal network |
+| `EMBEDDING_API_KEY` | External embeddings | Empty | Embedding service key. | Secret |
+| `EMBEDDING_MODEL` | External embeddings | `text-embedding-3-small` | Embedding model request ID; it must match a model supported by the provider. | Normal |
+| `EMBEDDING_DIM` | External embeddings | `1536` | The model's actual output dimension. After changing the model or dimension, you must rebuild the vectors of the affected knowledge bases. | Normal |
+| `MINERU_API_URL` | OCR/complex documents | Empty; the template may provide `https://mineru.net` | MinerU or compatible document parsing service address. | Internal network |
+| `MINERU_API_KEY` | OCR/complex documents | Empty | MinerU service key. Scanned documents and image-based PDFs often require it. | Secret |
+| `SANDBOX_BASE_URL` | External or Personal edition local sandbox | Empty; the official Full edition pins the internal address | Sandbox HTTP service address. The Personal edition local profile uses `http://sandbox:8000`; without configuration, Python remains unavailable. | Internal network |
+| `SANDBOX_API_KEY` | When the sandbox is enabled | Empty; the official built-in sandbox has an internal shared value | Sandbox Bearer key; it must match the sandbox server side. Do not expose the sandbox over the public internet. | Secret |
 
-沙盒资源、会话、上传和工作区变量见[沙盒变量](/docs/deployment/environment-sandbox)。模型渠道、搜索、OCR 和 embedding 的运营步骤见[渠道、模型与策略](/docs/admin/channels-models)和[知识库、RAG 与存储](/docs/admin/knowledge-rag)。
+For sandbox resource, session, upload, and workspace variables, see [Sandbox variables](./environment-sandbox.mdx). For operational steps on model channels, search, OCR, and embeddings, see [Channels, Models, and Policies](../admin/channels-models.mdx) and [Knowledge Bases, RAG, and Storage](../admin/knowledge-rag.mdx).

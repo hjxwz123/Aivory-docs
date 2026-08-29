@@ -41,7 +41,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.DOCS_SITE_URL) {
 
 const config: Config = {
   title: 'Aivory',
-  tagline: '把 AI 工作空间部署在自己的边界内',
+  tagline: 'Deploy your AI workspace inside your own boundaries',
   favicon: 'img/aivory-mark.svg',
 
   future: {
@@ -158,47 +158,47 @@ const config: Config = {
       items: [
         {
           type: 'dropdown',
-          label: '能力',
+          label: 'Capabilities',
           position: 'left',
           items: [
-            {label: '多模型对话', to: '/docs/getting-started/first-chat'},
-            {label: '知识库与向量', to: '/docs/user-guide/conversations-files'},
-            {label: '工具与沙盒', to: '/docs/admin/tools-sandbox'},
+            {label: 'Multi-model chat', to: '/docs/getting-started/first-chat'},
+            {label: 'Knowledge and vectors', to: '/docs/user-guide/conversations-files'},
+            {label: 'Tools and sandbox', to: '/docs/admin/tools-sandbox'},
           ],
         },
         {
           type: 'dropdown',
-          label: '部署',
+          label: 'Deploy',
           position: 'left',
           items: [
-            {label: '个人版', to: '/docs/getting-started/personal'},
-            {label: '完整版', to: '/docs/getting-started/full'},
-            {label: 'ARM64 与 x86_64', to: '/docs/deployment/arm-x86'},
+            {label: 'Personal edition', to: '/docs/getting-started/personal'},
+            {label: 'Full edition', to: '/docs/getting-started/full'},
+            {label: 'ARM64 and x86_64', to: '/docs/deployment/arm-x86'},
           ],
         },
         {
           to: '/docs/admin/channels-models',
-          label: '模型',
+          label: 'Models',
           position: 'left',
         },
         {
           type: 'dropdown',
-          label: '学习',
+          label: 'Learn',
           position: 'left',
           items: [
-            {label: '快速开始', to: '/docs/intro'},
-            {label: '常见问题', to: '/docs/troubleshooting/common-issues'},
-            {label: '更新日志', to: '/docs/reference/changelog'},
+            {label: 'Quick start', to: '/docs/intro'},
+            {label: 'Troubleshooting', to: '/docs/troubleshooting/common-issues'},
+            {label: 'Changelog', to: '/docs/reference/changelog'},
           ],
         },
         {
           type: 'dropdown',
-          label: '探索',
+          label: 'Explore',
           position: 'left',
           items: [
-            {label: '产品工作区', to: '/product'},
-            {label: '架构路径', to: '/architecture'},
-            {label: '交互实验室', to: '/playground'},
+            {label: 'Product workspace', to: '/product'},
+            {label: 'Architecture path', to: '/architecture'},
+            {label: 'Interactive lab', to: '/playground'},
           ],
         },
         {
@@ -212,7 +212,7 @@ const config: Config = {
         },
         {
           to: '/docs/getting-started/personal',
-          label: '开始使用',
+          label: 'Get started',
           position: 'right',
           className: 'aivory-navbar-cta',
         },
@@ -222,26 +222,26 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: '开始使用',
+          title: 'Get started',
           items: [
-            {label: '产品介绍', to: '/docs/intro'},
-            {label: '个人版部署', to: '/docs/getting-started/personal'},
-            {label: '完整版部署', to: '/docs/getting-started/full'},
+            {label: 'Product overview', to: '/docs/intro'},
+            {label: 'Personal edition', to: '/docs/getting-started/personal'},
+            {label: 'Full edition', to: '/docs/getting-started/full'},
           ],
         },
         {
-          title: '参考',
+          title: 'Reference',
           items: [
-            {label: '环境变量', to: '/docs/deployment/environment'},
-            {label: '升级与备份', to: '/docs/deployment/upgrade-backup'},
-            {label: '故障排查', to: '/docs/troubleshooting/common-issues'},
+            {label: 'Environment variables', to: '/docs/deployment/environment'},
+            {label: 'Upgrade and backup', to: '/docs/deployment/upgrade-backup'},
+            {label: 'Troubleshooting', to: '/docs/troubleshooting/common-issues'},
           ],
         },
         {
-          title: '项目',
+          title: 'Project',
           items: [
             {label: 'GitHub', href: 'https://github.com/hjxwz123/Aivory'},
-            {label: '更新日志', to: '/docs/reference/changelog'},
+            {label: 'Changelog', to: '/docs/reference/changelog'},
           ],
         },
       ],

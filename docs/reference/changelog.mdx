@@ -1,187 +1,187 @@
 ---
-title: 更新日志
+title: Changelog
 sidebar_position: 1
-description: Aivory 正式发布版本的详细变更、升级影响与兼容性说明。
+description: Detailed changes, upgrade impact, and compatibility notes for official Aivory releases.
 ---
 
-# 更新日志
+# Changelog
 
-本页以 [GitHub Releases](https://github.com/hjxwz123/Aivory/releases) 的 tag 和发布时间为准。镜像部署请固定对应的 `IMAGE_TAG`；升级前按[升级与备份](/docs/deployment/upgrade-backup)完成备份。每个版本的完整提交范围、校验记录和原始说明仍以对应 GitHub Release 为准。
+This page follows the tags and release times on [GitHub Releases](https://github.com/hjxwz123/Aivory/releases). For image deployments, pin the corresponding `IMAGE_TAG`; before upgrading, complete backups as described in [Upgrades and Backups](../deployment/upgrade-backup.mdx). The complete commit range, verification records, and original notes for each version remain authoritative on the corresponding GitHub Release.
 
-## v2.4 系列
+## v2.4 Series
 
 ### [v2.4.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.0) - 2026-08-29
 
-`v2.4.0` 将个人部署从“需要维护一组外部基础设施”的方案，扩展为可直接运行的单实例版本；同时继续保留并兼容原有的 PostgreSQL、Redis 与 Qdrant 完整部署。该版本也集中完善了管理员初始化、工具执行可靠性、认证会话安全、RAG 保护与聊天体验。
+`v2.4.0` expands personal deployment from a setup that "requires maintaining a set of external infrastructure" into a ready-to-run single-instance edition, while continuing to preserve and remain compatible with the original PostgreSQL, Redis, and Qdrant full deployment. This version also consolidates improvements to administrator initialization, tool execution reliability, authentication session security, RAG protection, and the chat experience.
 
-#### 个人部署与内嵌向量
+#### Personal deployment and embedded vectors
 
-- 新增 `deploy/docker-compose.personal.yml` 与 `.env.personal.example`。个人版使用 SQLite 保存业务数据和向量数据，并以进程内缓存、队列替代 Redis，不再要求单独部署 PostgreSQL、Redis 或 Qdrant。
-- 向量后端新增 `VECTOR_BACKEND=sqlite`。个人版以精确余弦相似度检索内嵌向量，适合单机、低维护成本的个人使用；SQLite 向量数据会纳入逻辑备份流程。
-- Python 沙盒在个人版中默认不随主服务启动。需要代码执行时，可通过 Compose 的 `sandbox` profile 选择性启用；未配置本地沙盒时，管理端会给出明确的配置提示。
-- 原有完整部署的服务编排、环境变量和数据路径保持不变。个人版仅面向单实例运行，不支持横向扩展，也不应将 SQLite 数据库放在 NFS 等网络文件系统上。
+- Added `deploy/docker-compose.personal.yml` and `.env.personal.example`. The Personal edition uses SQLite to store business data and vector data and replaces Redis with in-process caching and queues, so a separate deployment of PostgreSQL, Redis, or Qdrant is no longer required.
+- Added `VECTOR_BACKEND=sqlite` to the vector backend. The Personal edition performs exact cosine-similarity retrieval over embedded vectors, which suits single-machine, low-maintenance personal use; SQLite vector data is included in the logical backup workflow.
+- The Python sandbox no longer starts with the main service by default in the Personal edition. When code execution is needed, enable it selectively through the `sandbox` profile in Compose; when no local sandbox is configured, the admin side shows an explicit configuration prompt.
+- The service orchestration, environment variables, and data paths of the original full deployment remain unchanged. The Personal edition targets single-instance operation only; it does not support horizontal scaling, and the SQLite database should not be placed on network file systems such as NFS.
 
-#### 管理引导、渠道与模型配置
+#### Administrator bootstrap, channels, and model configuration
 
-- 管理员首次进入后台会进入可逐页漫游的配置引导，而非静态检查清单。引导可跳过、可在之后重新打开，并可跳转至对应配置页面后重新检测状态。
-- 引导会识别个人版和完整版：必要项涵盖渠道、聊天模型和默认模型；嵌入模型、搜索、沙盒与 SMTP 被作为按需启用的增强项展示。
-- 渠道模型页支持从服务商模型接口发现并批量导入该渠道支持的模型。导入过程会明确反馈重复模型、不支持的模型、部分成功、空结果和请求失败，避免误以为配置已经生效。
-- 管理概览新增近 24 小时活动、配置健康状态和全局离线指示；工作空间知识库信息可展开查看，便于排查资源与配置关联。
+- First-time entry into the admin console now opens a page-by-page configuration walkthrough instead of a static checklist. The walkthrough can be skipped, reopened later, and jump to the corresponding configuration page and re-check its status.
+- The walkthrough distinguishes the Personal and Full editions: required items cover channels, chat models, and the default model; embedding models, search, the sandbox, and SMTP are presented as enhancements to enable on demand.
+- The channel models page supports discovering models from the provider's models endpoint and bulk-importing the models a channel supports. The import process clearly reports duplicate models, unsupported models, partial success, empty results, and request failures, so you won't mistakenly believe the configuration has taken effect.
+- The admin overview adds activity for the last 24 hours, configuration health status, and a global offline indicator; workspace knowledge base information can be expanded to help troubleshoot resource and configuration associations.
 
-#### 工具执行与模型调用可靠性
+#### Tool execution and model call reliability
 
-- `aivory_web_search` 一次最多支持 5 个查询，`web_fetch` 一次最多支持 4 个 URL；系统会控制并发、去重并稳定排序，即使部分请求失败也会返回可用的部分结果。
-- 为单轮工具调用增加次数、时间和进度预算，并检测重复调用或无进展循环。达到限制后会以不再调用工具的最终回答结束本轮，而不是继续无限重试。
-- 该保护覆盖 OpenAI Chat、OpenAI Responses、Anthropic、Gemini、提示词工具流与 Deep Research 等调用路径；新增明确的 `tool_budget_exceeded` 与 `tool_no_progress` 错误状态，方便定位问题。
-- 工具编排与上下文压缩逻辑完成拆分，并补充回归覆盖，降低多工具、长对话和流式响应交织时的异常风险。
+- `aivory_web_search` now supports up to 5 queries per call and `web_fetch` up to 4 URLs; the system controls concurrency, deduplicates, and keeps a stable ordering, returning usable partial results even when some requests fail.
+- Added call-count, time, and progress budgets for tool calls in a single turn, with detection of repeated calls or no-progress loops. When a limit is reached, the turn ends with a final answer that makes no further tool calls instead of continuing to retry indefinitely.
+- This protection covers the OpenAI Chat, OpenAI Responses, Anthropic, Gemini, prompt tool flow, and Deep Research call paths; added explicit `tool_budget_exceeded` and `tool_no_progress` error states for easier diagnosis.
+- Tool orchestration and context compression logic were split apart, with regression coverage added to reduce the risk of anomalies when many tools, long conversations, and streaming responses interleave.
 
-#### 图片生成与编辑
+#### Image generation and editing
 
-- 图片流程会明确区分“生成新图片”和“基于附件编辑”。当一轮存在多张附件时，用户可以指定用于编辑的基础图片，其余图片仍作为参考保留。
-- 不再将历史附件意外带入新的编辑请求；基础图片无法唯一确定时会安全地拒绝执行，而不是随机选取图片。
-- 保持服务商参数、尺寸、生成数量、回退、额度和用量记录的一致性，并能安全处理已删除会话附件的历史引用。
+- The image flow now clearly distinguishes "generating a new image" from "editing based on an attachment". When a turn has multiple attachments, users can designate the base image for editing, and the remaining images are still kept as references.
+- Historical attachments are no longer accidentally carried into new editing requests; when the base image cannot be determined uniquely, execution is safely refused instead of picking an image at random.
+- Provider parameters, sizes, generation counts, fallbacks, quotas, and usage records remain consistent, and historical references to attachments from deleted conversations are handled safely.
 
-#### 认证与会话安全
+#### Authentication and session security
 
-- 滑块验证码改为服务器签名的通行令牌，增加过期与重放防护，避免客户端状态被直接伪造或复用。
-- GitHub 等 OAuth 身份源在交换令牌发生超时时，会使用新的连接重试；同时延长超时时间，并使用固定的公开错误白名单，改善网络波动下的登录失败体验。
-- 登录启用独占刷新会话：同一账户在新设备登录后，旧设备刷新会话会失效。检测到 refresh token 重放时，会撤销整个会话族，防止泄露令牌被持续换取新访问令牌。
-- 浏览器端使用 Web Locks 串行化多标签页刷新请求；刷新、会话查询和退出登录接口增加 CSRF 校验。
+- The slider captcha was replaced with a server-signed pass token, adding expiry and replay protection so client-side state cannot be forged or reused directly.
+- OAuth identity providers such as GitHub now retry with a fresh connection when token exchange times out; timeouts were also extended and a fixed allowlist of public error messages improves the sign-in failure experience under network fluctuations.
+- Sign-in enables exclusive refresh sessions: after the same account signs in on a new device, refresh sessions on older devices become invalid. When a refresh token replay is detected, the entire session family is revoked to prevent a leaked token from continuously exchanging new access tokens.
+- The browser serializes refresh requests across multiple tabs with Web Locks; CSRF validation was added to the refresh, session query, and sign-out endpoints.
 
-#### RAG、文档与托管工具安全
+#### RAG, documents, and hosted tool security
 
-- 当嵌入模型或渠道仍被全局设置、知识库引用时，系统会阻止删除；向量身份信息同样不能在存在引用时修改，避免旧文档向量失去可检索性。
-- 冲突场景显示可执行的本地化恢复说明，而不再直接暴露数据库外键错误。文档解析器与 MinerU 不可用时，也会在文档工作流中展示可理解的故障原因。
-- 所有模型不再隐式附带服务商托管工具。需要使用 Hosted 工具时必须显式配置，避免 OpenAI 渠道或其他模型在管理员未知的情况下拥有默认工具权限。
+- Deletion is now blocked while an embedding model or channel is still referenced by global settings or knowledge bases; vector identity information likewise cannot be modified while references exist, preventing old document vectors from becoming unsearchable.
+- Conflict scenarios now show actionable localized recovery instructions instead of raw database foreign-key errors. When document parsers or MinerU are unavailable, the document workflow also shows understandable failure reasons.
+- No model implicitly attaches provider-hosted tools anymore. Hosted tools must be configured explicitly, preventing OpenAI channels or other models from having default tool permissions without the administrator knowing.
 
-#### 聊天、公式与界面体验
+#### Chat, formula, and UI experience
 
-- 点击已渲染的行内或块级公式即可复制完整 LaTeX 源文本，并提供本地化的成功或失败反馈；此改动关联 [#25](https://github.com/hjxwz123/Aivory/issues/25) 并由 [#26](https://github.com/hjxwz123/Aivory/pull/26) 完成。
-- 补全思考耗时展示和恢复后的计时行为，修复 Markdown 加粗标题的换行表现；移动端头像菜单与桌面端功能保持一致，图片附件在消息气泡内正确约束尺寸。
-- 新对话会恢复已配置的默认工具选择。历史对话支持分享入口，重命名、字体、抽屉层级、侧边栏和文件页面的视觉层次经过统一，减少不必要的边框线。
-- 桌面聊天顶部栏从 56px 收紧为 48px，减少对对话内容的遮挡；设置页标题字体与主对话标题对齐，抽屉引用文字也使用统一字体规则。
+- Clicking a rendered inline or block formula copies the complete LaTeX source text, with localized success or failure feedback; this change relates to [#25](https://github.com/hjxwz123/Aivory/issues/25) and was completed by [#26](https://github.com/hjxwz123/Aivory/pull/26).
+- Completed thinking-time display and timer behavior after restore, and fixed line-break rendering of bold Markdown headings; the mobile avatar menu now matches the desktop feature set, and image attachments are correctly size-constrained within message bubbles.
+- New conversations restore the configured default tool selections. Past conversations support a share entry point; the visual hierarchy of renaming, fonts, drawer layers, the sidebar, and the files page was unified to remove unnecessary border lines.
+- The desktop chat top bar was tightened from 56px to 48px, reducing obstruction of conversation content; settings page heading fonts align with the main conversation title, and drawer citation text uses the same font rules.
 
-#### 权限、后台与沙盒恢复
+#### Permissions, admin console, and sandbox recovery
 
-- 用户组与工作空间成员权限增加会话删除控制，并分别校验会话删除与消息轮次删除，避免仅凭宽泛权限越界删除内容。
-- 用量记录和管理员搜索支持昵称，后台排查用户行为更直接。
-- 针对只读根文件系统下的运行环境完善沙盒归档恢复；改进产物链接识别，提升代码执行文件的访问可靠性。
+- Session deletion controls were added to user group and workspace member permissions, with conversation deletion and message-turn deletion validated separately to avoid out-of-scope deletion based on broad permissions alone.
+- Usage records and administrator search now support nicknames, making user-behavior investigation more direct.
+- Sandbox archive recovery was improved for runtime environments on read-only root file systems; artifact link recognition was improved to make code-execution files more reliably accessible.
 
-#### 镜像与平台支持
+#### Images and platform support
 
-- 应用、沙盒 runner 和 sidecar 镜像均发布 `linux/amd64` 与 `linux/arm64` 版本，且与应用使用相同的语义版本标签。Compose 会按主机架构自动选择正确镜像。
-- 32 位 ARM 不在支持范围内。ARM64 与 AMD64 部署均应使用 `v2.4.0` 或后续的对应版本 tag，不要将不同组件固定到不一致的版本。
+- The application, sandbox runner, and sidecar images are published for both `linux/amd64` and `linux/arm64`, tagged with the same semantic version as the application. Compose automatically selects the correct image per host architecture.
+- 32-bit ARM is not supported. ARM64 and AMD64 deployments should use the `v2.4.0` tag or the corresponding later versions; don't pin different components to inconsistent versions.
 
-#### 升级说明
+#### Upgrade notes
 
-- 数据库迁移会自动执行，无需手工运行 SQL。使用 SQLite 向量时会创建 `vector_points` 表，并随常规数据库备份一起处理。
-- 原有完整版部署不需要因个人版而迁移架构；个人版与完整版的 Compose 配置不能混合启动。升级前请确认实际部署模式，并遵循[升级与备份](/docs/deployment/upgrade-backup)中的备份步骤。
-- 独占会话策略可能使同一账户在其他设备被登出；这是预期的安全行为。升级后应复查 Hosted 工具的显式配置，以及仍被知识库引用的嵌入模型/渠道，先迁移引用再修改其向量身份。
-- 本次不要求新增必填环境变量。完整部署和个人部署均可继续使用已有的版本化镜像策略。
+- Database migrations run automatically; no manual SQL is required. When SQLite vectors are in use, a `vector_points` table is created and handled together with routine database backups.
+- Existing full deployments do not need to re-architect for the Personal edition, and the Personal and Full edition Compose configurations must not be started in a mix. Before upgrading, confirm your actual deployment mode and follow the backup steps in [Upgrades and Backups](../deployment/upgrade-backup.mdx).
+- The exclusive session policy may sign the same account out on other devices; this is expected security behavior. After upgrading, re-check explicit configuration of Hosted tools and any embedding models/channels still referenced by knowledge bases—migrate the references first, then modify their vector identity.
+- This release does not require any new mandatory environment variables. Full deployments and personal deployments can continue using the existing versioned image strategy.
 
-## v2.3 系列
+## v2.3 Series
 
 ### [v2.3.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.3.1) - 2026-08-22
 
-- Python 沙盒会以原始字节暂存每轮对话上传的 PDF、DOCX、PPTX、XLSX 等文件，模型可在保留原有格式的基础上编辑。
-- 增加 `fetch_image` 内置工具：通过后端的 SSRF 安全客户端下载公开图片到沙盒，Python runner 本身仍保持网络隔离。
-- 修复 OpenAI Chat 在工具轮次之间的 `reasoning_content` 回放与流式展示。
-- `web_fetch` 直连不可达时可经兼容 Jina Reader 的提取服务降级，同时保持 SSRF 边界。
-- 改进文本模型处理图片、粘贴附件、图像编辑上下文和多图片布局。
+- The Python sandbox now stages PDF, DOCX, PPTX, XLSX, and other files uploaded in each turn as raw bytes, so models can edit them while preserving the original formatting.
+- Added the `fetch_image` built-in tool: it downloads public images into the sandbox through a backend SSRF-safe client, while the Python runner itself stays network-isolated.
+- Fixed `reasoning_content` replay and streaming display between tool rounds in OpenAI Chat.
+- `web_fetch` can now fall back through a Jina Reader-compatible extraction service when a direct connection is unreachable, while keeping the SSRF boundary.
+- Improved how text models handle images, pasted attachments, image editing context, and multi-image layouts.
 
 ### [v2.3.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.3.0) - 2026-08-19
 
-- 引入完整的工作空间授权模型：管理员、成员、访客角色，以及资源、模型、工具、文件和生成行为的工作空间级策略。
-- 以可撤销、可过期、可限次的邀请记录取代旧的永久工作空间令牌，并增加审计事件。
-- 技能与提示词支持工作空间资源库范围；个人资源和工作空间资源在存储、目录和执行边界上隔离。
-- 增加企业 OAuth/OIDC 登录入口和密码策略，后端会验证配置以避免管理员锁定自己。
-- 处理 Gemini metadata-only thought signature、异步弹窗几何变化和镜像发布并发等稳定性问题。
+- Introduced the full workspace authorization model: administrator, member, and guest roles, plus workspace-level policies for resources, models, tools, files, and generation behavior.
+- Replaced the old permanent workspace tokens with revocable, expirable, usage-limited invitation records, and added audit events.
+- Skills and prompts support workspace resource library scopes; personal and workspace resources are isolated in storage, directories, and execution boundaries.
+- Added enterprise OAuth/OIDC sign-in entry points and password policies, with backend validation of the configuration to keep administrators from locking themselves out.
+- Addressed stability issues including Gemini metadata-only thought signatures, asynchronous popup geometry changes, and image publishing concurrency.
 
-## v2.2 系列
+## v2.2 Series
 
 ### [v2.2.13](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.13) - 2026-08-16
 
-- 图片生成支持一次性回退渠道，并正确记录实际服务渠道和失败用量。
-- 为直接绘图增加提示词优化开关，改进上传图片压缩、灯箱预览、下载和跨轮图片编辑。
-- 恢复并整理自动、开启、关闭三种工具使用模式；MCP 工具默认改为模型级显式选择。
-- 增加 SearXNG 搜索引擎选择、请求体隐私控制，并改善长对话压缩与侧边栏、输入框细节。
+- Image generation supports a one-shot fallback channel and correctly records the actual serving channel and failed usage.
+- Added a prompt optimization switch for direct drawing, and improved uploaded image compression, lightbox previews, downloading, and cross-turn image editing.
+- Restored and reorganized the automatic, on, and off tool-use modes; MCP tools now default to explicit model-level selection.
+- Added SearXNG search engine selection and request body privacy controls, and improved long-conversation compression plus sidebar and input box details.
 
 ### [v2.2.12](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.12) - 2026-08-14
 
-- 知识库增加可选 reranking 服务，保留原有检索、引用与故障回退路径。
-- 管理员增加全局内容资源页，可查看知识库、项目和生成图片的归属、状态与使用信息。
-- 调整主导航、长对话标题显示和输入框焦点反馈，并为图片库建立稳定的来源边界。
+- Knowledge bases gained an optional reranking service while preserving the original retrieval, citation, and failure fallback paths.
+- Administrators gained a global content resources page showing ownership, status, and usage information for knowledge bases, projects, and generated images.
+- Adjusted the main navigation, long-conversation title display, and input box focus feedback, and established a stable source boundary for the image library.
 
 ### [v2.2.11](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.11) - 2026-08-14
 
-- 每个模型可配置 MCP 服务默认选择策略，包括“全部可用服务”和显式自定义列表。
-- 私人知识库共享改为要求完整的账户邮箱，避免账户枚举和错误匹配。
-- 新对话的首条消息在网络较慢时也会立即进入会话页。
+- Each model can configure an MCP service default selection policy, including "all available services" and an explicit custom list.
+- Sharing a private knowledge base now requires the complete account email, preventing account enumeration and incorrect matching.
+- The first message of a new conversation now enters the conversation page immediately, even on slow networks.
 
 ### [v2.2.10](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.10) - 2026-08-14
 
-- 补全长对话上下文压缩生命周期：自动压缩、`/compact` 手动压缩、编辑/删除/分支/并发和多实例场景保持一致。
-- 压缩只改变送给模型的历史上下文，不删除用户可见的原始消息。
-- 降低长流式回复完成后重复渲染 Markdown 块的成本。
+- Completed the long-conversation context compression lifecycle: automatic compression, `/compact` manual compression, and edit/delete/branch/concurrent and multi-instance scenarios stay consistent.
+- Compression only changes the history context sent to the model; it never deletes the original messages visible to users.
+- Reduced the cost of re-rendering Markdown blocks after a long streaming reply completes.
 
 ### [v2.2.9](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.9) - 2026-08-14
 
-- 在用户组、工作空间、知识库、工具和活跃会话之间建立分层权限控制。
-- 工作空间成员创建权限、知识库读写共享、`@` 快速附加知识库和工具选择流程同步改进。
+- Established layered permission controls across user groups, workspaces, knowledge bases, tools, and active conversations.
+- Workspace member creation permissions, knowledge base read/write sharing, `@` quick attachment of knowledge bases, and the tool selection flow were improved in sync.
 
 ### [v2.2.8](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.8) - 2026-08-14
 
-- 扩展对话文档路由、完整文档总结和检索策略，并强化 MCP、私有工作空间和反馈流程。
-- 改进 provider 流式输出、文档摄取、沙盒恢复和模型历史回放稳定性。
+- Expanded conversation document routing, complete document summarization, and retrieval strategies, and strengthened MCP, private workspaces, and feedback flows.
+- Improved provider streaming output, document ingestion, sandbox recovery, and model history replay stability.
 
 ### [v2.2.7](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.7) - 2026-08-04
 
-- 聚焦认证、授权、OAuth/OIDC、计费、文件访问和并发管理员操作的安全与可靠性。
-- 使版本固定的 Docker 部署在应用与沙盒镜像之间保持确定性。
+- Focused on the security and reliability of authentication, authorization, OAuth/OIDC, billing, file access, and concurrent administrator operations.
+- Made version-pinned Docker deployments deterministic across the application and sandbox images.
 
-## 早期版本
+## Earlier Versions
 
 ### [v2.2.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.2) - 2026-07-21
 
-- 增加可视化公式编辑器，并统一公式编辑、分享、分支、导入和剪贴板场景的存储格式。
-- 增加快速/进阶模型模式，完善工具路由、表格读取、搜索、语音输入、移动端后台和对话稳定性。
+- Added a visual formula editor and unified the storage format of formulas across editing, sharing, branching, import, and clipboard scenarios.
+- Added fast/advanced model modes and refined tool routing, table reading, search, voice input, the mobile admin console, and conversation stability.
 
 ### [v2.2.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.1) - 2026-07-14
 
-- 多设备对话、侧边栏和会话状态通过 SSE 静默同步；旧标签页在安全时机自动更新版本。
-- 调整默认工具策略、计费与用量可观测性、RAG 上传和管理员操作体验。
+- Multi-device conversations, the sidebar, and session state now sync silently via SSE; older tabs update to the new version automatically at safe moments.
+- Adjusted the default tool policy, billing and usage observability, RAG uploads, and the administrator action experience.
 
 ### [v2.2.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.0) - 2026-07-12
 
-- 产品正式更名为 Aivory，旧 Aurelia 备份继续可导入。
-- 增加用户和管理员文件管理、存储配额、异步用户删除、回复导出 Word、身份关联、RAG/上传与沙盒持久化能力。
+- The product was officially renamed Aivory; old Aurelia backups remain importable.
+- Added file management for users and administrators, storage quotas, asynchronous user deletion, Word export of replies, identity linking, and RAG/upload and sandbox persistence.
 
 ### [v2.1.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.1) - 2026-07-02
 
-- 引入多人工作空间、邀请加入、共享对话、成员管理和管理员工作空间视图。
-- 优化 PDF 原生解析、RAG 路由、引用显示与工作空间相关安全边界。
+- Introduced multi-user workspaces, invitation to join, shared conversations, member management, and an administrator workspace view.
+- Improved native PDF parsing, RAG routing, citation display, and workspace-related security boundaries.
 
 ### [v2.1.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.0) - 2026-07-01
 
-- 增加绘图模式、多模型校验、对话树和概览、技能绑定、移动端/PWA，以及 RAG 和上下文压缩性能改进。
+- Added drawing mode, multi-model validation, conversation trees and an overview, skill binding, mobile/PWA, plus RAG and context compression performance improvements.
 
 ### [v2.0.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.1) - 2026-06-23
 
-- 对代码执行沙盒进行全链路安全和可靠性加固：预览 CSP、异常恢复、空闲回收、子进程清理、资源限制和归档清理。
+- End-to-end security and reliability hardening of the code execution sandbox: preview CSP, exception recovery, idle recycling, child process cleanup, resource limits, and archive cleanup.
 
 ### [v2.0.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.0) - 2026-06-22
 
-- 加固长上下文压缩的并发、估算、注入和删除一致性。
-- 增加 Mermaid 图表缩放、拖拽、适应窗口、全屏查看和 PNG/SVG 导出。
+- Hardened the concurrency, estimation, injection, and deletion consistency of long-context compression.
+- Added Mermaid diagram zoom, drag, fit-to-window, full-screen viewing, and PNG/SVG export.
 
-## 完整发布目录
+## Full Release Catalog
 
-以下版本均存在正式 GitHub Release；需要每个补丁版本的完整改动、提交范围和升级说明时，进入对应链接查看原始 release notes。
+Each of the following versions has an official GitHub Release; for the complete changes, commit range, and upgrade notes of each patch version, open the corresponding link for the original release notes.
 
-| 版本 | 发布时间 | 版本 | 发布时间 |
+| Version | Release date | Version | Release date |
 | --- | --- | --- | --- |
 | [v2.2.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6) | 2026-07-30 | [v2.2.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5) | 2026-07-29 |
 | [v2.2.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3) | 2026-07-24 | [v2.0.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.1) | 2026-06-23 |
 | [v2.0.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.0) | 2026-06-22 | [v2.1.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.0) | 2026-07-01 |
 
-`v2.2.4` 没有对应的 Git tag 或 GitHub Release，因此不在正式发布目录中。
+`v2.2.4` has no corresponding Git tag or GitHub Release, so it is not included in the official release catalog.

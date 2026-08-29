@@ -1,0 +1,50 @@
+{
+  "link.title.Get started": {
+    "message": "开始使用",
+    "description": "The title of the footer links column with title=Get started in the footer"
+  },
+  "link.title.Reference": {
+    "message": "参考",
+    "description": "The title of the footer links column with title=Reference in the footer"
+  },
+  "link.title.Project": {
+    "message": "项目",
+    "description": "The title of the footer links column with title=Project in the footer"
+  },
+  "link.item.label.Product overview": {
+    "message": "产品介绍",
+    "description": "The label of footer link with label=Product overview linking to /docs/intro"
+  },
+  "link.item.label.Personal edition": {
+    "message": "个人版部署",
+    "description": "The label of footer link with label=Personal edition linking to /docs/getting-started/personal"
+  },
+  "link.item.label.Full edition": {
+    "message": "完整版部署",
+    "description": "The label of footer link with label=Full edition linking to /docs/getting-started/full"
+  },
+  "link.item.label.Environment variables": {
+    "message": "环境变量",
+    "description": "The label of footer link with label=Environment variables linking to /docs/deployment/environment"
+  },
+  "link.item.label.Upgrade and backup": {
+    "message": "升级与备份",
+    "description": "The label of footer link with label=Upgrade and backup linking to /docs/deployment/upgrade-backup"
+  },
+  "link.item.label.Troubleshooting": {
+    "message": "故障排查",
+    "description": "The label of footer link with label=Troubleshooting linking to /docs/troubleshooting/common-issues"
+  },
+  "link.item.label.GitHub": {
+    "message": "GitHub",
+    "description": "The label of footer link with label=GitHub linking to https://github.com/hjxwz123/Aivory"
+  },
+  "link.item.label.Changelog": {
+    "message": "更新日志",
+    "description": "The label of footer link with label=Changelog linking to /docs/reference/changelog"
+  },
+  "copyright": {
+    "message": "Copyright © 2026 Aivory contributors.",
+    "description": "The footer copyright"
+  }
+}

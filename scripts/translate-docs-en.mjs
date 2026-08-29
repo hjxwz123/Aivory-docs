@@ -2,21 +2,24 @@ import {mkdir, readdir, readFile, stat, writeFile} from 'node:fs/promises'
 import {dirname, join, relative} from 'node:path'
 
 const root = process.cwd()
-const sourceRoot = join(root, 'docs')
-const targetRoot = join(root, 'i18n', 'en', 'docusaurus-plugin-content-docs', 'current')
+const sourceRoot = join(root, 'i18n', 'zh-Hans', 'docusaurus-plugin-content-docs', 'current')
+const targetRoot = join(root, 'docs')
 const apiKey = process.env.OPENAI_API_KEY
 const model = process.env.OPENAI_TRANSLATION_MODEL
 const force = process.argv.includes('--force')
 const requestedFiles = process.argv.filter((argument) => !argument.startsWith('--'))
 
-const usage = `Usage: npm run translate:en -- [--force] [docs/path.mdx ...]
+const usage = `Usage: npm run translate:en -- [--force] [deployment/environment.mdx ...]
 
 Required environment:
   OPENAI_API_KEY              OpenAI API key used only by this local command
   OPENAI_TRANSLATION_MODEL    Responses API model selected by the site operator
 
-The command writes English MDX to i18n/en/docusaurus-plugin-content-docs/current.
-It never changes Chinese source documents. Without --force, existing translations are retained.`
+The command reads Chinese MDX from i18n/zh-Hans/docusaurus-plugin-content-docs/current
+(English is the default locale, so docs/ is translated into by this command) and writes
+English MDX to docs/. It never changes Chinese source documents. Without --force,
+existing translations are retained. File arguments are paths relative to either the
+Chinese content directory or docs/, for example docs/deployment/environment.mdx.`
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log(usage)
@@ -104,7 +107,12 @@ if (!apiKey || !model) {
 const allFiles = await walk(sourceRoot)
 const files = requestedFiles.length === 0
   ? allFiles
-  : allFiles.filter((file) => requestedFiles.includes(relative(root, file)) || requestedFiles.includes(relative(sourceRoot, file)))
+  : allFiles.filter((file) => {
+    const rel = relative(sourceRoot, file)
+    return requestedFiles.includes(relative(root, file))
+      || requestedFiles.includes(rel)
+      || requestedFiles.includes(join('docs', rel))
+  })
 
 if (files.length === 0) {
   console.error('No matching MDX source files were found.')

@@ -1,58 +1,58 @@
 ---
-title: 对话、文件与分享
+title: Conversations, Files, and Sharing
 sidebar_position: 1
-description: 管理对话历史、附件、知识库引用和公开分享。
+description: Manage conversation history, attachments, knowledge base references, and public sharing.
 ---
 
-# 对话、文件与分享
+# Conversations, Files, and Sharing
 
-Aivory 把对话、附件和工具产物放在同一个工作区里。日常使用时可以从历史对话继续工作，也可以把一个经过检查的会话以只读快照分享给其他人。
+Aivory keeps conversations, attachments, and tool artifacts in the same workspace. Day to day, you can continue work from past conversations or share a reviewed conversation with others as a read-only snapshot.
 
-## 对话历史
+## Conversation history
 
-左侧历史列表按最近活动排序。打开一个会话后，可以继续发送消息、重命名标题，或通过会话菜单执行分享、删除等操作。删除前请确认会话中没有仍要保留的附件或产物；删除后的内容是否可恢复取决于管理员配置的备份。
+The history list on the left is sorted by recent activity. Open a conversation to keep sending messages, rename its title, or use the conversation menu to share, delete, and more. Before deleting, confirm the conversation contains no attachments or artifacts you still want to keep; whether deleted content can be recovered depends on the backups configured by your administrator.
 
-长任务建议使用项目或工作区归类。这样可以把相关对话、文件和指令放在一起，并在团队成员之间使用明确的访问权限。
+For long-running tasks, organize work under a project or workspace. This keeps related conversations, files, and instructions together and lets team members share them with explicit access permissions.
 
-## 分享会话
+## Sharing a conversation
 
-1. 在左侧历史对话上打开三个点菜单。
-2. 选择“分享”，确认要公开的会话内容。
-3. 在分享模态框中创建链接并复制地址。
+1. Open the three-dot menu on a conversation in the history list on the left.
+2. Choose "Share" and confirm the conversation content you want to make public.
+3. Create the link in the share modal and copy the address.
 
-分享链接指向一个固定快照，不会自动暴露之后新增的消息。快照可能包含消息中的引用、图片、文件预览和工具产物，创建前应逐项检查敏感信息。
+A share link points to a fixed snapshot; it doesn't automatically expose messages added afterward. The snapshot may include references, images, file previews, and tool artifacts from the messages, so review it item by item for sensitive information before creating it.
 
-任何拿到公开链接的人都可以在不登录的情况下查看快照。管理员或会话所有者可以在分享管理处撤销链接；撤销不能收回接收者已经下载、截图或再次转发的副本。
+Anyone with the public link can view the snapshot without signing in. Administrators or the conversation owner can revoke the link in share management; revoking doesn't take back copies recipients have already downloaded, screenshotted, or forwarded again.
 
-## 公式与引用
+## Formulas and citations
 
-回复中的数学公式可以直接点击。点击后选择复制，即可得到原始 LaTeX 文本，适合粘贴到 Markdown、LaTeX 编辑器或其他对话中。复制失败时，请检查浏览器的剪贴板权限。
+Math formulas in replies can be clicked directly. After clicking, choose copy to get the original LaTeX text, ready to paste into Markdown, a LaTeX editor, or another conversation. If the copy fails, check your browser's clipboard permissions.
 
-引用或子对话会保留来源消息的上下文。引用文字和对话标题使用与主对话一致的排版，打开引用时先核对来源会话和时间，避免把相似内容误当成同一条消息。
+Citations or sub-conversations keep the context of the source messages. Cited text and conversation titles use the same typography as the main conversation; when opening a citation, first verify the source conversation and time to avoid mistaking similar content for the same message.
 
-## 上传文件
+## Uploading files
 
-在消息编辑器中添加附件后，等待上传状态变为完成再发送消息。文件通常会进入以下流程：
+When you add an attachment in the message editor, wait for the upload status to finish before sending the message. Files typically go through this pipeline:
 
-1. **上传**：文件写入本地存储或管理员配置的对象存储。
-2. **解析**：文本、PDF、Office、表格和图片按可用解析器提取内容。
-3. **索引**：加入知识库时，文本会被切分并使用 embedding 模型生成向量。
-4. **检索**：后续问题只会把相关片段注入模型上下文，并显示来源引用。
+1. **Upload**: the file is written to local storage or the object storage configured by your administrator.
+2. **Parsing**: text, PDF, Office, spreadsheet, and image content is extracted by the available parsers.
+3. **Indexing**: when added to a knowledge base, text is chunked and embedded into vectors by an embedding model.
+4. **Retrieval**: follow-up questions only inject relevant passages into the model context and show source citations.
 
-扫描 PDF 或没有文字层的图片可能需要管理员配置 MinerU 或其他 OCR 服务。解析失败时可以先下载原文件，确认文件没有损坏，再查看管理员后台的任务错误详情。
+Scanned PDFs or images without a text layer may require the administrator to configure MinerU or another OCR service. If parsing fails, download the original file first to confirm it isn't corrupted, then check the task error details in the admin console.
 
-## 知识库使用建议
+## Knowledge base tips
 
-- 把同一主题的文件放在同一个知识库，并为知识库设置清晰的名称和访问范围。
-- 等待文档状态变为“已完成”后再测试检索；解析中的文档不会稳定地产生结果。
-- 更换 embedding 模型或维度前先规划重建索引，旧向量不能和新维度混用。
-- 在工作区分享知识库时，选择只读权限，除非成员确实需要上传和管理文档。
+- Put files on the same topic in one knowledge base, and give knowledge bases clear names and access scopes.
+- Wait until a document's status shows "Completed" before testing retrieval; documents still parsing won't produce stable results.
+- Plan a re-index before changing the embedding model or dimensions; old vectors cannot be mixed with new dimensions.
+- When sharing a knowledge base in a workspace, choose read-only permission unless members really need to upload and manage documents.
 
-## 隐私检查
+## Privacy checks
 
-分享或上传前请确认：
+Before sharing or uploading, confirm:
 
-- 文件和对话不包含不应向模型服务商发送的个人信息或密钥。
-- 公开快照中没有隐藏在引用、图片或产物链接里的敏感内容。
-- 团队工作区成员和知识库权限符合数据的实际所有权。
-- 生产实例已经配置 HTTPS，并且数据库、Redis、Qdrant 和沙盒没有映射到公网。
+- files and conversations contain no personal information or secrets that should not be sent to model providers.
+- public snapshots contain no sensitive content hidden in references, images, or artifact links.
+- team workspace membership and knowledge base permissions match the actual ownership of the data.
+- the production instance has HTTPS configured and the database, Redis, Qdrant, and sandbox are not exposed to the public network.

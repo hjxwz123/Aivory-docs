@@ -1,74 +1,74 @@
 ---
-title: 系统、备份与运营
+title: System, Backup, and Operations
 sidebar_position: 7
-description: 配置邮件、存储、隐私、公告、备份，并用分析、用量和资源管理维护 Aivory 实例。
+description: Configure email, storage, privacy, announcements, and backups, and maintain Aivory instances with analytics, usage, and resource management.
 ---
 
-# 系统、备份与运营
+# System, Backup, and Operations
 
-系统设置决定实例如何发送邮件、保存对象、记录日志、展示法律信息和执行备份；运营页面帮助管理员观察用户、模型、文件、资源和反馈。把它们作为持续运维工作，而不是只在第一次安装时填写一次。
+System settings determine how the instance sends email, stores objects, records logs, presents legal information, and performs backups; the operations pages help administrators observe users, models, files, resources, and feedback. Treat them as ongoing operational work, not something to fill in once at first install.
 
-## SMTP 与邮件
+## SMTP and email
 
-在“系统 → 邮件服务”填写 SMTP 主机、端口、用户名、密码、发件地址和 TLS 策略。邮件通常用于账号验证、密码重置和运营通知，因此在面向真实用户的完整部署中应尽早配置。
+Fill in the SMTP host, port, username, password, sender address, and TLS policy under "System → Email service". Email is usually used for account verification, password resets, and operational notifications, so configure it early in a full deployment that serves real users.
 
-配置时：
+When configuring:
 
-- 使用服务商提供的 SMTP 凭据或应用专用密码，不复用管理员密码。
-- 发件地址应属于受控域名，并配置必要的 SPF、DKIM、DMARC 或服务商验证。
-- 区分直接 TLS 与 STARTTLS 所需端口，按服务商要求填写。
-- 保存后用非管理员测试邮箱验证发送、收取、验证码有效期和重置密码流程。
+- Use the SMTP credentials provided by your service provider or an app-specific password; don't reuse the administrator password.
+- The sender address should belong to a domain you control, with the necessary SPF, DKIM, DMARC, or provider verification configured.
+- Distinguish the ports required for direct TLS vs. STARTTLS and fill them in per the provider's requirements.
+- After saving, verify sending, receiving, verification-code validity, and the password reset flow with a non-administrator test mailbox.
 
-SMTP 未配置时，依赖邮件的功能可能无法完成。不要通过在公开日志中打印验证码或 SMTP 密码来排查问题。
+When SMTP is not configured, features that depend on email may not complete. Don't troubleshoot by printing verification codes or SMTP passwords into public logs.
 
-## 存储、上传和保留
+## Storage, uploads, and retention
 
-“存储与上传”配置应用对象、上传限制和对象存储集成。单节点可以使用本地存储；需要多副本、跨节点访问或外部解析时，应使用受控对象存储。
+"Storage and uploads" configures application objects, upload limits, and object storage integration. A single node can use local storage; when you need multiple replicas, cross-node access, or external parsing, use a controlled object storage service.
 
-制定上传与保留策略前先确定：最大单文件、允许类型、用户总空间、预览和产物保存多久、删除后是否有恢复窗口，以及备份是否覆盖对象。提高限制必须同时检查反向代理请求体限制、应用内限制、解析服务容量、磁盘和备份成本。
+Before defining upload and retention policies, decide: the maximum single-file size, allowed types, total space per user, how long previews and artifacts are kept, whether there is a recovery window after deletion, and whether backups cover the objects. Raising limits must be paired with checking reverse-proxy request body limits, in-app limits, parser service capacity, disk, and backup costs.
 
-对象存储凭据与 bucket 配置属于敏感信息。使用单独的最小权限账号，不要授予整个云账号管理员权限；在更换 endpoint、bucket、区域或密钥后，测试上传、下载、预览、解析、分享和删除。
+Object storage credentials and bucket configuration are sensitive. Use a separate least-privilege account rather than granting administrator rights over the entire cloud account; after changing endpoints, buckets, regions, or keys, test upload, download, preview, parsing, sharing, and deletion.
 
-## 法律、联系信息、日志与隐私
+## Legal, contact information, logs, and privacy
 
-在系统设置中维护服务条款、隐私政策、联系入口以及日志/隐私策略。公开服务应提供真实、可处理的联系信息和与实际数据流一致的隐私说明。
+Maintain the terms of service, privacy policy, contact entry points, and log/privacy policies in the system settings. A public service should provide real, actionable contact information and a privacy statement consistent with its actual data flows.
 
-日志策略的目标是让管理员能诊断问题，而不是保存更多敏感信息。原则包括：
+The goal of a log policy is to let administrators diagnose problems, not to store more sensitive information. Principles include:
 
-- 不记录模型服务商 API Key、OAuth Client Secret、支付签名、JWT、刷新令牌、完整用户文件或完整私密提示词。
-- 排查时优先使用时间、请求 ID、脱敏错误码、服务名称和聚合指标。
-- 设置合理留存和访问权限；日志导出也可能包含用户元数据。
-- 对数据导出、删除、备份恢复和第三方服务传输建立负责人和审批流程。
+- don't log model provider API keys, OAuth Client Secrets, payment signatures, JWTs, refresh tokens, complete user files, or complete private prompts.
+- when troubleshooting, prefer timestamps, request IDs, sanitized error codes, service names, and aggregated metrics.
+- set reasonable retention and access permissions; log exports may also contain user metadata.
+- establish owners and approval workflows for data exports, deletions, backup restores, and transfers to third-party services.
 
-## 公告与内容运营
+## Announcements and content operations
 
-公告适合维护通知、功能提示和服务状态说明。发布前使用测试账号检查展示范围、关闭行为、移动端排版和链接；紧急公告应简明，避免嵌入敏感内部信息或无法验证的外部脚本。
+Announcements suit maintenance notices, feature tips, and service status updates. Before publishing, use a test account to check the display scope, dismissal behavior, mobile layout, and links; urgent announcements should be concise, avoiding embedded sensitive internal information or unverifiable external scripts.
 
-提示词、技能、图片风格和语音配置会直接影响用户体验和成本。任何面向全体用户的改动先在小范围账号中验证，再逐步开放，并保留可以快速禁用或回退的路径。
+Prompts, skills, image styles, and speech configurations directly affect user experience and cost. Validate any change intended for all users on a small set of accounts first, roll it out gradually, and keep a path to quickly disable or roll it back.
 
-## 备份、迁移与配置导出
+## Backup, migration, and configuration export
 
-“备份与迁移”可生成数据迁移归档，也可以导出管理员配置。二者的风险和用途不同：
+"Backup and migration" can generate data migration archives and export administrator configuration. The two differ in risk and purpose:
 
-| 类型 | 通常包含 | 主要用途 | 安全级别 |
+| Type | Typically contains | Primary purpose | Sensitivity |
 | --- | --- | --- | --- |
-| 完整数据备份 | 业务数据、向量以及选择的文件/产物 | 灾难恢复、迁移、测试恢复 | 高敏感 |
-| 管理员配置导出 | 设置、渠道、模型、身份源、用户组、支付/存储/邮件等配置 | 复制受控环境、变更留档 | 高敏感，常含凭据 |
+| Full data backup | Business data, vectors, and selected files/artifacts | Disaster recovery, migration, restore testing | Highly sensitive |
+| Administrator configuration export | Settings, channels, models, identity providers, user groups, payment/storage/email configuration | Replicating controlled environments, change archiving | Highly sensitive, often contains credentials |
 
-备份不是创建成功就结束。至少定期在隔离环境验证一次恢复，并检查管理员登录、普通对话、附件、知识库、向量、OAuth、邮件和需要的工具。恢复前停止写入、保留原始数据副本、记录版本和范围；不要把 `docker compose down -v` 用作普通重启命令，它会删除命名卷。
+A backup isn't finished once it's created successfully. At minimum, regularly verify a restore in an isolated environment and check administrator sign-in, normal conversations, attachments, knowledge bases, vectors, OAuth, email, and any needed tools. Before restoring, stop writes, keep a copy of the original data, and record the version and scope; don't use `docker compose down -v` as a routine restart command—it deletes named volumes.
 
-个人版应整体备份 `DATA_DIR`。完整版还必须同时保护数据库、Redis、Qdrant、沙盒归档卷与 `DATA_DIR`。详细命令和恢复顺序见[升级、备份与恢复](/docs/deployment/upgrade-backup)。
+The Personal edition should back up `DATA_DIR` as a whole. The Full edition must also protect the database, Redis, Qdrant, sandbox archive volumes, and `DATA_DIR`. For detailed commands and the restore order, see [Upgrades, Backups, and Recovery](../deployment/upgrade-backup.mdx).
 
-## 用量、分析、资源与反馈
+## Usage, analytics, resources, and feedback
 
-“分析”帮助观察活跃用户、请求和成本趋势；“用量记录”用于查看模型调用与计量；“内容资源”“文件”“反馈”帮助管理文档、图片、工作区资源、上传对象和用户问题。
+"Analytics" helps you observe active users, requests, and cost trends; "Usage records" shows model calls and metering; "Content resources", "Files", and "Feedback" help you manage documents, images, workspace resources, uploaded objects, and user issues.
 
-建议建立定期运营节奏：
+Recommended periodic operational rhythm:
 
-1. 每日或每周检查错误率、模型失败、支付异常和高成本用户/模型。
-2. 审阅增长趋势、存储占用、知识库任务积压和异常大文件。
-3. 将用户反馈关联到实际会话、模型、渠道或功能配置，但避免把私密内容复制到公开工单。
-4. 清理测试文件、废弃模板和过期兑换码前确认备份与保留规则。
-5. 对向量重建、批量删除、导入/导出等长任务观察进度和结果，再发起下一轮操作。
+1. Check error rates, model failures, payment anomalies, and high-cost users/models daily or weekly.
+2. Review growth trends, storage usage, knowledge base task backlogs, and abnormally large files.
+3. Tie user feedback to actual conversations, models, channels, or feature configurations, but avoid copying private content into public tickets.
+4. Confirm backups and retention rules before cleaning up test files, abandoned templates, and expired redemption codes.
+5. For long tasks such as vector rebuilds, bulk deletions, and imports/exports, watch progress and results before starting the next round.
 
-运营页面提供观察与管理能力，不替代主机级监控。生产实例仍应监控磁盘、内存、容器重启、网络出站、备份成功与证书过期；发现趋势异常时先限制风险能力或用户范围，再做根因排查。
+The operations pages provide observation and management capabilities, not host-level monitoring. Production instances should still monitor disk, memory, container restarts, outbound network, backup success, and certificate expiry; when a trend looks off, first restrict the risky capability or user scope, then investigate root causes.

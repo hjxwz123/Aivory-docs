@@ -1,0 +1,177 @@
+---
+title: 个人版部署
+sidebar_position: 2
+description: 在一台服务器上以 SQLite、内嵌向量和可选沙盒运行 Aivory 个人版。
+---
+
+# 个人版部署
+
+个人版面向个人、家庭实验室和低并发小团队。默认只启动一个 `app` 容器，使用 SQLite 保存业务数据和向量，使用进程内缓存与后台队列；不启动 PostgreSQL、Redis、Qdrant，也不默认启动 Python 沙盒。
+
+这不是功能阉割版：对话、工作区、知识库、RAG、模型渠道、MCP、文件、分享、积分和管理员后台仍可用。它的边界是单实例运行，不适合把应用水平扩展到多台机器。
+
+## 先确认适用场景
+
+个人版适合以下情况：
+
+- 只有一台服务器，或只希望维护一个应用容器。
+- 使用者数量有限，业务不需要多副本、高可用或独立 Redis。
+- 需要向量检索，但希望把向量和业务数据放进同一个 SQLite 文件。
+- 接受将来扩容时通过备份恢复迁移到完整版。
+
+请直接选择[完整版](./full.mdx)，如果你需要多应用副本、独立数据库运维、较高并发、多人长期使用，或已经有 PostgreSQL、Redis 和 Qdrant 运维体系。
+
+## 服务器准备
+
+建议使用 64 位 Ubuntu 22.04/24.04 LTS 或 Debian 12。最低可从 2 vCPU、4 GB 内存、30 GB SSD 开始；文档较多、使用外部 embedding、启用本地沙盒或保存大量附件时，应按实际负载增加内存和磁盘。
+
+开始前确认：
+
+- 系统是 `x86_64`、`aarch64` 或 `arm64` 的 64 位 Linux。两种架构都支持，详见 [ARM64 与 x86_64](../deployment/arm-x86.mdx)。
+- 已安装 Docker Engine 和 Docker Compose Plugin，并且当前管理员可以运行 `docker compose`。
+- 服务器可以访问镜像仓库，以及你将使用的模型、embedding、搜索、OAuth 和邮件服务的 HTTPS 地址。
+- 对外直连时，防火墙只放行 HTTP/HTTPS；使用反向代理时，不要把应用监听端口直接暴露到公网。
+- `DATA_DIR` 所在磁盘有足够空间，Docker 服务对该目录有读写权限。SQLite 不应放在 NFS、SMB 或其他网络文件系统上。
+
+可用以下命令做只读预检：
+
+```bash
+uname -m
+docker version
+docker compose version
+df -h
+```
+
+`docker version` 或 `docker compose version` 不可用时，先按服务器发行版的官方文档安装 Docker；Aivory 不会自动安装它。
+
+## 获取发布配置
+
+下面以 `/opt/aivory` 为例。发布镜像同时包含网页和 API，不需要在服务器上构建前端或后端。
+
+```bash
+git clone --depth=1 https://github.com/hjxwz123/Aivory.git /opt/aivory
+cd /opt/aivory/deploy
+cp .env.personal.example .env.personal
+```
+
+编辑 `.env.personal`。必须设置稳定且足够长的 `JWT_SECRET`；重启时改掉它会让全部登录会话失效。`DATA_DIR` 建议使用绝对路径，避免在不同工作目录下把数据写到意外位置。
+
+```dotenv
+JWT_SECRET=替换为独立的强随机字符串
+DATA_DIR=/opt/aivory/data-personal
+IMAGE_TAG=latest
+```
+
+生成密钥示例：
+
+```bash
+openssl rand -hex 32
+```
+
+`latest` 适合试用。稳定运行的实例建议固定为已完整发布的版本号，例如 `IMAGE_TAG=3.0.0`；镜像标签不要带 `v` 前缀。升级和回滚步骤见[升级、备份与恢复](../deployment/upgrade-backup.mdx)。
+
+## 启动前预览
+
+不要直接修改 `.env.personal.example`。实际被 Compose 读取的是 `.env.personal`。启动前先渲染配置和镜像列表，能尽早发现漏填的密钥、错误的路径或错误的镜像标签。
+
+```bash
+cd /opt/aivory/deploy
+docker compose --env-file .env.personal -f docker-compose.personal.yml config
+docker compose --env-file .env.personal -f docker-compose.personal.yml config --images
+```
+
+个人版会明确固定以下后端：SQLite 数据库、`VECTOR_BACKEND=sqlite`、空的 Redis 和 Qdrant 地址。因此在 `.env.personal` 额外写入 `DATABASE_URL`、`REDIS_URL`、`QDRANT_URL` 或 `QDRANT_API_KEY` 不会改变官方个人版拓扑。
+
+## 拉取、启动与验收
+
+```bash
+cd /opt/aivory/deploy
+docker compose --env-file .env.personal -f docker-compose.personal.yml pull
+docker compose --env-file .env.personal -f docker-compose.personal.yml up -d
+docker compose --env-file .env.personal -f docker-compose.personal.yml ps
+docker compose --env-file .env.personal -f docker-compose.personal.yml logs --tail=200 app
+```
+
+默认端口映射为主机 `80` 到容器 `8787`。应用启动后，先确认健康检查：
+
+```bash
+curl -fsS http://127.0.0.1/api/health
+```
+
+预期会返回 `{"ok":true}`。然后在浏览器访问服务器 IP 或域名。没有任何用户的全新实例会显示初始化页面，第一个创建成功的账号自动成为管理员；环境变量不会再预置管理员账号。
+
+完成首次管理员登录后，按以下顺序验收最小聊天能力：
+
+1. 在“渠道”创建一个已启用、可连接的渠道。
+2. 在“模型”添加或自动导入至少一个已启用的聊天模型。
+3. 在“设置 → 模型策略”选择默认聊天模型。
+4. 用普通用户或管理员新建一个对话，发送一条简短消息验证真实上游响应。
+
+失败时先查看 `app` 的最近日志，不要通过删除数据目录或 `docker compose down -v` 来“重试”。常见症状的处理在[故障排查](../troubleshooting/common-issues.mdx)。
+
+## 域名与 HTTPS
+
+直接使用公网 IP 可用于短期验证，正式使用应配置域名和 HTTPS。若让应用直接绑定主机 80 端口，前置负载均衡或反向代理可以接收 HTTPS 后转发给它；若在同一主机运行 Caddy、Nginx 或 Traefik，应先把 Compose 端口映射改为仅本机监听，例如 `127.0.0.1:8787:8787`，以免与代理争用 80/443 端口。
+
+完整的端口、反向代理、OAuth 回调和多域名配置见[域名、HTTPS 与 OAuth](../deployment/domain-tls-oauth.mdx)。网页和 `/api` 由同一应用同源提供，通常不需要单独配置 CORS。
+
+## 向量与知识库
+
+个人版始终使用 SQLite 内嵌向量：`aivory.db` 同时保存业务数据和向量点，不需要 Qdrant。没有配置外部 embedding 时，系统可以使用基础本地 embedding 作为兜底；它适合尝试流程，不建议作为高质量语义检索的长期方案。
+
+需要更可靠的 RAG 时，在管理员后台或 `.env.personal` 配置 OpenAI 兼容 embedding 服务，并让 `EMBEDDING_DIM` 与模型真实输出维度一致。更换 embedding 模型或维度后，必须在后台重建受影响知识库的向量，否则新旧向量不能可靠地混用。
+
+扫描 PDF、图像型 PDF 或复杂版面文件可能需要 MinerU 等解析服务；对象存储、OCR、embedding 的配置说明见[知识库、RAG 与存储](../admin/knowledge-rag.mdx)。
+
+## 可选：配置 Python 沙盒
+
+没有沙盒时，管理员工具页会提示先配置沙盒，Python 解释器保持关闭。这是正常状态，不影响普通对话、知识库或文件上传。
+
+### 使用外部沙盒
+
+推荐将沙盒部署在受控的独立环境，然后在管理员后台“工具”填写其 HTTPS 地址和 Bearer Key；也可以在启动前加入：
+
+```dotenv
+SANDBOX_BASE_URL=https://sandbox.example.com
+SANDBOX_API_KEY=与外部沙盒一致的高强度密钥
+```
+
+外部沙盒必须只能被 Aivory 信任地访问，且不应无鉴权暴露到公网。
+
+### 启用本机沙盒 profile
+
+若接受本机 Docker socket 的高权限风险，可以显式启用可选 profile。先在 `.env.personal` 设置与 sidecar 相同的地址和密钥：
+
+```dotenv
+SANDBOX_BASE_URL=http://sandbox:8000
+SANDBOX_API_KEY=aivory-personal-sandbox
+```
+
+然后使用带 `sandbox` profile 的命令：
+
+```bash
+cd /opt/aivory/deploy
+docker compose --env-file .env.personal -f docker-compose.personal.yml --profile sandbox pull
+docker compose --env-file .env.personal -f docker-compose.personal.yml --profile sandbox up -d
+docker compose --env-file .env.personal -f docker-compose.personal.yml --profile sandbox ps
+```
+
+这会额外启动 `sandbox` 和 `sandbox-image-keepalive`。前者通过宿主机 Docker socket 创建受限的临时执行容器，后者保留运行时镜像，避免会话间镜像清理造成下次执行冷拉取和超时。Docker socket 等同于宿主机高权限，只应在完全受控的服务器启用，且不要为沙盒添加公网端口映射。
+
+沙盒资源、持久工作区和 MCP 的具体安全边界见[工具、MCP 与沙盒](../admin/tools-sandbox.mdx)。
+
+## 数据、备份与迁移
+
+`DATA_DIR` 是个人版的唯一持久化根目录，通常包含：
+
+```text
+data-personal/
+├── aivory.db
+├── uploads/
+├── artifacts/
+└── backups/
+```
+
+其中 `aivory.db` 包含业务行和内嵌向量；只备份数据库文件而遗漏上传文件和产物，恢复后会出现附件或下载链接失效。请对整个目录进行定期、可恢复的离机备份，并在升级前先做一次备份。
+
+个人版只能运行一个 `app` 副本，不能通过扩容容器获得高可用。迁移到完整版时，应先生成完整备份，在新服务器启动空的完整版，再从后台导入并逐项验证对话、文件、知识库和向量。详细恢复流程见[升级、备份与恢复](../deployment/upgrade-backup.mdx)。

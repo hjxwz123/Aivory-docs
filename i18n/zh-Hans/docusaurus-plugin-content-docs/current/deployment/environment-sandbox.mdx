@@ -1,0 +1,99 @@
+---
+title: 沙盒变量
+sidebar_position: 3
+description: 内置或外部 Python sandbox sidecar 的全部 SANDBOX_* 环境变量、资源上限和安全边界。
+---
+
+# 沙盒变量
+
+本页列出 sandbox sidecar 与其会话容器使用的全部 `SANDBOX_*` 变量。它们只影响沙盒进程；修改后需要重启 `sandbox` 服务。`SANDBOX_BASE_URL`、`SANDBOX_API_KEY` 是应用访问沙盒的连接变量，已在[环境变量总览](./environment.mdx)说明，这里一并列出以方便核对。
+
+官方完整版默认启动内置 sidecar。个人版默认不启动它，只有启用 `--profile sandbox` 或配置外部沙盒后 Python 才可用。sidecar 驱动宿主机 Docker socket，具有高权限；不要公开端口、不要关闭鉴权、不要为了修复超时而无限制提高资源上限。
+
+## 配置层级
+
+| 层级 | 常见变量 | 作用 |
+| --- | --- | --- |
+| 应用到 sidecar | `SANDBOX_BASE_URL`、`SANDBOX_API_KEY` | 决定 Aivory 是否能声明和调用 Python 工具 |
+| sidecar 控制面 | `SANDBOX_IMAGE`、鉴权、并发、队列、Docker 超时 | 创建、复用和回收会话容器 |
+| 单个会话容器 | CPU、内存、PID、只读根、tmpfs、seccomp、文件上限 | 限制不可信代码的资源和系统能力 |
+| 工作区归档 | 本地目录、对象存储超时、归档大小与 TTL | 控制会话回收后的持久工作区 |
+
+`SANDBOX_MEMORY`、`SANDBOX_CPUS`、`SANDBOX_MAX_SESSIONS` 和 `SANDBOX_WORKSPACE_SIZE` 的总和不能超过宿主机可承受资源。不要只按单会话额度计算，还要为 sidecar、应用、数据库、镜像拉取和峰值并发留余量。
+
+## 连接、镜像与鉴权
+
+| 变量 | 默认值 | 作用与取值 | 安全说明 |
+| --- | --- | --- | --- |
+| `SANDBOX_BASE_URL` | 空 | 应用请求 sidecar 的基础 URL。个人版本机 profile 为 `http://sandbox:8000`；官方完整版固定内部地址。 | 不应指向公网无鉴权服务。 |
+| `SANDBOX_API_KEY` | 空 | sidecar Bearer Key，应用与 sidecar 必须一致。官方 Compose 提供内部值，外部沙盒必须自行设置强随机值。 | 密钥，泄露可变成执行入口。 |
+| `SANDBOX_IMAGE` | `aivory-sandbox:latest` | sidecar 为每个执行会话启动的运行时镜像。官方 Compose 会替换为发布镜像。 | 只能指向受控镜像，避免不可信镜像。 |
+| `SANDBOX_PULL_ON_START` | 关闭 | `1`/`true` 时在启动时预拉取运行时镜像。官方 Compose 开启。 | 可减少首次执行超时，但会增加启动时间和出站流量。 |
+| `SANDBOX_ALLOW_NO_AUTH` | `0` | 仅当为真时允许 sidecar 无 API Key 启动。 | 仅可信本机开发可用；生产必须保持关闭。 |
+| `SANDBOX_DOCKER_CALL_TIMEOUT_S` | `30` | Docker inspect、version 等控制调用的默认超时，单位秒。 | 过高会延迟故障暴露。 |
+| `SANDBOX_ARCHIVE_TIMEOUT_S` | `120` | 打包工作区归档时的总时限，单位秒。 | 过高会占用会话回收锁。 |
+| `SANDBOX_IDLE_REAPER_SWEEP_INTERVAL` | `300` | 扫描空闲会话并回收的间隔，单位秒。 | 较短会更快回收资源，较长会增加空闲占用。 |
+
+## 会话资源与隔离
+
+| 变量 | 默认值 | 作用与取值 | 安全说明 |
+| --- | --- | --- | --- |
+| `SANDBOX_MEMORY` | `2g` | 每个会话容器的内存上限，使用 Docker 大小格式。 | 按最大并发预留总内存。 |
+| `SANDBOX_CPUS` | `1` | 每个会话容器可用 CPU 数或 Docker CPU 配额。 | 不要把所有宿主机 CPU 分配给单个会话。 |
+| `SANDBOX_PIDS_LIMIT` | `256` | 每个会话容器允许的进程数。 | 保持限制以缓解 fork bomb。 |
+| `SANDBOX_NOFILE_ULIMIT` | `1024:1024` | 容器打开文件描述符软/硬限制。 | 调高前评估文件与 socket 滥用。 |
+| `SANDBOX_READ_ONLY_ROOTFS` | `1` | 会话根文件系统只读；`0` 关闭。 | 生产应保持开启。 |
+| `SANDBOX_TMPFS_SIZE` | `256m` | 只读根模式下 `/tmp` 和用户目录的可写 tmpfs 大小。 | 影响临时文件可用空间和内存占用。 |
+| `SANDBOX_WORKSPACE_SIZE` | `512m` | 会话 `/workspace` 的可写 tmpfs 大小。 | 与归档上限、文件上传上限共同规划。 |
+| `SANDBOX_WORKSPACE_TMPFS_SIZE` | `512m` | 旧名称兼容别名；仅在 `SANDBOX_WORKSPACE_SIZE` 未设置时生效。 | 新部署使用正式变量。 |
+| `SANDBOX_DISK_SIZE` | 空 | 可选容器可写层大小限制，需要主机 Docker 存储驱动支持。 | 不支持时会尽力回退；不能替代只读根。 |
+| `SANDBOX_SECCOMP_PROFILE` | 空 | sidecar 内可读取的 seccomp profile 路径。 | 仅使用审阅过的本地只读 profile。 |
+
+## 执行、并发与回收
+
+| 变量 | 默认值 | 作用与取值 | 运营说明 |
+| --- | --- | --- | --- |
+| `SANDBOX_EXEC_TIMEOUT_CAP_MS` | `600000` | 单次执行的硬上限，毫秒；后台单次超时不能超过它。 | 降低可减少资源风险。 |
+| `SANDBOX_DEFAULT_EXEC_TIMEOUT_MS` | `120000` | 调用方未提供执行时长时的默认超时，毫秒。 | 不应默认等于硬上限。 |
+| `SANDBOX_IDLE_TTL_SECONDS` | `1800` | 未指定会话级 TTL 时的空闲回收时长，秒。 | 缩短释放资源更快，延长保留更多工作区。 |
+| `SANDBOX_IDLE_TTL_CAP_SECONDS` | `86400` | 管理后台下发的会话级空闲 TTL 硬上限，秒。 | 管理员无法超出此运营边界。 |
+| `SANDBOX_MAX_SESSIONS` | `16` | 可同时存在的活跃沙盒会话容器数。个人版官方 profile 默认覆盖为 `4`。 | 与内存、CPU 和 Docker socket 负载关联。 |
+| `SANDBOX_MAX_CONCURRENT_EXECS` | `4` | 所有会话合计同时执行 `/exec` 的上限。 | 调高会放大 CPU、内存和镜像/文件压力。 |
+| `SANDBOX_MAX_CONCURRENT_CREATES` | `2` | 同时创建会话容器的最大数量。 | 保守值可防止 Docker daemon 突刺。 |
+| `SANDBOX_QUEUE_TIMEOUT_SECONDS` | `150` | 请求等待内部执行或创建槽位的最长时间，秒。 | 超时应返回可诊断错误，而不是无限排队。 |
+
+## 请求、代码与产物上限
+
+| 变量 | 默认值 | 作用与取值 | 运营说明 |
+| --- | --- | --- | --- |
+| `SANDBOX_MAX_BODY_BYTES` | `58720256` | `/exec` 与文件请求体读取前的最大字节数，约 56 MiB，含 base64/JSON 开销。 | 应大于上传原始文件上限的编码后大小。 |
+| `SANDBOX_MAX_STORAGE_BODY_BYTES` | `314572800` | `/storage/put` 请求体最大字节数，约 300 MiB。 | 文档归档需要较大空间，仍需与代理限制一致。 |
+| `SANDBOX_MAX_CODE_BYTES` | `1048576` | 单次 `/exec` 源代码字段最大字节数，默认 1 MiB。 | 保持上限以避免控制面内存压力。 |
+| `SANDBOX_MAX_UPLOAD_BYTES` | `41943040` | 单个输入文件解码后最大字节数，默认 40 MiB。 | 与应用上传、暂存和 body 上限协调。 |
+| `SANDBOX_MAX_OUTPUT_BYTES` | `32768` | 返回给模型的 stdout/stderr 总字节截断上限。 | 防止无限打印占用内存和上下文。 |
+| `SANDBOX_MAX_ARTIFACT_BYTES` | `20971520` | 单个生成产物最大字节数，默认 20 MiB。 | 大文件应使用受控存储而非直接响应。 |
+| `SANDBOX_MAX_FILES_PER_EXEC` | `20` | 单次执行最多返回的产物文件数。 | 限制批量文件滥用。 |
+| `SANDBOX_MAX_TOTAL_ARTIFACT_BYTES` | `52428800` | 单次执行返回产物总大小上限，默认 50 MiB。 | 与单文件上限共同生效。 |
+| `SANDBOX_MAX_COLLECT_SECONDS` | `60` | 收集执行产物的总时间预算，秒。 | 过高会拉长用户请求和占用执行槽位。 |
+| `SANDBOX_COLLECT_FILE_TIMEOUT_S` | `30` | 收集单个产物文件的超时，秒。 | 过低可能丢失大文件，过高增加卡住风险。 |
+
+## 工作区归档与对象存储
+
+| 变量 | 默认值 | 作用与取值 | 安全说明 |
+| --- | --- | --- | --- |
+| `SANDBOX_LOCAL_STORAGE_DIR` | 空 | 本地工作区归档目录。设置后必须挂载持久化卷；空则本地归档不生效。 | 仅单节点，路径只能由运维者设置。 |
+| `SANDBOX_MAX_ARCHIVE_BYTES` | `209715200` | 回收或删除时可归档的工作区 tar 最大大小，默认 200 MiB。 | 超出会跳过归档，需在用户文档中明确。 |
+| `SANDBOX_STORAGE_DEFAULT_TTL` | `3600` | `/storage/put` 未指定时预签名读取 URL 的默认有效期，秒。 | 尽量短，避免长期公开访问。 |
+| `SANDBOX_STORAGE_MAX_TTL` | `86400` | 预签名读取 URL 的硬上限，秒。 | 不要提高到超过业务所需。 |
+| `SANDBOX_S3_MAX_ATTEMPTS` | `3` | S3 SDK 单次操作最大重试次数。 | 过高会把故障放大成排队。 |
+| `SANDBOX_S3_CONNECT_TIMEOUT_S` | `10` | S3 连接超时，秒。 | 与私网/跨区网络延迟协调。 |
+| `SANDBOX_S3_READ_TIMEOUT_S` | `120` | S3 读取超时，秒。 | 大对象需同时检查总 body 上限。 |
+| `SANDBOX_OSS_CONNECT_TIMEOUT_S` | `30` | OSS 客户端连接超时，秒。 | 仅使用受控 endpoint。 |
+
+## 其他运行时变量
+
+| 变量 | 默认值 | 作用与取值 | 说明 |
+| --- | --- | --- | --- |
+| `MPLCONFIGDIR` | 未设置 | Matplotlib 配置缓存目录。 | 通常无需设置；若设置，应指向会话内可写、受限目录，不能指向宿主机敏感路径。 |
+
+应用侧还有 `AIVORY_SANDBOX_MAX_SANDBOX_RESP_BYTES`、`AIVORY_SANDBOX_EXEC_CLIENT_OVERHEAD` 和 `AIVORY_SANDBOX_SANDBOX_ERROR_BODY_READ_CAP`，它们限制 API 处理 sidecar 响应的大小和时长，见[高级运行时变量](./environment-advanced.mdx)。

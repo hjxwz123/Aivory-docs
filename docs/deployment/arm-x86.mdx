@@ -1,63 +1,63 @@
 ---
-title: ARM64 与 x86_64
+title: ARM64 and x86_64
 sidebar_position: 2
-description: 在 64 位 AMD/Intel 或 ARM Linux 服务器上部署、更新和迁移 Aivory。
+description: Deploying, updating, and migrating Aivory on 64-bit AMD/Intel or ARM Linux servers.
 ---
 
-# ARM64 与 x86_64
+# ARM64 and x86_64
 
-Aivory 的应用镜像、沙盒 sidecar 和沙盒运行时镜像为同一发布标签提供多架构变体：
+Aivory's application image, sandbox sidecar, and sandbox runtime images provide multi-architecture variants under the same release tag:
 
-| 系统命令输出 | Docker 平台 | 是否支持 |
+| System command output | Docker platform | Supported |
 | --- | --- | --- |
-| `x86_64` | `linux/amd64` | 支持 |
-| `aarch64`、`arm64` | `linux/arm64` | 支持 |
-| `armv7l` 等 32 位 ARM | 非 64 位 ARM | 不支持 |
+| `x86_64` | `linux/amd64` | Yes |
+| `aarch64`, `arm64` | `linux/arm64` | Yes |
+| 32-bit ARM such as `armv7l` | Non-64-bit ARM | No |
 
-确认主机架构：
+Confirm the host architecture:
 
 ```bash
 uname -m
 ```
 
-Docker Compose 会根据宿主机自动选择相应镜像。官方 Compose 不需要也不建议添加 `platform:` 强制指定架构；强制成错误平台会导致拉取失败或依赖模拟运行，增加性能与稳定性风险。
+Docker Compose automatically selects the matching image based on the host. The official Compose neither needs nor recommends adding `platform:` to force an architecture; forcing the wrong platform causes pull failures or dependence on emulation, increasing performance and stability risks.
 
-## 新服务器部署
+## Deploying on a new server
 
-ARM64 与 x86_64 使用完全相同的部署过程：选择[个人版](/docs/getting-started/personal)或[完整版](/docs/getting-started/full)，创建相应 env 文件，先执行 `config --images`，再 `pull` 和 `up -d`。不要为 ARM64 单独改镜像名称、数据路径、数据库配置或沙盒地址。
+ARM64 and x86_64 use exactly the same deployment process: choose the [Personal edition](../getting-started/personal.mdx) or the [Full edition](../getting-started/full.mdx), create the corresponding env file, run `config --images` first, then `pull` and `up -d`. Do not change image names, data paths, database configuration, or sandbox addresses just for ARM64.
 
-开始前仍需确认操作系统是 64 位 Linux、Docker 已更新到支持目标架构的版本，并且服务器能访问镜像仓库。应用、沙盒 sidecar 与运行时镜像都应使用同一 `IMAGE_TAG`。
+Before starting, still confirm that the OS is 64-bit Linux, Docker is updated to a version that supports the target architecture, and the server can reach the image registry. The application, sandbox sidecar, and runtime images should all use the same `IMAGE_TAG`.
 
-## 已有 x86_64 实例更新
+## Updating an existing x86_64 instance
 
-同架构更新不需要迁移。保留现有 env 文件、Compose 文件、命名卷和数据目录，按照[升级、备份与恢复](/docs/deployment/upgrade-backup)固定版本并执行 `pull`、`up -d --no-build` 即可。
+Same-architecture updates require no migration. Keep the existing env file, Compose file, named volumes, and data directory; follow [Upgrade, Backup, and Restore](./upgrade-backup.mdx) to pin the version and run `pull` and `up -d --no-build`.
 
-升级后检查应用健康接口、管理员登录、普通对话、文件、知识库和启用的沙盒，不要因为更换了镜像架构说明而跳过业务验收。
+After upgrading, check the application health endpoint, administrator login, normal conversations, files, knowledge bases, and the enabled sandbox; do not skip business acceptance just because you switched image architectures.
 
-## 从 x86_64 迁移到 ARM64，或反向迁移
+## Migrating from x86_64 to ARM64, or the other way around
 
-跨架构迁移应使用“备份并恢复”，而不是共享正在运行的卷。数据库文件、容器层和某些本地卷格式不应被视为可同时挂载或直接复制到另一台正在工作的服务器。
+Cross-architecture migration should use "back up and restore", not sharing live volumes. Database files, container layers, and some local volume formats must not be treated as safe to mount simultaneously or copy directly to another working server.
 
-推荐流程：
+Recommended process:
 
-1. 在旧服务器完成完整备份，并单独保存所有持久化数据的副本。
-2. 在新架构服务器安装 Docker，使用相同或兼容的 Aivory 版本启动空实例。
-3. 确认新实例的 `/api/health` 正常，且镜像已自动选择正确架构。
-4. 在维护窗口停止旧实例写入，创建最后一份增量或最终备份。
-5. 将备份恢复到新实例，按部署模式恢复数据目录及全部相关数据服务。
-6. 验证管理员登录、普通对话、附件、知识库检索、向量、工作区与需要的 Python 能力。
-7. 确认 DNS/反向代理切换后的真实用户访问正常，再保留旧实例一段可回退时间。
+1. Complete a full backup on the old server, and separately keep copies of all persistent data.
+2. Install Docker on the new-architecture server and start an empty instance with the same or a compatible Aivory version.
+3. Confirm the new instance's `/api/health` is healthy and that the images automatically selected the correct architecture.
+4. During a maintenance window, stop writes on the old instance and create a final incremental or last full backup.
+5. Restore the backup into the new instance, recovering the data directory and all related data services according to the deployment mode.
+6. Verify administrator login, normal conversations, attachments, knowledge base retrieval, vectors, workspaces, and needed Python capabilities.
+7. Confirm that real user traffic works normally after the DNS/reverse proxy switch, then keep the old instance for a rollback window.
 
-个人版要完整迁移 `DATA_DIR`，不能只迁移 SQLite 文件；完整版要同时迁移 PostgreSQL、Qdrant、Redis、沙盒归档卷和 `DATA_DIR`，或通过后台完整备份恢复。详细范围见[升级、备份与恢复](/docs/deployment/upgrade-backup)。
+The Personal edition must migrate the entire `DATA_DIR`, not just the SQLite file; the Full edition must migrate PostgreSQL, Qdrant, Redis, the sandbox archive volume, and `DATA_DIR` together, or restore via a full backup from the admin backend. For the detailed scope, see [Upgrade, Backup, and Restore](./upgrade-backup.mdx).
 
-## 架构相关故障
+## Architecture-related failures
 
-镜像拉取失败时，依次确认：
+When image pulls fail, confirm each of the following in order:
 
-- `uname -m` 是否是受支持的 64 位架构。
-- `IMAGE_TAG` 是否是完整发布的标签，而不是尚未发布或只存在部分镜像的版本。
-- 是否通过第三方镜像代理获得了不完整或不一致的 manifest。
-- Docker 是否被显式指定了错误 `platform`。
-- 使用本地沙盒时，三个 Aivory 镜像是否都被同一 registry 与同一版本标签解析。
+- Whether `uname -m` reports a supported 64-bit architecture.
+- Whether `IMAGE_TAG` is a fully released tag, rather than a version that is unreleased or has only some images.
+- Whether a third-party image proxy served an incomplete or inconsistent manifest.
+- Whether Docker was explicitly given the wrong `platform`.
+- When using the local sandbox, whether all three Aivory images resolve from the same registry and the same version tag.
 
-不要用 QEMU 模拟作为长期生产解决方案。它可以用于临时验证，但会让 Python 沙盒、数据库和长时间文档处理的性能与问题定位变得更困难。
+Do not use QEMU emulation as a long-term production solution. It is fine for temporary verification, but it makes performance and problem diagnosis for the Python sandbox, the database, and long-running document processing much harder.

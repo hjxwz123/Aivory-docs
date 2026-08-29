@@ -1,39 +1,39 @@
 ---
-title: 个人版部署
+title: Personal Edition Deployment
 sidebar_position: 2
-description: 在一台服务器上以 SQLite、内嵌向量和可选沙盒运行 Aivory 个人版。
+description: Run the Aivory Personal edition on a single server with SQLite, embedded vectors, and an optional sandbox.
 ---
 
-# 个人版部署
+# Personal Edition Deployment
 
-个人版面向个人、家庭实验室和低并发小团队。默认只启动一个 `app` 容器，使用 SQLite 保存业务数据和向量，使用进程内缓存与后台队列；不启动 PostgreSQL、Redis、Qdrant，也不默认启动 Python 沙盒。
+The Personal edition is aimed at individuals, home labs, and low-concurrency small teams. By default it starts only a single `app` container, uses SQLite for both business data and vectors, and uses in-process caching and a background queue; it does not start PostgreSQL, Redis, or Qdrant, and does not start the Python sandbox by default.
 
-这不是功能阉割版：对话、工作区、知识库、RAG、模型渠道、MCP、文件、分享、积分和管理员后台仍可用。它的边界是单实例运行，不适合把应用水平扩展到多台机器。
+This is not a feature-stripped edition: conversations, workspaces, knowledge bases, RAG, model channels, MCP, files, sharing, credits, and the admin console all remain available. Its boundary is single-instance operation — it is not designed to horizontally scale the application across multiple machines.
 
-## 先确认适用场景
+## Confirm Your Use Case First
 
-个人版适合以下情况：
+The Personal edition is a good fit when:
 
-- 只有一台服务器，或只希望维护一个应用容器。
-- 使用者数量有限，业务不需要多副本、高可用或独立 Redis。
-- 需要向量检索，但希望把向量和业务数据放进同一个 SQLite 文件。
-- 接受将来扩容时通过备份恢复迁移到完整版。
+- You have only one server, or only want to maintain a single application container.
+- The number of users is limited and your workload does not require multiple replicas, high availability, or a standalone Redis.
+- You need vector retrieval but want to keep vectors and business data in the same SQLite file.
+- You accept migrating to the Full edition via backup and restore when you scale up later.
 
-请直接选择[完整版](/docs/getting-started/full)，如果你需要多应用副本、独立数据库运维、较高并发、多人长期使用，或已经有 PostgreSQL、Redis 和 Qdrant 运维体系。
+Choose the [Full edition](./full.mdx) directly instead if you need multiple app replicas, independently operated databases, higher concurrency, long-term multi-user use, or if you already run PostgreSQL, Redis, and Qdrant.
 
-## 服务器准备
+## Server Preparation
 
-建议使用 64 位 Ubuntu 22.04/24.04 LTS 或 Debian 12。最低可从 2 vCPU、4 GB 内存、30 GB SSD 开始；文档较多、使用外部 embedding、启用本地沙盒或保存大量附件时，应按实际负载增加内存和磁盘。
+A 64-bit Ubuntu 22.04/24.04 LTS or Debian 12 is recommended. You can start with as little as 2 vCPUs, 4 GB of memory, and a 30 GB SSD; add memory and disk to match real load when you have many documents, use external embeddings, enable the local sandbox, or store a large number of attachments.
 
-开始前确认：
+Before you start, confirm:
 
-- 系统是 `x86_64`、`aarch64` 或 `arm64` 的 64 位 Linux。两种架构都支持，详见 [ARM64 与 x86_64](/docs/deployment/arm-x86)。
-- 已安装 Docker Engine 和 Docker Compose Plugin，并且当前管理员可以运行 `docker compose`。
-- 服务器可以访问镜像仓库，以及你将使用的模型、embedding、搜索、OAuth 和邮件服务的 HTTPS 地址。
-- 对外直连时，防火墙只放行 HTTP/HTTPS；使用反向代理时，不要把应用监听端口直接暴露到公网。
-- `DATA_DIR` 所在磁盘有足够空间，Docker 服务对该目录有读写权限。SQLite 不应放在 NFS、SMB 或其他网络文件系统上。
+- The system is 64-bit Linux on `x86_64`, `aarch64`, or `arm64`. Both architectures are supported; see [ARM64 and x86_64](../deployment/arm-x86.mdx).
+- Docker Engine and the Docker Compose Plugin are installed, and the current administrator can run `docker compose`.
+- The server can reach the image registry and the HTTPS endpoints of the model, embedding, search, OAuth, and mail services you plan to use.
+- When exposing the instance directly, allow only HTTP/HTTPS through the firewall; when using a reverse proxy, do not expose the application's listening port directly to the internet.
+- The disk holding `DATA_DIR` has enough space, and Docker can read and write that directory. Do not put SQLite on NFS, SMB, or other network file systems.
 
-可用以下命令做只读预检：
+You can run these read-only preflight checks:
 
 ```bash
 uname -m
@@ -42,11 +42,11 @@ docker compose version
 df -h
 ```
 
-`docker version` 或 `docker compose version` 不可用时，先按服务器发行版的官方文档安装 Docker；Aivory 不会自动安装它。
+If `docker version` or `docker compose version` is unavailable, install Docker first per your distribution's official documentation; Aivory will not install it for you.
 
-## 获取发布配置
+## Obtain the Release Configuration
 
-下面以 `/opt/aivory` 为例。发布镜像同时包含网页和 API，不需要在服务器上构建前端或后端。
+`/opt/aivory` is used as the example below. The release image contains both the web UI and the API; there is no need to build the frontend or backend on the server.
 
 ```bash
 git clone --depth=1 https://github.com/hjxwz123/Aivory.git /opt/aivory
@@ -54,7 +54,7 @@ cd /opt/aivory/deploy
 cp .env.personal.example .env.personal
 ```
 
-编辑 `.env.personal`。必须设置稳定且足够长的 `JWT_SECRET`；重启时改掉它会让全部登录会话失效。`DATA_DIR` 建议使用绝对路径，避免在不同工作目录下把数据写到意外位置。
+Edit `.env.personal`. You must set a stable, sufficiently long `JWT_SECRET`; changing it on restart invalidates all login sessions. An absolute path is recommended for `DATA_DIR` to avoid writing data to an unexpected location when working from different directories.
 
 ```dotenv
 JWT_SECRET=替换为独立的强随机字符串
@@ -62,17 +62,17 @@ DATA_DIR=/opt/aivory/data-personal
 IMAGE_TAG=latest
 ```
 
-生成密钥示例：
+Example of generating a key:
 
 ```bash
 openssl rand -hex 32
 ```
 
-`latest` 适合试用。稳定运行的实例建议固定为已完整发布的版本号，例如 `IMAGE_TAG=3.0.0`；镜像标签不要带 `v` 前缀。升级和回滚步骤见[升级、备份与恢复](/docs/deployment/upgrade-backup)。
+`latest` is fine for evaluation. For a stable instance, pin it to a fully released version number, for example `IMAGE_TAG=3.0.0`; image tags must not carry a `v` prefix. For upgrade and rollback steps, see [Upgrades, Backups, and Recovery](../deployment/upgrade-backup.mdx).
 
-## 启动前预览
+## Preview Before Startup
 
-不要直接修改 `.env.personal.example`。实际被 Compose 读取的是 `.env.personal`。启动前先渲染配置和镜像列表，能尽早发现漏填的密钥、错误的路径或错误的镜像标签。
+Do not modify `.env.personal.example` directly. The file Compose actually reads is `.env.personal`. Rendering the configuration and image list before startup helps catch missing keys, wrong paths, or wrong image tags early.
 
 ```bash
 cd /opt/aivory/deploy
@@ -80,9 +80,9 @@ docker compose --env-file .env.personal -f docker-compose.personal.yml config
 docker compose --env-file .env.personal -f docker-compose.personal.yml config --images
 ```
 
-个人版会明确固定以下后端：SQLite 数据库、`VECTOR_BACKEND=sqlite`、空的 Redis 和 Qdrant 地址。因此在 `.env.personal` 额外写入 `DATABASE_URL`、`REDIS_URL`、`QDRANT_URL` 或 `QDRANT_API_KEY` 不会改变官方个人版拓扑。
+The Personal edition explicitly pins the following backends: the SQLite database, `VECTOR_BACKEND=sqlite`, and empty Redis and Qdrant addresses. As a result, additionally setting `DATABASE_URL`, `REDIS_URL`, `QDRANT_URL`, or `QDRANT_API_KEY` in `.env.personal` will not change the official Personal edition topology.
 
-## 拉取、启动与验收
+## Pull, Start, and Verify
 
 ```bash
 cd /opt/aivory/deploy
@@ -92,62 +92,62 @@ docker compose --env-file .env.personal -f docker-compose.personal.yml ps
 docker compose --env-file .env.personal -f docker-compose.personal.yml logs --tail=200 app
 ```
 
-默认端口映射为主机 `80` 到容器 `8787`。应用启动后，先确认健康检查：
+The default port mapping is host `80` to container `8787`. After the app starts, verify the health check first:
 
 ```bash
 curl -fsS http://127.0.0.1/api/health
 ```
 
-预期会返回 `{"ok":true}`。然后在浏览器访问服务器 IP 或域名。没有任何用户的全新实例会显示初始化页面，第一个创建成功的账号自动成为管理员；环境变量不会再预置管理员账号。
+The expected response is `{"ok":true}`. Then open the server's IP or domain in a browser. A brand-new instance with no users shows the initialization page, and the first account created automatically becomes the administrator; environment variables no longer pre-provision an admin account.
 
-完成首次管理员登录后，按以下顺序验收最小聊天能力：
+After completing the first administrator login, verify minimal chat capability in this order:
 
-1. 在“渠道”创建一个已启用、可连接的渠道。
-2. 在“模型”添加或自动导入至少一个已启用的聊天模型。
-3. 在“设置 → 模型策略”选择默认聊天模型。
-4. 用普通用户或管理员新建一个对话，发送一条简短消息验证真实上游响应。
+1. In "Channels", create an enabled, connectable channel.
+2. In "Models", add or auto-import at least one enabled chat model.
+3. In "Settings → Model policy", select the default chat model.
+4. As a regular user or an administrator, start a new conversation and send a short message to verify a real upstream response.
 
-失败时先查看 `app` 的最近日志，不要通过删除数据目录或 `docker compose down -v` 来“重试”。常见症状的处理在[故障排查](/docs/troubleshooting/common-issues)。
+If something fails, first check the recent logs of `app`; do not "retry" by deleting the data directory or running `docker compose down -v`. Fixes for common symptoms are covered in [Troubleshooting](../troubleshooting/common-issues.mdx).
 
-## 域名与 HTTPS
+## Domain and HTTPS
 
-直接使用公网 IP 可用于短期验证，正式使用应配置域名和 HTTPS。若让应用直接绑定主机 80 端口，前置负载均衡或反向代理可以接收 HTTPS 后转发给它；若在同一主机运行 Caddy、Nginx 或 Traefik，应先把 Compose 端口映射改为仅本机监听，例如 `127.0.0.1:8787:8787`，以免与代理争用 80/443 端口。
+Using a public IP directly is fine for short-term verification; for production use, configure a domain and HTTPS. If the app binds host port 80 directly, an upstream load balancer or reverse proxy can terminate HTTPS and forward to it; if you run Caddy, Nginx, or Traefik on the same host, first change the Compose port mapping to loopback-only — for example `127.0.0.1:8787:8787` — to avoid competing with the proxy for ports 80/443.
 
-完整的端口、反向代理、OAuth 回调和多域名配置见[域名、HTTPS 与 OAuth](/docs/deployment/domain-tls-oauth)。网页和 `/api` 由同一应用同源提供，通常不需要单独配置 CORS。
+Full details on ports, reverse proxies, OAuth callbacks, and multi-domain configuration are in [Domains, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx). The web UI and `/api` are served from the same origin by the same app, so CORS usually needs no separate configuration.
 
-## 向量与知识库
+## Vectors and Knowledge Bases
 
-个人版始终使用 SQLite 内嵌向量：`aivory.db` 同时保存业务数据和向量点，不需要 Qdrant。没有配置外部 embedding 时，系统可以使用基础本地 embedding 作为兜底；它适合尝试流程，不建议作为高质量语义检索的长期方案。
+The Personal edition always uses SQLite embedded vectors: `aivory.db` stores both business data and vector points, and Qdrant is not required. When no external embedding is configured, the system can fall back to a basic local embedding; it is fine for trying out the flow, but it is not recommended as a long-term solution for high-quality semantic retrieval.
 
-需要更可靠的 RAG 时，在管理员后台或 `.env.personal` 配置 OpenAI 兼容 embedding 服务，并让 `EMBEDDING_DIM` 与模型真实输出维度一致。更换 embedding 模型或维度后，必须在后台重建受影响知识库的向量，否则新旧向量不能可靠地混用。
+For more reliable RAG, configure an OpenAI-compatible embedding service in the admin console or in `.env.personal`, and make `EMBEDDING_DIM` match the model's real output dimension. After changing the embedding model or dimension, you must rebuild the vectors of the affected knowledge bases in the admin console; old and new vectors cannot be reliably mixed.
 
-扫描 PDF、图像型 PDF 或复杂版面文件可能需要 MinerU 等解析服务；对象存储、OCR、embedding 的配置说明见[知识库、RAG 与存储](/docs/admin/knowledge-rag)。
+Scanning PDFs, image-based PDFs, or complex-layout files may require a parsing service such as MinerU. Configuration docs for object storage, OCR, and embeddings are in [Knowledge Bases, RAG, and Storage](../admin/knowledge-rag.mdx).
 
-## 可选：配置 Python 沙盒
+## Optional: Configure the Python Sandbox
 
-没有沙盒时，管理员工具页会提示先配置沙盒，Python 解释器保持关闭。这是正常状态，不影响普通对话、知识库或文件上传。
+Without a sandbox, the admin tools page prompts you to configure one and the Python interpreter stays disabled. This is a normal state and does not affect regular conversations, knowledge bases, or file uploads.
 
-### 使用外部沙盒
+### Use an External Sandbox
 
-推荐将沙盒部署在受控的独立环境，然后在管理员后台“工具”填写其 HTTPS 地址和 Bearer Key；也可以在启动前加入：
+Deploying the sandbox in a controlled, separate environment is recommended; then enter its HTTPS address and Bearer Key under "Tools" in the admin console. You can also add them before startup:
 
 ```dotenv
 SANDBOX_BASE_URL=https://sandbox.example.com
 SANDBOX_API_KEY=与外部沙盒一致的高强度密钥
 ```
 
-外部沙盒必须只能被 Aivory 信任地访问，且不应无鉴权暴露到公网。
+The external sandbox must be accessible only to Aivory as a trusted party, and should never be exposed to the public internet without authentication.
 
-### 启用本机沙盒 profile
+### Enable the Local Sandbox Profile
 
-若接受本机 Docker socket 的高权限风险，可以显式启用可选 profile。先在 `.env.personal` 设置与 sidecar 相同的地址和密钥：
+If you accept the high-privilege risk of the local Docker socket, you can explicitly enable the optional profile. First set the same address and key as the sidecar in `.env.personal`:
 
 ```dotenv
 SANDBOX_BASE_URL=http://sandbox:8000
 SANDBOX_API_KEY=aivory-personal-sandbox
 ```
 
-然后使用带 `sandbox` profile 的命令：
+Then run the commands with the `sandbox` profile:
 
 ```bash
 cd /opt/aivory/deploy
@@ -156,13 +156,13 @@ docker compose --env-file .env.personal -f docker-compose.personal.yml --profile
 docker compose --env-file .env.personal -f docker-compose.personal.yml --profile sandbox ps
 ```
 
-这会额外启动 `sandbox` 和 `sandbox-image-keepalive`。前者通过宿主机 Docker socket 创建受限的临时执行容器，后者保留运行时镜像，避免会话间镜像清理造成下次执行冷拉取和超时。Docker socket 等同于宿主机高权限，只应在完全受控的服务器启用，且不要为沙盒添加公网端口映射。
+This additionally starts `sandbox` and `sandbox-image-keepalive`. The former creates restricted, ephemeral execution containers through the host Docker socket, and the latter keeps the runtime image so that image cleanup between sessions does not force a cold pull and timeout on the next execution. The Docker socket is equivalent to high privilege on the host — enable it only on a fully controlled server, and never add public port mappings for the sandbox.
 
-沙盒资源、持久工作区和 MCP 的具体安全边界见[工具、MCP 与沙盒](/docs/admin/tools-sandbox)。
+For the concrete security boundaries of sandbox resources, persistent workspaces, and MCP, see [Tools, MCP, and the Sandbox](../admin/tools-sandbox.mdx).
 
-## 数据、备份与迁移
+## Data, Backups, and Migration
 
-`DATA_DIR` 是个人版的唯一持久化根目录，通常包含：
+`DATA_DIR` is the only persistent root for the Personal edition and typically contains:
 
 ```text
 data-personal/
@@ -172,6 +172,6 @@ data-personal/
 └── backups/
 ```
 
-其中 `aivory.db` 包含业务行和内嵌向量；只备份数据库文件而遗漏上传文件和产物，恢复后会出现附件或下载链接失效。请对整个目录进行定期、可恢复的离机备份，并在升级前先做一次备份。
+`aivory.db` contains both business rows and embedded vectors; if you back up only the database file and miss uploaded files and artifacts, attachments or download links will break after a restore. Take regular, restorable off-site backups of the entire directory, and take a backup before every upgrade.
 
-个人版只能运行一个 `app` 副本，不能通过扩容容器获得高可用。迁移到完整版时，应先生成完整备份，在新服务器启动空的完整版，再从后台导入并逐项验证对话、文件、知识库和向量。详细恢复流程见[升级、备份与恢复](/docs/deployment/upgrade-backup)。
+The Personal edition can run only one `app` replica; high availability cannot be obtained by scaling containers. When migrating to the Full edition, generate a complete backup first, start an empty Full edition on the new server, then import from the admin console and verify conversations, files, knowledge bases, and vectors item by item. The detailed restore procedure is in [Upgrades, Backups, and Recovery](../deployment/upgrade-backup.mdx).

@@ -67,7 +67,7 @@ curl -L https://docs.example.com/docs/deployment/environment/
 
 ## 英文文档
 
-中文是默认语言，英文页面使用独立的静态 URL：首页为 `/en/`，文档为 `/en/docs/.../`。导航栏的语言菜单会保留当前页面路径，因此用户能在同一篇文档的两个语言版本之间切换；构建输出中的内容不是浏览器端翻译，仍可被搜索引擎索引。
+英文是默认语言：首页为 `/`，文档为 `/docs/.../`；中文使用独立静态 URL：首页为 `/zh-Hans/`，文档为 `/zh-Hans/docs/.../`。导航栏的语言菜单会保留当前页面路径，因此用户能在同一篇文档的两个语言版本之间切换；构建输出中的内容不是浏览器端翻译，仍可被搜索引擎索引。
 
 英文 MDX 由本地翻译命令生成到 `i18n/en/docusaurus-plugin-content-docs/current/`，不会修改 `docs/` 下的中文源文件。翻译前设置 OpenAI Responses API 所需变量，并由部署维护者明确选择模型：
 
@@ -83,7 +83,7 @@ npm run translate:en
 npm run translate:en -- --force docs/deployment/environment.mdx
 ```
 
-翻译命令会验证代码块、行内代码、URL、API 路径和环境变量是否仍保持原样，发现被改写时拒绝写入目标文件。生成后执行 `npm run build && npm run verify:static`，确认 `/en/docs/.../` 也在静态输出中。
+翻译命令会验证代码块、行内代码、URL、API 路径和环境变量是否仍保持原样，发现被改写时拒绝写入目标文件。生成后执行 `npm run build && npm run verify:static`，确认默认英文 `/docs/.../` 和中文 `/zh-Hans/docs/.../` 都在静态输出中。
 
 ## Cloudflare Pages
 

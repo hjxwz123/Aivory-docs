@@ -17,8 +17,8 @@ async function findHtmlFiles(directory) {
 }
 
 const localeDirectories = [
-  {locale: 'zh-Hans', directory: join(outputDir, 'docs')},
-  {locale: 'en', directory: join(outputDir, 'en', 'docs')},
+  {locale: 'en', directory: join(outputDir, 'docs')},
+  {locale: 'zh-Hans', directory: join(outputDir, 'zh-Hans', 'docs')},
 ]
 const localeFiles = await Promise.all(localeDirectories.map(async ({locale, directory}) => ({
   locale,

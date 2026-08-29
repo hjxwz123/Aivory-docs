@@ -99,21 +99,25 @@ body.aivory-home-page .navbar__inner {
   max-width: none;
   min-height: 4.75rem;
   padding: 0 clamp(1.25rem, 4vw, 3rem);
+  column-gap: clamp(0.75rem, 2vw, 1.75rem);
+  flex-wrap: nowrap;
 }
 
-body.aivory-home-page .navbar__items--left,
-body.aivory-home-page .navbar__items--right {
-  flex: 1 1 0;
+body.aivory-home-page .navbar__items:not(.navbar__items--right) {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
 }
 
 body.aivory-home-page .navbar__items--right {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   justify-content: flex-end;
 }
 
 body.aivory-home-page .navbar__brand {
   min-height: 44px;
   gap: 0.65rem;
-  margin-right: clamp(1rem, 5vw, 6rem);
+  margin-right: clamp(1rem, 3vw, 3rem);
 }
 
 body.aivory-home-page .navbar__logo {
@@ -139,6 +143,7 @@ body.aivory-home-page .navbar__link {
   padding: 0.7rem 0.65rem;
   font-size: 0.86rem;
   font-weight: 550;
+  white-space: nowrap;
   transition: color 180ms ease, background-color 180ms ease;
 }
 
@@ -302,21 +307,25 @@ body.aivory-experience-page .aivory-navbar-cta:hover {
     max-width: none;
     min-height: 4.75rem;
     padding: 0 clamp(1.25rem, 4vw, 3rem);
+    column-gap: clamp(0.75rem, 2vw, 1.75rem);
+    flex-wrap: nowrap;
   }
 
-  body:has(main.aivory-home-page) .navbar__items--left,
-  body:has(main.aivory-home-page) .navbar__items--right {
-    flex: 1 1 0;
+  body:has(main.aivory-home-page) .navbar__items:not(.navbar__items--right) {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
   }
 
   body:has(main.aivory-home-page) .navbar__items--right {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
     justify-content: flex-end;
   }
 
   body:has(main.aivory-home-page) .navbar__brand {
     min-height: 44px;
     gap: 0.65rem;
-    margin-right: clamp(1rem, 5vw, 6rem);
+    margin-right: clamp(1rem, 3vw, 3rem);
   }
 
   body:has(main.aivory-home-page) .navbar__logo {
@@ -334,6 +343,7 @@ body.aivory-experience-page .aivory-navbar-cta:hover {
   body:has(main.aivory-home-page) .navbar__link {
     min-height: 44px;
     font-size: 0.86rem;
+    white-space: nowrap;
   }
 
   body:has(main.aivory-home-page) .aivory-navbar-cta {
@@ -449,7 +459,26 @@ body.aivory-experience-page .aivory-navbar-cta:hover {
     scroll-behavior: auto;
   }
 
-  body.aivory-home-page .navbar__link {
-    transition: none;
+body.aivory-home-page .navbar__link {
+  transition: none;
+}
+}
+
+@media (min-width: 997px) and (max-width: 1200px) {
+  body.aivory-home-page .navbar__brand,
+  body:has(main.aivory-home-page) .navbar__brand {
+    margin-right: 1rem;
+  }
+
+  body.aivory-home-page .navbar__link,
+  body:has(main.aivory-home-page) .navbar__link {
+    padding-right: 0.45rem;
+    padding-left: 0.45rem;
+    font-size: 0.82rem;
+  }
+
+  body.aivory-home-page .navbar__items--right > a[href*='github.com'],
+  body:has(main.aivory-home-page) .navbar__items--right > a[href*='github.com'] {
+    display: none;
   }
 }

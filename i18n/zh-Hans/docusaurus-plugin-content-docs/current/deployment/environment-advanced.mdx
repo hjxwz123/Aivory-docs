@@ -8,7 +8,7 @@ description: Aivory 服务端运行时调优变量的完整参考，不含代码
 
 本页列出服务端的高级调优变量。它们都不是首次部署的必填项；除非你正在处理明确的性能、容量、限流或兼容性问题，否则应保留默认值。基础部署、认证、存储、向量、集成和 Compose 变量见[环境变量总览](./environment.mdx)。沙盒与前端构建变量分别见[沙盒变量](./environment-sandbox.mdx)和[前端构建变量](./environment-frontend.mdx)。
 
-除 `AIVORY_TOOLS_WEB_FETCH_JINA_FALLBACK` 和 `AIVORY_TOOLS_WEB_FETCH_JINA_BASE` 外，所有 `AIVORY_*` 变量都在应用进程启动时读取，修改后需要重启 `app`。这两个网页抓取回退变量会在每次抓取时读取，修改后从下一次抓取开始生效。时长值使用 `30s`、`5m`、`2h` 等格式；字节上限填写十进制字节数，例如 `20971520` 表示 20 MiB；整数、浮点数和布尔值必须使用有效格式，非法值会回退为默认值。变量名中的 `_2`、`_3` 等是稳定兼容名称，并不表示可任意自行编号。
+除 `AIVORY_TOOLS_WEB_FETCH_JINA_FALLBACK`、`AIVORY_TOOLS_WEB_FETCH_JINA_BASE` 和 `AIVORY_TOOLS_WEB_FETCH_JINA_URL_MODE` 外，所有 `AIVORY_*` 变量都在应用进程启动时读取，修改后需要重启 `app`。这三个网页抓取回退变量会在每次抓取时读取，修改后从下一次抓取开始生效。时长值使用 `30s`、`5m`、`2h` 等格式；字节上限填写十进制字节数，例如 `20971520` 表示 20 MiB；整数、浮点数和布尔值必须使用有效格式，非法值会回退为默认值。变量名中的 `_2`、`_3` 等是稳定兼容名称，并不表示可任意自行编号。
 
 > 调优前先记录当前值、压测或问题证据和回滚方案。提高并发、请求体、超时或工具上限会同时增加成本、内存、上游压力和滥用面。
 
@@ -442,4 +442,5 @@ HTTP server 超时、优雅关闭、启动流程常量等。
 | `AIVORY_TOOLS_WEB_FETCH_DIRECT_TIMEOUT` | `duration` | `12s` | 网页抓取直连目标站点的单次尝试超时。 |
 | `AIVORY_TOOLS_WEB_FETCH_JINA_FALLBACK` | `bool` | `true` | 直连网页抓取失败时是否使用 Jina Reader 回退；关闭可减少向第三方发送 URL 的范围。 |
 | `AIVORY_TOOLS_WEB_FETCH_JINA_BASE` | `string` | `https://r.jina.ai` | Jina Reader 回退服务基础地址；只应指向受控、可信的兼容服务。 |
+| `AIVORY_TOOLS_WEB_FETCH_JINA_URL_MODE` | `string` | `escaped` | 目标 URL 追加到 Reader 基址的方式。Jina Reader 使用 `escaped`，`https://markdown.new` 等兼容服务使用 `raw`；未知值按 `escaped` 处理。 |
 | `AIVORY_PDF_INSPECTION_TEST_SLEEP` | `string` | 未设置 | 仅用于自动化测试中模拟 PDF 检查延迟；生产运行不应设置，也不会改善解析性能。 |

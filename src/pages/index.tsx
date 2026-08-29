@@ -706,13 +706,13 @@ export default function Home(): ReactNode {
                 {isEnglish ? 'Conversations, RAG knowledge, persistent Python sandboxes, MCP, and member collaboration all live within one controlled workspace.' : '对话、RAG 知识库、持久 Python 沙箱、MCP 与成员协作，都留在同一个可控的工作空间。'}
               </p>
               <div className={styles.heroActions}>
-                <a className={styles.heroCta} href="https://chat.aivorygo.com" target="_blank" rel="noreferrer"><span>{isEnglish ? 'Try the demo' : '在线体验 Demo'}</span><span className={styles.ctaArrow} aria-hidden="true">↗</span></a>
+                <a className={styles.heroCta} href="https://demo.aivorygo.com" target="_blank" rel="noreferrer"><span>{isEnglish ? 'Try the demo' : '在线体验 Demo'}</span><span className={styles.ctaArrow} aria-hidden="true">↗</span></a>
                 <Link className={styles.heroTextLink} to="/docs/getting-started/personal">{isEnglish ? 'Start deploying' : '开始部署'} <span aria-hidden="true">→</span></Link>
                 <Link className={styles.heroTextLink} to="/docs/intro">{isEnglish ? 'Browse the docs' : '浏览文档'} <span aria-hidden="true">→</span></Link>
               </div>
               <div className={styles.heroContact} aria-label={isEnglish ? 'Demo and contact information' : '演示与联系信息'}>
                 <span>{isEnglish ? 'Demo' : '体验地址'}</span>
-                <a href="https://chat.aivorygo.com" target="_blank" rel="noreferrer">chat.aivorygo.com</a>
+                <a href="https://demo.aivorygo.com" target="_blank" rel="noreferrer">demo.aivorygo.com</a>
                 <i aria-hidden="true" />
                 <span>{isEnglish ? 'Contact' : '联系邮箱'}</span>
                 <a href="mailto:info@aivorygo.com">info@aivorygo.com</a>

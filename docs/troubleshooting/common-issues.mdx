@@ -1,0 +1,74 @@
+---
+title: 常见故障排查
+sidebar_position: 1
+description: 从启动、模型请求到 OAuth、向量检索和沙盒问题的排查路径。
+---
+
+# 常见故障排查
+
+先确认问题范围：是网页无法打开、管理员配置不完整，还是某一次模型请求失败。下面的顺序可以避免在应用正常运行时反复重建容器。
+
+## 网页打不开
+
+在部署目录查看容器状态和最近日志：
+
+~~~bash
+docker compose ps
+docker compose logs --tail=200 app
+~~~
+
+确认安全组允许应用端口，反向代理的 upstream 指向应用容器，而不是 PostgreSQL、Redis 或 Qdrant。应用和 `/api` 使用同一个 origin，代理不需要额外配置前端 API 地址。
+
+## 能登录但无法对话
+
+在管理员后台按以下顺序检查：
+
+1. 渠道已启用，Base URL、API Key 和接口格式正确。
+2. 渠道下至少有一个已启用的聊天模型。
+3. 模型策略中已经选中默认聊天模型。
+4. 上游服务商允许当前模型，并且账户仍有额度。
+
+OpenAI 兼容渠道的 Base URL 通常以 `/v1` 结尾，但具体路径以服务商文档为准。不要把 API Key 放进前端构建变量或公开日志。
+
+## OAuth 登录报 `token_exchange_failed`
+
+如果日志包含 `context deadline exceeded` 或 `github exchange failed`，通常是应用服务器访问 GitHub token endpoint 超时，而不是账号绑定记录损坏。检查：
+
+- 服务器能否解析并访问 `github.com:443`，以及出口防火墙、代理和 DNS。
+- GitHub OAuth App 的 callback URL 是否与当前公开域名完全一致。
+- `OAUTH_CALLBACK_BASE_URL`、客户端 ID 和客户端密钥是否属于同一个 OAuth App。
+- 系统时间是否准确；时间偏差会使 state 或 cookie 校验失败。
+
+修复网络或配置后重新发起登录。不要把客户端密钥写入浏览器，也不要把一次性的 callback 参数转发给其他人。若出口必须经过代理，请在应用运行环境配置标准 HTTP(S) 代理，并确认代理允许 GitHub 的 token 请求。
+
+## Python 解释器显示未配置
+
+个人版默认不部署沙盒。管理员工具页显示“请先配置沙盒”时，可以选择：
+
+- 在个人版 Compose 中启用 `sandbox` profile；或
+- 填写可访问的 `SANDBOX_BASE_URL` 和匹配的 `SANDBOX_API_KEY`。
+
+确认沙盒 sidecar 健康后再打开 Python 解释器。不要把沙盒端口发布到公网；sidecar 使用 Docker socket，只有在可信主机上才应启用。
+
+## 知识库没有结果
+
+确认文档已经完成解析和索引，并且 embedding 模型返回的维度与 `EMBEDDING_DIM` 一致。完整部署还要检查 Qdrant 健康状态：
+
+~~~bash
+docker compose ps qdrant
+docker compose logs --tail=100 qdrant
+~~~
+
+个人版使用 SQLite 内嵌向量，不需要启动 Qdrant。更换 embedding 模型后，按管理员后台提示重建受影响的知识库。
+
+## ARM64 镜像拉取失败
+
+确认主机是 64 位 ARM（`uname -m` 通常显示 `aarch64`），并使用最新发布标签。官方多架构标签会由 Docker 自动选择，不要在 Compose 中强制写入错误的 `platform`。如果使用旧的自建镜像，请分别为 `linux/amd64` 和 `linux/arm64` 构建并推送 manifest。
+
+## 分享链接失效或附件打不开
+
+检查链接是否被所有者撤销、是否超过应用的分享策略时限，以及反向代理是否转发了 `/api/public/shared/` 和分享资源路径。公开快照中的附件仍需要应用存储可访问；迁移或清理 `DATA_DIR` 后，只有数据库而没有 uploads/artifacts 目录会导致预览失效。
+
+## 收集诊断信息
+
+提交 issue 时请附上 Aivory 版本、部署模式（个人版或完整版）、CPU 架构、相关容器状态和脱敏后的日志。请删除 API Key、OAuth 密钥、JWT secret、分享 token 以及用户文件内容；不要直接上传完整的 `.env` 文件。

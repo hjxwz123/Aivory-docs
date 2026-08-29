@@ -1,0 +1,60 @@
+---
+title: 前端构建变量
+sidebar_position: 4
+description: Aivory 前端全部 VITE_* 构建期变量，以及什么时候不应该修改它们。
+---
+
+# 前端构建变量
+
+`VITE_*` 变量只在自行构建前端时读取，并会被写入构建产物。官方发布的 Aivory 应用镜像已经包含前端，因此在运行中的 Docker `.env` 文件中添加或修改 `VITE_*` **不会**改变网页行为；需要在构建环境设置后重新构建镜像/静态文件。
+
+不要在任何 `VITE_*` 中放 API Key、JWT、数据库密码、OAuth Client Secret、支付密钥或内部地址。构建后这些值可以被用户浏览器读取。
+
+除非你正在维护自定义前端、遇到明确的 UI 性能问题并有回滚方案，否则保留默认值。大多数变量只影响分页、轮询、前端超时或客户端显示限制，不会放宽服务端安全上限。
+
+## API 与开发代理
+
+| 变量 | 默认值 | 作用与取值 |
+| --- | --- | --- |
+| `VITE_API_BASE` | `/api` | 浏览器请求 API 的基础路径。官方同源部署保持默认；仅分离前端/API 时使用受控的 HTTPS 地址或路径。 |
+| `VITE_API_TARGET` | `http://localhost:8787` | 本地开发服务器的代理目标，只对开发构建/开发服务器生效，不会写入生产浏览器请求。 |
+
+## 分页、列表与轮询
+
+| 变量 | 默认值 | 作用与取值 |
+| --- | --- | --- |
+| `VITE_AIVORY_CONV_PAGE` | `200` | 左侧会话列表首次和滚动加载的每页数量。 |
+| `VITE_AIVORY_MSG_PAGE` | `40` | 打开会话及向上加载历史消息时每页请求数量。 |
+| `VITE_AIVORY_CONVERSATIONS_API_LIST_LIMIT` | `200` | 常规会话 API 列表的默认请求上限。 |
+| `VITE_AIVORY_CONVERSATIONS_API_LIST_ARCHIVED_LIMIT` | `200` | 归档会话 API 列表的默认请求上限。 |
+| `VITE_AIVORY_PROJECT_CONVERSATIONS_API_LIST_LIMIT` | `500` | 项目详情中加载会话的默认请求上限。 |
+| `VITE_AIVORY_WORKSPACES_API_ADMIN_LIST_LIMIT` | `200` | 管理员工作区列表请求默认上限。 |
+| `VITE_AIVORY_IMAGE_API_MY_IMAGES_LIMIT` | `60` | 当前用户生成图库每页请求数量。 |
+| `VITE_AIVORY_ADMIN_API_USERS_LIMIT` | `50` | 管理员用户列表 API 默认请求上限。 |
+| `VITE_AIVORY_ADMIN_API_USER_IMAGES_LIMIT` | `60` | 管理员查看单个用户图库时每页请求数量。 |
+| `VITE_AIVORY_ADMIN_API_ANALYTICS` | `30` | 管理员分析页请求的默认回溯天数。 |
+| `VITE_AIVORY_PAGE_SIZE` | `50` | 用户文件、管理员文件和用量记录等通用表格每页大小。 |
+| `VITE_AIVORY_PAGE_SIZE_2` | `20` | 管理员兑换码表格每页大小。 |
+| `VITE_AIVORY_PAGE_SIZE_3` | `20` | 管理员用户表格每页大小。 |
+| `VITE_AIVORY_IMAGES_PAGE` | `60` | 管理员用户图库无限滚动每页数量。 |
+| `VITE_AIVORY_PAGE` | `30` | 用户个人生成图库每页数量。 |
+| `VITE_AIVORY_KB_DOC_STATUS_POLL_INTERVAL` | `2200` | 知识库仍有解析/索引文档时的状态轮询间隔，毫秒。 |
+| `VITE_AIVORY_INGEST_POLL_MS` | `1200` | 聊天编辑器等待附件摄取时的轮询间隔，毫秒。 |
+| `VITE_AIVORY_ADMIN_BACKUP_EXPORT_JOB_POLL_INTERVAL` | `2500` | 管理员备份导出任务状态轮询间隔，毫秒。 |
+| `VITE_AIVORY_ADMIN_VECTOR_MAINTENANCE_JOB_POLL_INTERVAL` | `2500` | 管理员向量维护任务状态轮询间隔，毫秒。 |
+| `VITE_AIVORY_REALTIME_SYNC_THROTTLE_MS` | `800` | 多设备实时事件触发的前端同步节流时长，毫秒。 |
+| `VITE_AIVORY_ONLINE_WINDOW_S` | `300` | 管理员用户列表中判定“在线”的最后活动窗口，秒。 |
+
+降低轮询间隔或提高列表上限会增加数据库/API 负载和浏览器内存；前端填写更大数值也可能被服务端分页、限流和权限规则拒绝或钳制。
+
+## 输入、上传与浏览器 Python
+
+| 变量 | 默认值 | 作用与取值 |
+| --- | --- | --- |
+| `VITE_AIVORY_MAX_LEN` | `12000` | 聊天编辑器单条消息最大字符数。服务端仍可能有独立请求体限制。 |
+| `VITE_AIVORY_MAX_BYTES` | `262144` | 管理员图标上传在浏览器端的最大字节数，默认 256 KiB。 |
+| `VITE_AIVORY_RUN_TIMEOUT_MS` | `120000` | 浏览器内 Pyodide Python 单次运行硬超时，毫秒。与服务器沙盒无关。 |
+| `VITE_AIVORY_MAX_STREAM_CHARS` | `200000` | 浏览器 Pyodide 运行中的 stdout/stderr 最大累计字符数。 |
+| `VITE_AIVORY_MAX_RESULT_CHARS` | `20000` | 浏览器 Pyodide 最终表达式显示结果最大字符数。 |
+
+浏览器内 Pyodide 仅影响前端本地体验，不等于服务器 Python 沙盒。需要模型调用 `python_execute` 时，仍必须配置受控的 `SANDBOX_*` sidecar，并遵守[工具、MCP 与沙盒](/docs/admin/tools-sandbox)中的权限和资源限制。

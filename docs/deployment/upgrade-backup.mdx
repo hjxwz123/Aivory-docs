@@ -1,0 +1,134 @@
+---
+title: 升级、备份与恢复
+sidebar_position: 4
+description: 使用固定镜像版本、安全备份、验证、回滚和恢复流程维护 Aivory 个人版与完整版。
+---
+
+# 升级、备份与恢复
+
+更新 Aivory 应包含四个阶段：确定目标版本、创建可恢复备份、部署并验收、必要时回滚。不要将拉取最新镜像、删除容器和删除数据卷混为一次操作。
+
+## 固定发布版本
+
+测试可以使用 `IMAGE_TAG=latest`，稳定环境应固定为已完整发布的语义版本，例如：
+
+```dotenv
+IMAGE_TAG=3.0.0
+```
+
+镜像标签不带 `v` 前缀。完整部署会让应用、沙盒 sidecar 和沙盒运行时使用同一个版本标签；升级前必须确认三张镜像都能获取，避免混用半发布版本。
+
+渲染当前实际配置，而不是只检查模板：
+
+```bash
+cd /opt/aivory/deploy
+docker compose --env-file .env -f docker-compose.prod.yml config --images
+```
+
+个人版将 `.env` 和 Compose 文件替换为 `.env.personal`、`docker-compose.personal.yml`。若启用了个人版本地沙盒 profile，命令中还需要加入 `--profile sandbox`。
+
+历史版本早于统一沙盒版本标签时，可以显式使用兼容覆盖，例如：
+
+```dotenv
+IMAGE_TAG=2.2.6
+SANDBOX_IMAGE_TAG=latest
+```
+
+只在目标历史版本确实没有匹配沙盒镜像时使用它；新版本不要长期固定 `SANDBOX_IMAGE_TAG=latest`，否则可能悄悄混用不同版本的应用和沙盒。
+
+## 升级前检查
+
+每次升级前完成以下事项：
+
+1. 阅读目标版本的发布说明，确认数据库迁移、环境变量或功能弃用情况。
+2. 记录当前 `IMAGE_TAG`、部署模式、容器状态和关键功能的基线。
+3. 创建并确认可访问的备份；不要只相信“备份任务已提交”。
+4. 确认 `DATA_DIR` 和命名卷仍有足够磁盘空间，证书与域名正常。
+5. 对有真实用户的实例，在维护窗口或低峰期操作，并准备明确的回滚版本。
+
+升级前不应执行 `docker compose down -v`。`-v` 会删除命名卷，可能删除 PostgreSQL、Redis、Qdrant 或沙盒归档数据。
+
+## 更新个人版
+
+个人版默认只有应用容器：
+
+```bash
+cd /opt/aivory/deploy
+docker compose --env-file .env.personal -f docker-compose.personal.yml config --images
+docker compose --env-file .env.personal -f docker-compose.personal.yml pull
+docker compose --env-file .env.personal -f docker-compose.personal.yml up -d --no-build
+docker compose --env-file .env.personal -f docker-compose.personal.yml ps
+docker compose --env-file .env.personal -f docker-compose.personal.yml logs --tail=200 app
+```
+
+若已启用本地沙盒，把每条 Compose 命令改为附带 `--profile sandbox`。个人版的数据在 `DATA_DIR`：SQLite 数据库、向量、上传文件、产物和后台备份都要整体保留。
+
+## 更新完整版
+
+```bash
+cd /opt/aivory/deploy
+docker compose --env-file .env -f docker-compose.prod.yml config --images
+docker compose --env-file .env -f docker-compose.prod.yml pull
+docker compose --env-file .env -f docker-compose.prod.yml up -d --no-build
+docker compose --env-file .env -f docker-compose.prod.yml ps
+docker compose --env-file .env -f docker-compose.prod.yml logs --tail=200 app
+```
+
+首次拉取或升级沙盒运行时镜像可能比较慢。`sandbox-image-keepalive` 的存在是为了让运行时镜像持续被引用，避免镜像清理任务使下一次 Python 调用冷拉取并超时；不要因为它看起来空闲而删除它。
+
+## 升级后的验收
+
+容器显示运行中并不足够。至少做以下检查：
+
+```bash
+curl -fsS http://127.0.0.1/api/health
+```
+
+然后用浏览器验证：
+
+- 管理员和普通用户能登录，已有会话仍可访问。
+- 默认模型能够完成一条短对话；渠道和模型选择器正常。
+- 上传一个小文件并确认预览或下载正常。
+- 有知识库时，检索一条已知内容；完整版同时检查 Qdrant 状态。
+- 启用 Python 时，执行一个无害的小任务，确认沙盒可用。
+- 启用 OAuth、邮件或支付时，至少在测试账号上验证对应回调/发送/订单流程。
+
+发现问题时先保存应用和相关服务的脱敏日志。若问题与新版本有关且无法快速修复，按下面的回滚流程恢复；不要在生产数据上反复试验删除、导入或强制重建。
+
+## 回滚
+
+将实际 env 文件中的 `IMAGE_TAG` 改为上一个已经完整发布、且你已验证过的版本，再重复 `config --images`、`pull` 和 `up -d --no-build`。若回滚跨越包含数据迁移的版本，先查看发布说明：应用二进制可以回滚不代表新数据结构也能安全回退。
+
+当升级后的数据写入已经发生且没有确认兼容性时，应优先在隔离环境恢复升级前备份，而不是盲目运行旧镜像。回滚完成后再次执行完整验收。
+
+## 备份范围
+
+| 部署模式 | 必须保护的内容 | 说明 |
+| --- | --- | --- |
+| 个人版 | 整个 `DATA_DIR` | 包含 `aivory.db`、内嵌向量、上传、产物、本地对象和备份归档 |
+| 完整版 | `pgdata`、`redisdata`、`qdrantdata`、`sandbox-archives`、`DATA_DIR` | 关系数据、向量、缓存持久化、持久工作区与文件必须保持一致 |
+
+后台“备份与迁移”可创建面向迁移的完整归档，通常包含数据库逻辑备份、向量与可选文件；“配置导出”用于复制管理员设置。两者都可能含有 API Key、OAuth/SMTP/存储/支付凭据，必须加密存放、限制访问并避免上传到工单、公开仓库或聊天记录。
+
+物理备份和后台逻辑备份最好同时保留：前者用于完整灾难恢复，后者便于跨服务器或跨部署模式迁移。备份任务生成的归档本身也位于持久化位置，不应只保存在即将替换的临时容器中。
+
+## 恢复原则与流程
+
+恢复是有破坏性的写入操作。开始前停止新写入、保存当前部署的独立副本、记录原版本与恢复目标，并在可能时先在隔离环境演练。
+
+推荐顺序：
+
+1. 在目标主机准备与备份相匹配或兼容的空部署，确认可启动。
+2. 停止目标应用的写入，保留其现有数据目录和卷快照。
+3. 通过后台恢复完整归档，或按所用备份工具恢复数据目录和全部相关卷。
+4. 启动服务，查看数据库、向量、应用和沙盒日志。
+5. 验证健康接口、管理员登录、普通对话、文件下载、知识库检索、工作区权限和必要集成。
+6. 只有在验收完成后才更新 DNS、关闭旧实例或清理旧数据。
+
+不要将个人版正在使用的 SQLite 文件直接拿给多个容器或多台服务器使用；不要只恢复 PostgreSQL 而遗漏 Qdrant 和文件；不要把 Redis、Qdrant 或沙盒归档卷视为可以随意丢弃的“缓存”，除非你已评估恢复后果。
+
+## 备份演练与保留
+
+至少定期在非生产环境恢复一份近期备份。记录恢复所需时间、所需磁盘、缺失项和验收结果；真正发生故障时，这些信息比“备份昨天成功”更有价值。
+
+保留策略应同时满足业务、法规和成本要求：保留多个时间点、至少一份离机或跨区域副本、加密归档、访问审计和定期删除过期备份。删除用户或工作区的请求也应与备份保留规则明确协调。

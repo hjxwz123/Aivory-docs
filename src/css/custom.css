@@ -1,0 +1,455 @@
+/* Aivory documentation theme: restrained surfaces, high-contrast ink, and
+   one electric violet accent shared with the main application. */
+:root {
+  --ifm-color-primary: oklch(53% 0.2 290);
+  --ifm-color-primary-dark: oklch(47% 0.21 290);
+  --ifm-color-primary-darker: oklch(43% 0.2 290);
+  --ifm-color-primary-darkest: oklch(36% 0.17 290);
+  --ifm-color-primary-light: oklch(61% 0.18 290);
+  --ifm-color-primary-lighter: oklch(67% 0.15 290);
+  --ifm-color-primary-lightest: oklch(75% 0.11 290);
+  --ifm-background-color: oklch(98.4% 0.006 290);
+  --ifm-background-surface-color: oklch(99.2% 0.007 290);
+  --ifm-font-family-base: 'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ifm-heading-font-family: var(--ifm-font-family-base);
+  --ifm-font-family-monospace: 'Geist Mono', 'SFMono-Regular', Consolas, monospace;
+  --ifm-global-radius: 0.5rem;
+  --ifm-navbar-height: 4rem;
+  --ifm-navbar-background-color: oklch(98.4% 0.006 290 / 0.96);
+  --ifm-footer-background-color: oklch(22% 0.04 290);
+  --ifm-code-font-size: 90%;
+  --ifm-code-background: oklch(95% 0.018 290);
+  --ifm-toc-border-color: oklch(88% 0.018 290);
+  --ifm-color-emphasis-200: oklch(91% 0.016 290);
+  --ifm-color-emphasis-300: oklch(86% 0.02 290);
+  --docusaurus-highlighted-code-line-bg: oklch(93% 0.025 290);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: oklch(76% 0.14 290);
+  --ifm-color-primary-dark: oklch(70% 0.16 290);
+  --ifm-color-primary-darker: oklch(66% 0.17 290);
+  --ifm-color-primary-darkest: oklch(58% 0.18 290);
+  --ifm-color-primary-light: oklch(82% 0.11 290);
+  --ifm-color-primary-lighter: oklch(86% 0.09 290);
+  --ifm-color-primary-lightest: oklch(91% 0.06 290);
+  --ifm-background-color: oklch(19% 0.03 290);
+  --ifm-background-surface-color: oklch(23% 0.035 290);
+  --ifm-navbar-background-color: oklch(19% 0.03 290 / 0.96);
+  --ifm-footer-background-color: oklch(14% 0.025 290);
+  --ifm-code-background: oklch(24% 0.035 290);
+  --ifm-toc-border-color: oklch(34% 0.035 290);
+  --ifm-color-emphasis-200: oklch(31% 0.035 290);
+  --ifm-color-emphasis-300: oklch(37% 0.035 290);
+  --docusaurus-highlighted-code-line-bg: oklch(30% 0.04 290);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  letter-spacing: 0;
+}
+
+.navbar {
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  box-shadow: none;
+}
+
+/* The home page uses the site navbar as its single hero navbar.
+   Scoping this to the body marker keeps documentation pages unchanged. */
+body.aivory-home-page {
+  background: oklch(15% 0.025 290);
+}
+
+body.aivory-home-page .navbar {
+  position: absolute;
+  z-index: 50;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: auto;
+  min-height: 4.75rem;
+  padding-top: env(safe-area-inset-top);
+  border-bottom: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.aivory-home-page .navbar::after {
+  position: absolute;
+  right: clamp(1.25rem, 4vw, 3rem);
+  bottom: 0;
+  left: clamp(1.25rem, 4vw, 3rem);
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    hsl(40 6% 95% / 0.2) 22%,
+    hsl(40 6% 95% / 0.2) 78%,
+    transparent
+  );
+  content: '';
+  pointer-events: none;
+}
+
+body.aivory-home-page .navbar__inner {
+  width: 100%;
+  max-width: none;
+  min-height: 4.75rem;
+  padding: 0 clamp(1.25rem, 4vw, 3rem);
+}
+
+body.aivory-home-page .navbar__items--left,
+body.aivory-home-page .navbar__items--right {
+  flex: 1 1 0;
+}
+
+body.aivory-home-page .navbar__items--right {
+  justify-content: flex-end;
+}
+
+body.aivory-home-page .navbar__brand {
+  min-height: 44px;
+  gap: 0.65rem;
+  margin-right: clamp(1rem, 5vw, 6rem);
+}
+
+body.aivory-home-page .navbar__logo {
+  width: 32px;
+  height: 32px;
+}
+
+body.aivory-home-page .navbar__title,
+body.aivory-home-page .navbar__link,
+body.aivory-home-page .navbar__item {
+  color: hsl(40 6% 95% / 0.9);
+  font-family: 'Geist Variable', 'Geist', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+body.aivory-home-page .navbar__title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+body.aivory-home-page .navbar__link {
+  min-height: 44px;
+  padding: 0.7rem 0.65rem;
+  font-size: 0.86rem;
+  font-weight: 550;
+  transition: color 180ms ease, background-color 180ms ease;
+}
+
+body.aivory-home-page .navbar__link:hover,
+body.aivory-home-page .navbar__link--active {
+  color: hsl(40 6% 100%);
+  background: hsl(40 6% 95% / 0.08);
+}
+
+body.aivory-home-page .dropdown__menu {
+  min-width: 12rem;
+  margin-top: 0.55rem;
+  padding: 0.45rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: hsl(260 38% 8% / 0.96);
+  box-shadow: 0 18px 45px hsl(260 70% 2% / 0.42), inset 0 1px 0 hsl(40 6% 95% / 0.1);
+  backdrop-filter: blur(12px);
+}
+
+body.aivory-home-page .dropdown__link {
+  min-height: 42px;
+  border-radius: 0.5rem;
+  color: hsl(40 6% 88% / 0.9);
+  font-size: 0.84rem;
+}
+
+body.aivory-home-page .dropdown__link:hover {
+  background: hsl(258 92% 76% / 0.15);
+  color: hsl(40 6% 100%);
+}
+
+body.aivory-home-page .aivory-navbar-cta {
+  min-height: 42px;
+  margin-left: 0.7rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  background: hsl(40 6% 95%);
+  color: hsl(260 35% 8%) !important;
+  font-weight: 700;
+}
+
+body.aivory-home-page .aivory-navbar-cta:hover {
+  background: hsl(40 6% 100%);
+  color: hsl(260 35% 8%) !important;
+}
+
+body.aivory-home-page .navbar__toggle {
+  min-width: 44px;
+  min-height: 44px;
+  color: hsl(40 6% 95%);
+}
+
+body.aivory-home-page .navbar-sidebar {
+  background: hsl(260 38% 7%);
+  color: hsl(40 6% 95%);
+}
+
+body.aivory-home-page .navbar-sidebar .menu__link,
+body.aivory-home-page .navbar-sidebar__back {
+  color: hsl(40 6% 90%);
+}
+
+body.aivory-home-page .navbar-sidebar .menu__link:hover {
+  background: hsl(258 92% 76% / 0.14);
+  color: hsl(40 6% 100%);
+}
+
+/* Product, architecture and playground routes use the same quiet midnight
+   navigation surface as the home page while remaining in normal document flow. */
+body.aivory-experience-page {
+  background: oklch(15% 0.025 290);
+}
+
+body.aivory-experience-page .navbar {
+  border-bottom: 1px solid oklch(95% 0.01 290 / 0.1);
+  background: oklch(15% 0.025 290 / 0.96);
+  box-shadow: none;
+  backdrop-filter: blur(14px);
+}
+
+body.aivory-experience-page .navbar__title,
+body.aivory-experience-page .navbar__link,
+body.aivory-experience-page .navbar__item,
+body.aivory-experience-page .navbar__toggle {
+  color: oklch(95% 0.01 290 / 0.9);
+}
+
+body.aivory-experience-page .navbar__link:hover,
+body.aivory-experience-page .navbar__link--active {
+  background: oklch(95% 0.01 290 / 0.08);
+  color: oklch(95% 0.01 290);
+}
+
+body.aivory-experience-page .dropdown__menu {
+  border: 0;
+  background: oklch(20% 0.03 290 / 0.98);
+  box-shadow: 0 0.75rem 1.8rem oklch(5% 0.025 290 / 0.3), inset 0 1px 0 oklch(95% 0.01 290 / 0.08);
+}
+
+body.aivory-experience-page .dropdown__link {
+  color: oklch(88% 0.015 290);
+}
+
+body.aivory-experience-page .dropdown__link:hover {
+  background: oklch(72% 0.215 290 / 0.14);
+  color: oklch(98% 0.01 290);
+}
+
+body.aivory-experience-page .aivory-navbar-cta {
+  background: oklch(72% 0.215 290);
+  color: oklch(18% 0.04 290) !important;
+}
+
+body.aivory-experience-page .aivory-navbar-cta:hover {
+  background: oklch(78% 0.185 290);
+  color: oklch(18% 0.04 290) !important;
+}
+
+/* The main wrapper is rendered after Navbar, so :has() lets modern browsers
+   apply the hero treatment during the first server-rendered paint. The body
+   class rules above remain the fallback for older browsers and hydration. */
+@supports selector(body:has(*)) {
+  body:has(main.aivory-home-page) {
+    background: oklch(15% 0.025 290);
+  }
+
+  body:has(main.aivory-home-page) .navbar {
+    position: absolute;
+    z-index: 50;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: auto;
+    min-height: 4.75rem;
+    padding-top: env(safe-area-inset-top);
+    border-bottom: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  body:has(main.aivory-home-page) .navbar::after {
+    position: absolute;
+    right: clamp(1.25rem, 4vw, 3rem);
+    bottom: 0;
+    left: clamp(1.25rem, 4vw, 3rem);
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      hsl(40 6% 95% / 0.2) 22%,
+      hsl(40 6% 95% / 0.2) 78%,
+      transparent
+    );
+    content: '';
+    pointer-events: none;
+  }
+
+  body:has(main.aivory-home-page) .navbar__inner {
+    width: 100%;
+    max-width: none;
+    min-height: 4.75rem;
+    padding: 0 clamp(1.25rem, 4vw, 3rem);
+  }
+
+  body:has(main.aivory-home-page) .navbar__items--left,
+  body:has(main.aivory-home-page) .navbar__items--right {
+    flex: 1 1 0;
+  }
+
+  body:has(main.aivory-home-page) .navbar__items--right {
+    justify-content: flex-end;
+  }
+
+  body:has(main.aivory-home-page) .navbar__brand {
+    min-height: 44px;
+    gap: 0.65rem;
+    margin-right: clamp(1rem, 5vw, 6rem);
+  }
+
+  body:has(main.aivory-home-page) .navbar__logo {
+    width: 32px;
+    height: 32px;
+  }
+
+  body:has(main.aivory-home-page) .navbar__title,
+  body:has(main.aivory-home-page) .navbar__link,
+  body:has(main.aivory-home-page) .navbar__item {
+    color: hsl(40 6% 95% / 0.9);
+    font-family: 'Geist Variable', 'Geist', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body:has(main.aivory-home-page) .navbar__link {
+    min-height: 44px;
+    font-size: 0.86rem;
+  }
+
+  body:has(main.aivory-home-page) .aivory-navbar-cta {
+    min-height: 42px;
+    border-radius: 999px;
+    background: hsl(40 6% 95%);
+    color: hsl(260 35% 8%) !important;
+    font-weight: 700;
+  }
+
+  body:has(main.aivory-home-page) .navbar__toggle {
+    min-width: 44px;
+    min-height: 44px;
+    color: hsl(40 6% 95%);
+  }
+
+  body:has(main.aivory-experience-page) {
+    background: oklch(15% 0.025 290);
+  }
+
+  body:has(main.aivory-experience-page) .navbar {
+    border-bottom: 1px solid oklch(95% 0.01 290 / 0.1);
+    background: oklch(15% 0.025 290 / 0.96);
+    box-shadow: none;
+    backdrop-filter: blur(14px);
+  }
+
+  body:has(main.aivory-experience-page) .navbar__title,
+  body:has(main.aivory-experience-page) .navbar__link,
+  body:has(main.aivory-experience-page) .navbar__item,
+  body:has(main.aivory-experience-page) .navbar__toggle {
+    color: oklch(95% 0.01 290 / 0.9);
+  }
+
+  body:has(main.aivory-experience-page) .navbar__link:hover,
+  body:has(main.aivory-experience-page) .navbar__link--active {
+    background: oklch(95% 0.01 290 / 0.08);
+    color: oklch(95% 0.01 290);
+  }
+
+  body:has(main.aivory-experience-page) .dropdown__menu {
+    border: 0;
+    background: oklch(20% 0.03 290 / 0.98);
+    box-shadow: 0 0.75rem 1.8rem oklch(5% 0.025 290 / 0.3), inset 0 1px 0 oklch(95% 0.01 290 / 0.08);
+  }
+
+  body:has(main.aivory-experience-page) .dropdown__link {
+    color: oklch(88% 0.015 290);
+  }
+
+  body:has(main.aivory-experience-page) .aivory-navbar-cta {
+    background: oklch(72% 0.215 290);
+    color: oklch(18% 0.04 290) !important;
+  }
+}
+
+.navbar__title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.navbar__link,
+.menu__link {
+  font-size: 0.9rem;
+}
+
+.footer {
+  border-top: 1px solid oklch(34% 0.035 290);
+}
+
+.footer__title {
+  color: oklch(88% 0.02 290);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.footer__link-item {
+  color: oklch(70% 0.025 290);
+}
+
+.footer__link-item:hover {
+  color: oklch(86% 0.08 290);
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.markdown p,
+.markdown li {
+  line-height: 1.75;
+}
+
+.markdown code {
+  border: 0;
+  border-radius: 0.3rem;
+}
+
+.theme-doc-sidebar-container {
+  border-right: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.theme-doc-toc-desktop {
+  border-left-color: var(--ifm-color-emphasis-200);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  body.aivory-home-page .navbar__link {
+    transition: none;
+  }
+}

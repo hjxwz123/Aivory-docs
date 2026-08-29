@@ -16,6 +16,8 @@ Except for `AIVORY_TOOLS_WEB_FETCH_JINA_FALLBACK` and `AIVORY_TOOLS_WEB_FETCH_JI
 
 The main conversation flow, tool loops, the TTFT watchdog, and internal model calls for compaction / memory / moderation / validation / deep research / document generation.
 
+Tool-count limits apply to Aivory system tools only. Provider-hosted tools remain configured in every mode and do not consume these counters; for Fast Mode system tools, `0` hides the tool and a positive value both exposes it and sets its cap.
+
 | Environment variable | Type | Default | Description |
 | --- | --- | --- | --- |
 | `AIVORY_LLM_APPLY_ANTHROPIC_THINKING_SETTINGS` | `int` | `2048` | Token margin added on top of the extended-thinking budget_tokens when raising the Anthropic max_tokens, so the output can fit thinking plus the reply. |
@@ -76,17 +78,23 @@ The main conversation flow, tool loops, the TTFT watchdog, and internal model ca
 | `AIVORY_LLM_PER_TURN_TOOL_LIMITS_WEB_FETCH` | `int` | `12` | Per-message cap on web_fetch calls allowed in normal mode; calls beyond it fail. |
 | `AIVORY_LLM_PER_TURN_TOOL_LIMITS_IMAGE_GENERATE` | `int` | `8` | Per-message cap on image_generate calls allowed in normal mode; calls beyond it fail. |
 | `AIVORY_LLM_PER_TURN_TOOL_LIMITS_PYTHON_EXECUTE` | `int` | `16` | Per-message cap on python_execute sandbox executions allowed in normal mode; calls beyond it fail. |
+| `AIVORY_LLM_FAST_TOOL_LIMITS_WEB_SEARCH` | `int` | `4` | Fast-mode cap for the `aivory_web_search` system tool; `0` hides it. |
+| `AIVORY_LLM_FAST_TOOL_LIMITS_WEB_FETCH` | `int` | `3` | Fast-mode cap for the web_fetch system tool; `0` hides it. |
+| `AIVORY_LLM_FAST_TOOL_LIMITS_FETCH_IMAGE` | `int` | `0` | Fast-mode cap for the fetch_image system tool; `0` hides it, while a positive value still requires its normal dependencies and permissions. |
+| `AIVORY_LLM_FAST_TOOL_LIMITS_IMAGE_GENERATE` | `int` | `2` | Fast-mode cap for the image_generate system tool; `0` hides it. |
+| `AIVORY_LLM_FAST_TOOL_LIMITS_PYTHON_EXECUTE` | `int` | `0` | Fast-mode cap for the python_execute system tool; `0` hides it, while a positive value still requires a configured sandbox and normal permissions. |
 | `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_WEB_SEARCH` | `int` | `40` | Per-message cap on `aivory_web_search` calls allowed during deep research runs; calls beyond it fail. |
 | `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_WEB_FETCH` | `int` | `25` | Per-message cap on web_fetch calls allowed during deep research runs; calls beyond it fail. |
 | `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_IMAGE_GENERATE` | `int` | `4` | Per-message cap on image_generate calls allowed during deep research runs; calls beyond it fail. |
 | `AIVORY_LLM_DEEP_RESEARCH_TOOL_LIMITS_PYTHON_EXECUTE` | `int` | `8` | Per-message cap on python_execute sandbox executions allowed during deep research runs; calls beyond it fail. |
 | `AIVORY_LLM_MAX_TOOL_CALLS_PER_TURN` | `int` | `48` | Global per-message cap on total tool calls across all tools in normal mode, layered on top of the per-tool limits. |
 | `AIVORY_LLM_MAX_TOOL_CALLS_PER_TURN_DEEP` | `int` | `150` | Global per-message cap on total tool calls across all tools during deep research runs. |
+| `AIVORY_LLM_MAX_TOOL_CALLS_PER_TURN_FAST` | `int` | `12` | Independent global per-message cap on total tool calls across all tools in fast mode. |
 | `AIVORY_LLM_MAX_TOOL_TIME_PER_TURN` | `duration` | `15m` | Cumulative wall-clock time budget for all tool executions in a normal message. Once exhausted, all tools are removed and the model is allowed a single tool-free wrap-up request. Set to a non-positive value to disable the time budget. |
 | `AIVORY_LLM_MAX_TOOL_TIME_PER_TURN_DEEP` | `duration` | `4m` | Cumulative tool-execution time budget for deep research, reserving time within the five-minute research window for one tool-free report-writing request. Set to a non-positive value to disable the time budget. |
 | `AIVORY_LLM_MAX_TOOL_TIME_PER_TURN_FAST` | `duration` | `3m` | Cumulative tool-execution time budget for fast mode; once exhausted, only a single tool-free wrap-up request runs. Set to a non-positive value to disable the time budget. |
 | `AIVORY_LLM_TOOL_TIMEOUTS` | `duration` | `10s` | Per-call timeout cap for a single `aivory_web_search` tool call. |
-| `AIVORY_LLM_TOOL_TIMEOUTS_2` | `duration` | `30s` | Per-call timeout cap for a single web_fetch tool call. |
+| `AIVORY_LLM_TOOL_TIMEOUTS_2` | `duration` | `60s` | Per-call timeout for web_fetch, leaving time for Jina fallback after the direct attempt. |
 | `AIVORY_LLM_TOOL_TIMEOUTS_3` | `duration` | `600s` | Per-call timeout cap for a single image_generate tool call (a generous window for slow third-party image gateways). |
 | `AIVORY_LLM_TOOL_TIMEOUT_DEFAULT` | `duration` | `100s` | Fallback per-call timeout for tools not listed in the per-type toolTimeouts map. |
 | `AIVORY_LLM_PROMPT_MAX_ITER` | `int` | `10` | Maximum iterations in the prompt-mode tool loop before the round ends (each iteration = one model generation plus optional tool calls). |

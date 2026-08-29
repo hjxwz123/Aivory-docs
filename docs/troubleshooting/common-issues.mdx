@@ -19,6 +19,10 @@ docker compose logs --tail=200 app
 
 Confirm the security group allows the application port, and that the reverse proxy's upstream points at the application container, not PostgreSQL, Redis, or Qdrant. The app and `/api` use the same origin, so the proxy doesn't need an extra front-end API address.
 
+## Requests return `cross-site request blocked`
+
+This is Aivory's origin check, not a browser CORS message. For a domain or HTTPS reverse proxy, set the exact browser origin in the deployment env file, for example `ALLOWED_ORIGINS=https://chat.example.com`, then restart `app`. Do not include `/api`, another path, or a trailing slash.
+
 ## Can sign in but can't chat
 
 In the admin console, check in this order:

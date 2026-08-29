@@ -113,7 +113,7 @@ If something fails, first check the recent logs of `app`; do not "retry" by dele
 
 Using a public IP directly is fine for short-term verification; for production use, configure a domain and HTTPS. If the app binds host port 80 directly, an upstream load balancer or reverse proxy can terminate HTTPS and forward to it; if you run Caddy, Nginx, or Traefik on the same host, first change the Compose port mapping to loopback-only — for example `127.0.0.1:8787:8787` — to avoid competing with the proxy for ports 80/443.
 
-Full details on ports, reverse proxies, OAuth callbacks, and multi-domain configuration are in [Domains, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx). The web UI and `/api` are served from the same origin by the same app, so CORS usually needs no separate configuration.
+Set `ALLOWED_ORIGINS=https://chat.example.com` in `.env.personal` for any domain or HTTPS reverse proxy. Full details on ports, reverse proxies, OAuth callbacks, and multi-domain configuration are in [Domains, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx).
 
 ## Vectors and Knowledge Bases
 

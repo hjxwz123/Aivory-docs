@@ -6,7 +6,11 @@ description: Safely expose Aivory behind a reverse proxy or cloud load balancer,
 
 # Domains, HTTPS, and OAuth
 
-The official application image serves both the web UI and `/api` from a single process. This means that in a normal deployment the browser and the API are always same-origin: the reverse proxy only needs to forward the entire request to the application — no separate frontend deployment, no frontend API address configuration, and no CORS setup for a single domain.
+The official application image serves both the web UI and `/api` from a single process, so the reverse proxy forwards the whole request to one app. No separate frontend API address is needed, but domain and HTTPS deployments must still configure the browser-origin allowlist below.
+
+:::warning Required for domain deployments
+When using a domain or HTTPS reverse proxy, set `ALLOWED_ORIGINS=https://chat.example.com`. Without it, cookie-authenticated requests may return `cross-site request blocked`. Same-origin IP/HTTP testing may leave it unset.
+:::
 
 ## Three Ways to Access
 
@@ -44,17 +48,15 @@ curl -fsS https://aivory.example.com/api/health
 
 Once the certificate has been issued, the second command should return `{"ok":true}`. The reverse proxy must forward a proper `Host` header; mainstream proxies do this by default.
 
-## CORS and a Split Frontend
+## Allowed Browser Origins
 
-The official image has no required setting such as `PUBLIC_ORIGIN`. As long as the web UI and the API are served by the same `app`, the application works on whichever valid domain the user entered through.
-
-`ALLOWED_ORIGINS` is only for cases where you deliberately place the frontend on another origin and have the browser access the API cross-origin. Fill in an exact list of `scheme://host[:port]` values, for example:
+For every domain or HTTPS reverse-proxy deployment, fill in the exact browser origin as `scheme://host[:port]`:
 
 ```dotenv
-ALLOWED_ORIGINS=https://console.example.com,https://staging-console.example.com
+ALLOWED_ORIGINS=https://chat.example.com,https://admin.example.com:8443
 ```
 
-Do not replace a controlled domain list with broad wildcards. A normal monolithic deployment does not need to set it.
+Include the scheme and non-default port, but no path or trailing slash. Do not use broad wildcards. Restart `app` after changing the value.
 
 ## OAuth Callbacks: Single Domain
 

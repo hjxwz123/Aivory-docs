@@ -114,7 +114,7 @@ Model provider API keys are stored in the persistent configuration of the admin 
 
 ## Domain, HTTPS, and Access Boundaries
 
-In a single-app deployment, the web UI and `/api` are served from the same origin, so a normal domain deployment needs no extra CORS configuration. Let Caddy, Traefik, Nginx, or a cloud load balancer terminate HTTPS and forward requests to `app`.
+The web UI and `/api` are served by the same app. For a domain or HTTPS reverse proxy, set `ALLOWED_ORIGINS=https://chat.example.com` in `.env`, then let Caddy, Traefik, Nginx, or a cloud load balancer terminate HTTPS and forward requests to `app`.
 
 If the proxy and Compose run on the same host, change the Compose port mapping to `127.0.0.1:8787:8787`, then point the proxy at `127.0.0.1:8787`. Never let the proxy and the app compete for host ports 80/443, and never expose PostgreSQL, Redis, Qdrant, or the sandbox through the reverse proxy. Concrete examples and the callback rules for GitHub OAuth are in [Domains, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx).
 

@@ -86,7 +86,7 @@ Model provider API keys are not written in these variables; they should be store
 | `REDIS_URL` | Custom deployments | Empty, uses in-process cache | Redis DSN. The official Full edition pins internal Redis; the Personal edition explicitly clears it. | Secret/Internal network |
 | `VECTOR_BACKEND` | Custom deployments | `auto` | `auto`, `qdrant`, `sqlite`, or `disabled`. `qdrant` requires a Qdrant address; `sqlite` requires a SQLite database. | Normal |
 | `STATIC_DIR` | Separated frontend or self-built images | Empty | Directory for the embedded SPA static files. The official application image already ships the web UI; set this only for API-only/self-built frontend deployments. | Normal |
-| `ALLOWED_ORIGINS` | Cross-origin frontend/backend deployments | Development address list | Comma-separated exact `scheme://host[:port]` origins. Not needed for the official same-origin Compose; do not use uncontrolled wildcards. | Security configuration |
+| `ALLOWED_ORIGINS` | Domain or HTTPS reverse-proxy deployments | Development address list | Required exact browser `scheme://host[:port]` origins, comma-separated and without paths. Same-origin IP/HTTP testing may leave it unset; do not use uncontrolled wildcards. | Security configuration |
 | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` | Deployments with an outbound proxy | Not set | Standard proxy variables, used for model services, OAuth token exchange, and other outbound HTTP. `NO_PROXY` should include internal services and local addresses. | Internal network/May contain credentials |
 
 ## Authentication, sessions, and OAuth

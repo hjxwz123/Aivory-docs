@@ -115,6 +115,7 @@ body.aivory-home-page .navbar__items--right {
 }
 
 body.aivory-home-page .navbar__brand {
+  flex: 0 0 auto;
   min-height: 44px;
   gap: 0.65rem;
   margin-right: clamp(1rem, 3vw, 3rem);
@@ -323,6 +324,7 @@ body.aivory-experience-page .aivory-navbar-cta:hover {
   }
 
   body:has(main.aivory-home-page) .navbar__brand {
+    flex: 0 0 auto;
     min-height: 44px;
     gap: 0.65rem;
     margin-right: clamp(1rem, 3vw, 3rem);

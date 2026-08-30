@@ -163,7 +163,7 @@ const config: Config = {
           items: [
             {label: 'Multi-model chat', to: '/docs/getting-started/first-chat'},
             {label: 'Knowledge and vectors', to: '/docs/user-guide/conversations-files'},
-            {label: 'Tools and sandbox', to: '/docs/admin/tools-sandbox'},
+            {label: 'Tools and sandbox', to: '/docs/sandbox/overview'},
           ],
         },
         {
@@ -233,6 +233,7 @@ const config: Config = {
           title: 'Reference',
           items: [
             {label: 'Environment variables', to: '/docs/deployment/environment'},
+            {label: 'Sandbox API', to: '/docs/sandbox/api'},
             {label: 'Upgrade and backup', to: '/docs/deployment/upgrade-backup'},
             {label: 'Troubleshooting', to: '/docs/troubleshooting/common-issues'},
           ],

@@ -1,0 +1,225 @@
+---
+title: Python 沙箱说明
+sidebar_position: 1
+description: Aivory Python 沙箱的架构、部署、接入、工作区生命周期、安全边界和故障排查。
+---
+
+# Python 沙箱说明
+
+Aivory 的 Python 沙箱让模型能够真正执行代码、读取对话文件，并把图表、表格、文档和演示文稿作为对话产物返回。沙箱不是 Aivory 主应用进程中的 Python 解释器，而是一项独立的 Sidecar 服务：Aivory 通过内部 HTTP API 请求 Sidecar，Sidecar 再为每个会话创建受限制的 Python 运行容器。
+
+沙箱是可选能力。没有配置沙箱时，普通对话、知识库、文件上传和其他工具仍可使用，但 `python_execute` 不会向用户显示。
+
+## 组件与请求路径
+
+```text
+浏览器
+  |
+  v
+Aivory 应用 / API
+  |  Bearer 鉴权的内部 HTTP
+  v
+Sandbox Sidecar
+  |  Docker API
+  v
+每个会话一个 Python Runner 容器
+  |- /workspace/uploads   对话上传文件
+  |- /workspace/skills    Skill 资源
+  |- /workspace/outputs   本次执行产生的对话产物
+  `- 其他工作文件         同一会话内跨轮次保留
+```
+
+Sidecar 负责会话创建、代码执行、文件传输、空闲回收和工作区归档。Runner 镜像负责实际执行 Python，内置 pandas、NumPy、Matplotlib、Plotly、OpenPyXL、python-pptx、python-docx、ReportLab、WeasyPrint 等常用数据分析与文档生成依赖，并包含 CJK 字体。
+
+## 选择部署方式
+
+| 方式 | 适用场景 | 关键点 |
+| --- | --- | --- |
+| 完整版内置沙箱 | 标准团队部署 | Compose 默认在内部网络连接 Aivory 与 Sidecar，不发布沙箱端口 |
+| 个人版本机沙箱 | 可信单机上的个人使用 | 个人版默认不启动沙箱，需要显式启用 `--profile sandbox` |
+| 独立沙箱服务器 | 希望把代码执行与应用主机隔离 | 只允许 Aivory 通过私网、VPN 或 mTLS 访问，不要直接开放公网 |
+
+### 完整版
+
+完整版的 `docker-compose.prod.yml` 已包含 `sandbox` 和 `sandbox-image-keepalive`。正常部署不需要手工填写地址；应用固定通过内部地址 `http://sandbox:8000` 访问 Sidecar。
+
+```bash
+cd deploy
+docker compose --env-file .env -f docker-compose.prod.yml pull
+docker compose --env-file .env -f docker-compose.prod.yml up -d
+docker compose --env-file .env -f docker-compose.prod.yml ps
+```
+
+不要给 `sandbox` 服务添加 `ports`，也不要通过 Nginx、Caddy 或 Cloudflare Tunnel 暴露它。
+
+### 个人版
+
+个人版默认只启动 Aivory 应用。需要本机 Python 沙箱时，在 `deploy/.env.personal` 中设置相同的连接地址和密钥：
+
+```dotenv
+SANDBOX_BASE_URL=http://sandbox:8000
+SANDBOX_API_KEY=replace-with-a-strong-random-secret
+```
+
+生成随机密钥并启动可选 profile：
+
+```bash
+openssl rand -hex 24
+docker compose --env-file .env.personal -f docker-compose.personal.yml --profile sandbox pull
+docker compose --env-file .env.personal -f docker-compose.personal.yml --profile sandbox up -d
+docker compose --env-file .env.personal -f docker-compose.personal.yml --profile sandbox ps
+```
+
+`SANDBOX_API_KEY` 必须与应用和 Sidecar 使用的值一致。示例文本不能直接用于公网或多人实例。
+
+### 独立服务器
+
+需要单独部署 Sidecar 时，可以使用仓库中的 `sandbox-service/docker-compose.yml`。该 Compose 默认把容器端口 `8000` 映射为宿主机 `48217`；应通过防火墙把它限制到 Aivory 服务器的私网地址。
+
+```bash
+cd sandbox-service
+export SANDBOX_API_KEY="$(openssl rand -hex 24)"
+docker compose pull
+docker compose up -d
+docker compose ps
+curl http://127.0.0.1:48217/healthz
+```
+
+然后在 Aivory 管理后台的“工具”页面填写沙箱地址与同一个 Bearer Key，或者在 Aivory 进程中设置：
+
+```dotenv
+SANDBOX_BASE_URL=http://10.0.0.20:48217
+SANDBOX_API_KEY=the-same-random-secret
+```
+
+独立部署不是公共代码执行 API。推荐使用同一私网、WireGuard/Tailscale、云内网或 mTLS；至少同时设置防火墙来源限制和强随机 Bearer Key。
+
+## 管理后台配置
+
+管理员可以在“工具”页面设置沙箱地址、API Key、单次执行超时和空闲回收时间。后台配置优先用于后续请求；留空时使用部署环境变量。
+
+保存后建议依次检查：
+
+1. 管理后台不再显示“请先配置沙箱”。
+2. `python_execute` 已在系统工具中启用，并且目标模型、用户组和工作空间具有使用权限。
+3. 使用测试对话执行 `print(1 + 1)`。
+4. 再生成一个 `/workspace/outputs/test.txt`，确认文件能回到对话中。
+
+更细的 `SANDBOX_*` 限制见[沙箱变量](../deployment/environment-sandbox.mdx)。
+
+## 工作区与文件生命周期
+
+同一个 Aivory 对话会复用同一沙箱工作区，因此前一轮创建的数据、图表和中间文件可以被后一轮继续读取。
+
+| 路径 | 来源 | 生命周期 |
+| --- | --- | --- |
+| `/workspace/uploads` | 当前对话上传文件 | 每次执行前由 Aivory 重新同步，不依赖旧归档 |
+| `/workspace/skills` | 当前启用 Skill 的资源 | 每次执行前重新同步 |
+| `/workspace/outputs` | Python 生成的对话产物 | 会话内保留；符合限制的新文件会自动返回 Aivory |
+| `/workspace/downloads` | Aivory 后端代为获取的文件 | 会话内保留，可进入工作区归档 |
+| `/workspace` 其他路径 | Python 中间文件 | 会话内保留，可进入工作区归档 |
+
+Runner 固定使用 `--network none`，因此 Python 代码不能直接联网，也不能在执行时使用 `pip install` 下载依赖。需要外部文件时，由 Aivory 的受控工具或后端先获取，再放入工作区；需要新依赖时，应定制并重新构建 Runner 镜像。
+
+空闲会话会被回收。配置有效的工作区存储后，Sidecar 在回收前归档 `/workspace`，下次同一对话创建新 Runner 时恢复。官方单机 Compose 使用本地持久卷；多副本部署应使用 S3、兼容 S3 的对象存储或阿里云 OSS。管理员执行“清空沙箱”时会跳过归档并删除该对话已有的归档，避免下次恢复出已清理内容。
+
+## 产物返回规则
+
+只有本次执行期间在 `/workspace/outputs` 中新增或发生变化的文件会随 `/exec` 响应自动返回。默认限制为：
+
+- 单个产物不超过 20 MiB；
+- 单次最多返回 20 个产物；
+- 单次产物总量不超过 50 MiB；
+- `stdout` 和 `stderr` 超出 32 KiB 后截断。
+
+文件仍可能保留在工作区中，即使因为数量、大小或收集超时没有自动返回。管理员可以通过会话沙箱检查器查看文件；模型也可以在后续执行中重新整理或压缩产物。
+
+## 安全边界
+
+官方 Sidecar 会挂载宿主机 Docker socket。Docker socket 对宿主机近似 root 权限，因此 Sidecar 本身必须被视为高权限控制面。Runner 容器的限制可以降低用户代码风险，但不能消除一个已被攻破的 Sidecar 对宿主机的风险。
+
+默认 Runner 边界包括：
+
+- 非 root 用户运行；
+- 固定 `--network none`；
+- `--cap-drop ALL` 与 `no-new-privileges`；
+- 只读根文件系统；
+- `/tmp`、用户目录和 `/workspace` 使用有大小限制的 tmpfs；
+- CPU、内存、PID、文件描述符和执行时间限制；
+- 工作区路径规范化和符号链接逃逸检查；
+- 请求体、代码、上传文件、输出文本和产物大小限制。
+
+生产环境必须遵守：
+
+1. 设置强随机 `SANDBOX_API_KEY`，不要使用 `SANDBOX_ALLOW_NO_AUTH=1`。
+2. 不对公网发布 Sidecar 端口；即使有 Bearer Key，也应再加私网或来源限制。
+3. 只允许必要的用户、工作空间和模型使用 `python_execute`。
+4. 保持 `SANDBOX_READ_ONLY_ROOTFS=1`，并按最大并发预留总内存和 CPU。
+5. 更高风险的多租户场景应把 Docker Runner 替换为 gVisor、Kata Containers、Firecracker 或其他 microVM 隔离实现，同时保持相同 HTTP 合约。
+
+## 容量规划
+
+`SANDBOX_MEMORY` 和 `SANDBOX_CPUS` 是每个 Runner 的上限，而 `SANDBOX_MAX_SESSIONS` 是活跃 Runner 总数。不要把它们当作整台机器的总配额。例如 `SANDBOX_MEMORY=2g` 且 `SANDBOX_MAX_SESSIONS=4`，理论峰值仅 Runner 就可能接近 8 GiB，还没有计算 Aivory、Sidecar、数据库、缓存与镜像拉取。
+
+低内存机器建议从较小并发开始：
+
+```dotenv
+SANDBOX_MEMORY=768m
+SANDBOX_CPUS=0.75
+SANDBOX_MAX_SESSIONS=2
+SANDBOX_MAX_CONCURRENT_EXECS=1
+SANDBOX_WORKSPACE_SIZE=256m
+```
+
+这些只是起点。生成 PDF、PPT、复杂图表或处理大型表格时可能需要更高内存，不应只通过延长超时掩盖资源不足。
+
+## 升级与镜像
+
+应用、Sidecar 和 Runner 应使用同一版本标签。`sandbox-image-keepalive` 会保持 Runner 镜像处于被引用状态，避免清理任务删除镜像后，下一次执行临时冷拉取大型镜像并超时。
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose images
+```
+
+若自定义 Runner 依赖，请基于当前版本的 `sandbox-service/Dockerfile.runner` 和 `runner-requirements.txt` 构建自己的固定标签，不要在会话中动态安装依赖。
+
+## 排查顺序
+
+### 管理后台显示沙箱不可用
+
+检查有效的 `SANDBOX_BASE_URL` 是否为空、地址是否能从 Aivory 容器访问，以及管理员后台配置是否覆盖了环境变量。容器内的 `127.0.0.1` 指向容器自身，不是另一个 Compose 服务。
+
+### 健康检查失败
+
+```bash
+docker compose ps sandbox
+docker compose logs --tail=200 sandbox
+docker version
+curl http://127.0.0.1:48217/healthz
+```
+
+`/healthz` 返回 `503` 通常表示 Sidecar 无法访问 Docker daemon。首次启动也可能正在拉取 Runner 镜像；查看 `image_ready` 和 Sidecar 日志。
+
+### `401 unauthorized`
+
+Aivory 与 Sidecar 的 `SANDBOX_API_KEY` 不一致，或者直接调用 API 时没有发送 `Authorization: Bearer ...`。
+
+### `429` 或 session busy
+
+活跃会话、创建并发或执行并发已经达到限制，或者同一 session 正有执行未结束。先查看负载和卡住的执行，再调整并发与队列超时；不要无条件放大所有上限。
+
+### 执行超时
+
+同时核对管理员设置的执行超时、`SANDBOX_EXEC_TIMEOUT_CAP_MS`、Aivory 到 Sidecar 的网络，以及 Runner 是否内存不足。超时后 Sidecar 会清理该次执行产生的后台进程。
+
+### 文件没有出现在对话中
+
+确认代码写入 `/workspace/outputs`，并检查单文件、文件数量、总大小和收集时间限制。写入其他目录的文件会留在工作区，但不会作为本次执行产物自动返回。
+
+## 下一步
+
+- 调用或实现兼容 Sidecar 时，查看[沙箱 API](./api.mdx)。
+- 调整资源、并发、归档和请求限制时，查看[沙箱变量](../deployment/environment-sandbox.mdx)。
+- 配置用户、模型和工作空间工具权限时，查看[工具、MCP 与沙盒](../admin/tools-sandbox.mdx)。

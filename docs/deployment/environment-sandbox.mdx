@@ -8,6 +8,8 @@ description: All SANDBOX_* environment variables, resource limits, and security 
 
 This page lists all `SANDBOX_*` variables used by the sandbox sidecar and its session containers. They only affect the sandbox process; after changing them, restart the `sandbox` service. `SANDBOX_BASE_URL` and `SANDBOX_API_KEY` are the application-side connection variables for accessing the sandbox and are already described in the [Environment Variables Overview](./environment.mdx); they are listed here as well for easy cross-checking.
 
+For deployment and operating procedures, start with the [Python Sandbox Guide](../sandbox/overview.mdx). For the sidecar's HTTP contract, see the [Sandbox API Reference](../sandbox/api.mdx).
+
 The official Full edition starts the built-in sidecar by default. The Personal edition does not start it by default; Python is only available after enabling `--profile sandbox` or configuring an external sandbox. The sidecar drives the host Docker socket and has high privileges; do not publish its ports, do not disable authentication, and do not endlessly raise resource limits to fix timeouts.
 
 ## Configuration layers

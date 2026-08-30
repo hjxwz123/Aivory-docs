@@ -8,6 +8,8 @@ description: 内置或外部 Python sandbox sidecar 的全部 SANDBOX_* 环境�
 
 本页列出 sandbox sidecar 与其会话容器使用的全部 `SANDBOX_*` 变量。它们只影响沙盒进程；修改后需要重启 `sandbox` 服务。`SANDBOX_BASE_URL`、`SANDBOX_API_KEY` 是应用访问沙盒的连接变量，已在[环境变量总览](./environment.mdx)说明，这里一并列出以方便核对。
 
+部署和运维流程请先查看 [Python 沙箱说明](../sandbox/overview.mdx)；Sidecar 的 HTTP 合约见[沙箱 API](../sandbox/api.mdx)。
+
 官方完整版默认启动内置 sidecar。个人版默认不启动它，只有启用 `--profile sandbox` 或配置外部沙盒后 Python 才可用。sidecar 驱动宿主机 Docker socket，具有高权限；不要公开端口、不要关闭鉴权、不要为了修复超时而无限制提高资源上限。
 
 ## 配置层级

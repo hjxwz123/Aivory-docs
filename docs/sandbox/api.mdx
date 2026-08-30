@@ -1,0 +1,485 @@
+---
+title: Sandbox API Reference
+sidebar_position: 2
+description: Authentication, session, execution, file, storage endpoints, and error responses for the Aivory Sandbox Sidecar HTTP API.
+---
+
+# Sandbox API Reference
+
+This page describes the current HTTP contract implemented by the official Aivory Sandbox Sidecar. It is primarily for internal communication between the Aivory application and the sidecar, and it is also the compatibility reference for a gVisor, microVM, or other execution backend.
+
+This is not an end-user public API. The sidecar can drive the Docker daemon. Do not expose it directly to the internet merely because it has Bearer authentication.
+
+## Base URL and Authentication
+
+The dedicated deployment example uses this base URL:
+
+```text
+http://127.0.0.1:48217
+```
+
+Every endpoint except `GET /healthz` requires:
+
+```http
+Authorization: Bearer <SANDBOX_API_KEY>
+Content-Type: application/json
+```
+
+The examples on this page use:
+
+```bash
+export SANDBOX_URL=http://127.0.0.1:48217
+export SANDBOX_API_KEY=replace-with-the-sidecar-key
+```
+
+The sidecar refuses to start without `SANDBOX_API_KEY` by default. `SANDBOX_ALLOW_NO_AUTH=1` is only for development bound to a trusted local interface and must not be used in production.
+
+## Common Conventions
+
+- Requests and responses use UTF-8 JSON.
+- Binary data uses standard Base64 in `data_base64`, without a Data URL prefix.
+- The sidecar creates `session_id` as a 32-character lowercase hexadecimal UUID. Clients cannot supply another format.
+- Relative workspace paths resolve under `/workspace`; absolute paths must stay under `/workspace`.
+- The sidecar resolves symlinks and rejects reads or writes whose real path escapes `/workspace`.
+- Executions in one session are serialized. Different sessions share global concurrency limits.
+- FastAPI handler errors normally return `{"detail":"..."}`. Authentication and body-size middleware errors return `{"error":"..."}`.
+
+## Endpoint Summary
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/healthz` | Check the sidecar, Docker daemon, and runner image state |
+| `POST` | `/sessions` | Create a runner session and optionally restore a workspace |
+| `DELETE` | `/sessions/{session_id}` | Archive and release a session, or discard its workspace |
+| `POST` | `/exec` | Execute Python and return output and artifacts |
+| `POST` | `/files` | Write a file into the session workspace |
+| `POST` | `/files/get` | Read a file from the session workspace |
+| `POST` | `/files/list` | List files in the session workspace |
+| `POST` | `/files/reset-inputs` | Clear only the Aivory-managed upload and skill input directories |
+| `POST` | `/storage/put` | Upload an object and return a presigned GET URL |
+| `POST` | `/storage/delete` | Delete an object inside the configured prefix |
+| `POST` | `/storage/gc` | Remove expired workspace archives and MinerU temporary objects |
+
+## Health
+
+### `GET /healthz`
+
+This is the only endpoint that does not require a Bearer key. It calls the Docker daemon to retrieve its server version.
+
+```bash
+curl "$SANDBOX_URL/healthz"
+```
+
+Successful response, HTTP `200`:
+
+```json
+{
+  "ok": true,
+  "docker": "27.5.1",
+  "image": "ghcr.io/hjxwz123/aivory-sandbox:2.4.2",
+  "image_ready": true
+}
+```
+
+`image_ready=false` means the current sidecar process has not confirmed that the runner image is ready. The next session creation may pull it synchronously and take longer. If the Docker daemon is unavailable, the endpoint returns HTTP `503` with `ok=false`.
+
+## Sessions
+
+### `POST /sessions`
+
+Create a runner container. The request body may be an empty object.
+
+```json
+{
+  "idle_ttl_sec": 1800,
+  "archive_key": "conv_6211e497a1db",
+  "storage": {
+    "provider": "local",
+    "prefix": "workspaces/"
+  }
+}
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `idle_ttl_sec` | No | Idle reclamation interval in seconds; absent or `0` uses the sidecar default, and the value is capped by `SANDBOX_IDLE_TTL_CAP_SECONDS` |
+| `archive_key` | No | Stable archive key; Aivory uses the conversation ID so a new session can restore the same conversation workspace |
+| `storage` | No | Workspace archive storage; see [Storage Configuration](#storage-configuration) |
+
+```bash
+curl -sS -X POST "$SANDBOX_URL/sessions" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"idle_ttl_sec":1800,"archive_key":"conv_example"}'
+```
+
+Successful response:
+
+```json
+{"session_id":"9fd8b918372d489ab6aa6843611148be"}
+```
+
+Creation confirms or pulls the runner image, creates a restricted container, initializes the workspace, warms the Matplotlib font cache, and attempts to restore an archive. After restoration, `/workspace/uploads` and `/workspace/skills` are cleared so Aivory can restage current authoritative inputs.
+
+The endpoint returns `429` when `SANDBOX_MAX_SESSIONS` or the creation queue is full, and `500` when Docker creation or workspace initialization fails.
+
+### `DELETE /sessions/{session_id}`
+
+Release a session. By default the sidecar attempts to archive the workspace before deleting the runner. Without effective storage, it deletes the runner directly.
+
+Normal release:
+
+```bash
+curl -sS -X DELETE "$SANDBOX_URL/sessions/$SID" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+Discard the workspace without creating a new archive, and remove the old archive for `archive_key`:
+
+```json
+{
+  "discard": true,
+  "archive_key": "conv_6211e497a1db",
+  "storage": {
+    "provider": "local",
+    "prefix": "workspaces/"
+  }
+}
+```
+
+Successful response:
+
+```json
+{"ok":true}
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `discard` | No | When `true`, skip archiving and attempt to delete the existing archive; defaults to `false` |
+| `archive_key` | No | Stable archive key to remove when `discard=true` |
+| `storage` | No | Storage used for this archive or purge; when omitted, the sidecar tries the configuration remembered at session creation |
+
+## Execute Python
+
+### `POST /exec`
+
+```json
+{
+  "session_id": "9fd8b918372d489ab6aa6843611148be",
+  "code": "from pathlib import Path\nPath('/workspace/outputs/result.txt').write_text('hello', encoding='utf-8')\nprint(2 + 2)",
+  "timeout_ms": 120000
+}
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `session_id` | Yes | Session ID returned by `/sessions` |
+| `code` | Yes | UTF-8 Python source; default maximum is 1 MiB |
+| `timeout_ms` | No | Execution timeout in milliseconds; defaults to 120000, has a minimum of 1000, and is capped by `SANDBOX_EXEC_TIMEOUT_CAP_MS` |
+
+```bash
+curl -sS -X POST "$SANDBOX_URL/exec" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d "$(python3 -c 'import json,os; print(json.dumps({"session_id":os.environ["SID"],"code":"print(2 + 2)","timeout_ms":120000}))')"
+```
+
+Successful response:
+
+```json
+{
+  "stdout": "4\n",
+  "stderr": "",
+  "exit_code": 0,
+  "files": [
+    {
+      "name": "result.txt",
+      "mime_type": "text/plain",
+      "data_base64": "aGVsbG8="
+    }
+  ]
+}
+```
+
+`files` contains only eligible files created or changed under `/workspace/outputs` during this execution. A timed-out program normally still produces HTTP `200` with `exit_code=124` and an explanation in `stderr`. A reclaimed or terminating session returns `404`. A busy session lock or full global execution queue returns `429`.
+
+## Workspace Files
+
+### `POST /files`
+
+Write a file into the session's `/workspace`. Relative paths receive a `/workspace/` prefix.
+
+```json
+{
+  "session_id": "9fd8b918372d489ab6aa6843611148be",
+  "path": "/workspace/uploads/data.csv",
+  "data_base64": "bmFtZSx2YWx1ZQphLDEK"
+}
+```
+
+```bash
+export DATA_BASE64="$(base64 < ./data.csv | tr -d '\n')"
+curl -sS -X POST "$SANDBOX_URL/files" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d "$(python3 -c 'import json,os; print(json.dumps({"session_id":os.environ["SID"],"path":"/workspace/uploads/data.csv","data_base64":os.environ["DATA_BASE64"]}))')"
+```
+
+Successful response:
+
+```json
+{"ok":true}
+```
+
+Invalid Base64 or an escaping path returns `400`, a file larger than `SANDBOX_MAX_UPLOAD_BYTES` returns `413`, and a missing session returns `404`.
+
+### `POST /files/get`
+
+Read a regular file under `/workspace`.
+
+```json
+{
+  "session_id": "9fd8b918372d489ab6aa6843611148be",
+  "path": "/workspace/outputs/result.txt"
+}
+```
+
+Successful response:
+
+```json
+{"data_base64":"aGVsbG8="}
+```
+
+A missing file returns `404`; directories cannot be read as files. Path restrictions are the same as `/files`.
+
+### `POST /files/list`
+
+List regular files under `/workspace` for the admin conversation sandbox inspector.
+
+Request:
+
+```json
+{"session_id":"9fd8b918372d489ab6aa6843611148be"}
+```
+
+Response paths are relative to `/workspace`:
+
+```json
+{
+  "files": [
+    {"path":"outputs/result.txt","size":5},
+    {"path":"uploads/data.csv","size":17}
+  ]
+}
+```
+
+The current implementation returns at most 500 files, scans to a maximum depth of 6, and caps the underlying listing output. This endpoint is read-only.
+
+### `POST /files/reset-inputs`
+
+Clear and recreate `/workspace/uploads` and `/workspace/skills` while preserving `/workspace/downloads`, `/workspace/outputs`, and other intermediate state. The caller cannot choose deletion paths.
+
+Request:
+
+```json
+{"session_id":"9fd8b918372d489ab6aa6843611148be"}
+```
+
+Active session:
+
+```json
+{"ok":true,"session_gone":false}
+```
+
+Session already reclaimed:
+
+```json
+{"ok":false,"session_gone":true}
+```
+
+Reclamation is an expected recovery signal, so this case still returns HTTP `200`. Aivory creates a replacement session and restages the input files.
+
+## Storage Configuration
+
+`storage` is internal configuration resolved by the Aivory admin layer and forwarded to the sidecar. Never accept these fields from end users because they may contain object-store credentials.
+
+### Local Archives
+
+```json
+{
+  "provider": "local",
+  "prefix": "workspaces/"
+}
+```
+
+Local mode requires the operator to set and mount `SANDBOX_LOCAL_STORAGE_DIR` on the sidecar. It is for single-node workspace archives only. It cannot generate presigned URLs and therefore cannot support the MinerU file flow through `/storage/put`.
+
+### S3 or S3-compatible Storage
+
+```json
+{
+  "provider": "s3",
+  "prefix": "aivory/",
+  "s3_bucket": "aivory-data",
+  "s3_region": "us-east-1",
+  "s3_endpoint": "https://minio.example.internal",
+  "s3_access_key": "access-key",
+  "s3_secret_key": "secret-key"
+}
+```
+
+Omit `s3_endpoint` for AWS S3. With a custom endpoint, the sidecar uses path-style addressing and SigV4.
+
+### Aliyun OSS
+
+```json
+{
+  "provider": "aliyun_oss",
+  "prefix": "aivory/",
+  "oss_bucket": "aivory-data",
+  "oss_endpoint": "https://oss-cn-hangzhou.aliyuncs.com",
+  "oss_access_key_id": "access-key-id",
+  "oss_access_key_secret": "access-key-secret"
+}
+```
+
+When omitted, `prefix` defaults to `workspaces/`. Object keys cannot be absolute and cannot contain `..` or NUL.
+
+## Object Storage Endpoints
+
+These endpoints support Aivory's internal workspace and document-processing flows. They must not be offered directly to regular users.
+
+### `POST /storage/put`
+
+Upload an object and return a short-lived presigned GET URL. Use this with `s3` and `aliyun_oss` only; `local` has no URL that an external parser can access.
+
+```json
+{
+  "key": "mineru/document.pdf",
+  "data_base64": "JVBERi0xLjQK...",
+  "content_type": "application/pdf",
+  "expires_in": 3600,
+  "storage": {
+    "provider": "s3",
+    "prefix": "aivory/",
+    "s3_bucket": "aivory-data",
+    "s3_region": "us-east-1"
+  }
+}
+```
+
+Successful response:
+
+```json
+{
+  "provider": "s3",
+  "key": "aivory/mineru/document.pdf",
+  "url": "https://storage.example/...?signature=...",
+  "expires_in": 3600
+}
+```
+
+`expires_in` defaults to 3600 seconds and is capped by `SANDBOX_STORAGE_MAX_TTL`. Storage SDK or upstream errors return `502`.
+
+### `POST /storage/delete`
+
+Delete an object. `key` may be the fully prefixed key returned by `/storage/put` or a relative key without the configured prefix. The sidecar only deletes objects inside the configured `prefix`.
+
+```json
+{
+  "key": "aivory/mineru/document.pdf",
+  "storage": {
+    "provider": "s3",
+    "prefix": "aivory/",
+    "s3_bucket": "aivory-data",
+    "s3_region": "us-east-1"
+  }
+}
+```
+
+Successful response:
+
+```json
+{"ok":true,"key":"aivory/mineru/document.pdf"}
+```
+
+### `POST /storage/gc`
+
+Delete workspace `.tgz` archives and MinerU temporary objects older than a specified age. The sidecar scans only its two known prefixes and never deletes an object whose timestamp is unknown.
+
+```json
+{
+  "max_age_seconds": 604800,
+  "storage": {
+    "provider": "local",
+    "prefix": "aivory/"
+  }
+}
+```
+
+Successful response:
+
+```json
+{"deleted":3,"scanned":12,"freed_bytes":10485760}
+```
+
+A zero or negative `max_age_seconds` disables deletion and returns zeros. Ineffective storage also safely returns zeros.
+
+## Error Responses
+
+| HTTP status | Common cause |
+| --- | --- |
+| `400` | Invalid session ID, Base64, workspace path, storage key, or storage configuration |
+| `401` | Missing or mismatched Bearer key |
+| `404` | Reclaimed or terminating session, or missing target file |
+| `413` | Request body, source code, or uploaded file exceeds a limit |
+| `422` | Missing JSON field, wrong type, or other Pydantic validation failure |
+| `429` | Active-session limit reached, or creation, execution, or session-lock queue is full |
+| `500` | Docker, container initialization, workspace I/O, or runtime component failure |
+| `502` | S3 or OSS operation failed |
+| `503` | `/healthz` cannot reach the Docker daemon |
+
+FastAPI error example:
+
+```json
+{"detail":"session not found or not running"}
+```
+
+Authentication error example:
+
+```json
+{"error":"unauthorized"}
+```
+
+Clients should branch on HTTP status and structured fields, not the full English error text. A `404` for a lost session is an expected recoverable state: create a new session, restage inputs, and retry once when the business operation permits it.
+
+## Complete Smoke Test
+
+This flow creates a session, executes code, receives an artifact, and releases the session:
+
+```bash
+export SANDBOX_URL=${SANDBOX_URL:-http://127.0.0.1:48217}
+
+export SID="$(curl -sS -X POST "$SANDBOX_URL/sessions" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"archive_key":"api-smoke-test"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])')"
+
+curl -sS -X POST "$SANDBOX_URL/exec" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d "$(python3 -c 'import json,os; print(json.dumps({"session_id":os.environ["SID"],"code":"from pathlib import Path\nPath(\"/workspace/outputs/hello.txt\").write_text(\"hello\", encoding=\"utf-8\")\nprint(\"ok\")","timeout_ms":30000}))')" \
+  | python3 -m json.tool
+
+curl -sS -X DELETE "$SANDBOX_URL/sessions/$SID" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+Expect `/exec` to return `stdout` as `"ok\n"`, `exit_code` as `0`, and `hello.txt` in `files`.
+
+For deployment, security, and lifecycle guidance, see the [Python Sandbox Guide](./overview.mdx). For every sidecar setting, see [Sandbox Variables](../deployment/environment-sandbox.mdx).

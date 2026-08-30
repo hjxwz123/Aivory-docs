@@ -1,0 +1,225 @@
+---
+title: Python Sandbox Guide
+sidebar_position: 1
+description: Architecture, deployment, integration, workspace lifecycle, security boundaries, and troubleshooting for the Aivory Python sandbox.
+---
+
+# Python Sandbox Guide
+
+The Aivory Python sandbox lets models execute code, read conversation files, and return charts, spreadsheets, documents, and presentations as conversation artifacts. It is not a Python interpreter embedded in the Aivory application process. It is an independent sidecar: Aivory calls the sidecar through an internal HTTP API, and the sidecar creates a restricted Python runner container for each session.
+
+The sandbox is optional. Conversations, knowledge bases, file uploads, and other tools continue to work without it, but `python_execute` is hidden from users when no sandbox is configured.
+
+## Components and Request Path
+
+```text
+Browser
+  |
+  v
+Aivory application / API
+  |  Bearer-authenticated internal HTTP
+  v
+Sandbox sidecar
+  |  Docker API
+  v
+One Python runner container per session
+  |- /workspace/uploads   Conversation uploads
+  |- /workspace/skills    Skill resources
+  |- /workspace/outputs   Artifacts produced by the current execution
+  `- Other work files     Preserved across turns in the same session
+```
+
+The sidecar manages session creation, code execution, file transfer, idle reclamation, and workspace archives. The runner image executes Python and includes common data-analysis and document-generation packages such as pandas, NumPy, Matplotlib, Plotly, OpenPyXL, python-pptx, python-docx, ReportLab, and WeasyPrint, together with CJK fonts.
+
+## Choose a Deployment Mode
+
+| Mode | Best for | Key point |
+| --- | --- | --- |
+| Full edition built-in sandbox | Standard team deployments | Compose connects Aivory and the sidecar on an internal network and publishes no sandbox port |
+| Personal edition local sandbox | Personal use on a trusted host | The Personal edition does not start it by default; explicitly enable `--profile sandbox` |
+| Dedicated sandbox server | Isolating code execution from the application host | Allow Aivory over a private network, VPN, or mTLS only; do not expose it directly to the internet |
+
+### Full Edition
+
+The Full edition's `docker-compose.prod.yml` already includes `sandbox` and `sandbox-image-keepalive`. A normal deployment does not need a manually configured address; the application uses the internal address `http://sandbox:8000`.
+
+```bash
+cd deploy
+docker compose --env-file .env -f docker-compose.prod.yml pull
+docker compose --env-file .env -f docker-compose.prod.yml up -d
+docker compose --env-file .env -f docker-compose.prod.yml ps
+```
+
+Do not add `ports` to the `sandbox` service or expose it through Nginx, Caddy, or Cloudflare Tunnel.
+
+### Personal Edition
+
+The Personal edition starts only the Aivory application by default. To run the local Python sandbox, set the matching address and key in `deploy/.env.personal`:
+
+```dotenv
+SANDBOX_BASE_URL=http://sandbox:8000
+SANDBOX_API_KEY=replace-with-a-strong-random-secret
+```
+
+Generate a random key and start the optional profile:
+
+```bash
+openssl rand -hex 24
+docker compose --env-file .env.personal -f docker-compose.personal.yml --profile sandbox pull
+docker compose --env-file .env.personal -f docker-compose.personal.yml --profile sandbox up -d
+docker compose --env-file .env.personal -f docker-compose.personal.yml --profile sandbox ps
+```
+
+`SANDBOX_API_KEY` must have the same value in the application and sidecar. Do not reuse the example text on a public or multi-user instance.
+
+### Dedicated Server
+
+To deploy the sidecar separately, use `sandbox-service/docker-compose.yml` from the repository. That Compose file maps container port `8000` to host port `48217`; restrict it to the Aivory server's private address with a firewall.
+
+```bash
+cd sandbox-service
+export SANDBOX_API_KEY="$(openssl rand -hex 24)"
+docker compose pull
+docker compose up -d
+docker compose ps
+curl http://127.0.0.1:48217/healthz
+```
+
+Enter the sandbox address and the same Bearer key on Aivory's Admin > Tools page, or set them on the Aivory process:
+
+```dotenv
+SANDBOX_BASE_URL=http://10.0.0.20:48217
+SANDBOX_API_KEY=the-same-random-secret
+```
+
+A dedicated deployment is not a public code-execution API. Prefer the same private network, WireGuard/Tailscale, a cloud private network, or mTLS. At minimum, combine a strong random Bearer key with a source firewall rule.
+
+## Admin Configuration
+
+Administrators can set the sandbox address, API key, execution timeout, and idle reclamation window on the Tools page. Admin values apply to subsequent requests; blank values fall back to deployment environment variables.
+
+After saving, verify these items in order:
+
+1. The admin page no longer says that a sandbox must be configured.
+2. `python_execute` is enabled as a system tool, and the target model, user group, and workspace have permission to use it.
+3. Run `print(1 + 1)` in a test conversation.
+4. Generate `/workspace/outputs/test.txt` and confirm that the file returns to the conversation.
+
+See [Sandbox Variables](../deployment/environment-sandbox.mdx) for the detailed `SANDBOX_*` limits.
+
+## Workspace and File Lifecycle
+
+One Aivory conversation reuses one sandbox workspace, so later turns can read data, charts, and intermediate files created by earlier turns.
+
+| Path | Source | Lifecycle |
+| --- | --- | --- |
+| `/workspace/uploads` | Current conversation uploads | Restaged by Aivory before execution; not dependent on old archives |
+| `/workspace/skills` | Resources from currently enabled skills | Restaged before execution |
+| `/workspace/outputs` | Artifacts generated by Python | Preserved in the session; eligible changed files automatically return to Aivory |
+| `/workspace/downloads` | Files fetched by the Aivory backend | Preserved in the session and eligible for workspace archiving |
+| Other paths under `/workspace` | Python intermediate files | Preserved in the session and eligible for workspace archiving |
+
+The runner always uses `--network none`. Python cannot access the network directly or download packages with runtime `pip install`. Use controlled Aivory tools or the backend to fetch external files and stage them into the workspace. Add dependencies by customizing and rebuilding the runner image.
+
+Idle sessions are reclaimed. With effective workspace storage configured, the sidecar archives `/workspace` before reclamation and restores it when the same conversation creates a new runner. The official single-host Compose uses a local persistent volume; multi-replica deployments should use S3, S3-compatible object storage, or Aliyun OSS. The administrator's Clear Sandbox action skips archiving and deletes the conversation's existing archive so cleared state cannot return on the next restore.
+
+## Artifact Return Rules
+
+Only files created or changed under `/workspace/outputs` during the current execution are automatically included in the `/exec` response. Default limits are:
+
+- no more than 20 MiB per artifact;
+- no more than 20 artifacts per execution;
+- no more than 50 MiB of artifacts per execution;
+- `stdout` and `stderr` are truncated after 32 KiB.
+
+A file can remain in the workspace even if it was not returned because of count, size, or collection-time limits. Administrators can inspect the conversation sandbox, and the model can reorganize or compress files in a later execution.
+
+## Security Boundaries
+
+The official sidecar mounts the host Docker socket. The Docker socket is approximately root-equivalent on the host, so treat the sidecar itself as a privileged control plane. Runner restrictions reduce the risk of user code, but they do not eliminate the host risk of a compromised sidecar.
+
+Default runner boundaries include:
+
+- execution as a non-root user;
+- mandatory `--network none`;
+- `--cap-drop ALL` and `no-new-privileges`;
+- a read-only root filesystem;
+- size-bounded tmpfs mounts for `/tmp`, the user home, and `/workspace`;
+- CPU, memory, PID, file descriptor, and execution-time limits;
+- workspace path normalization and symlink escape checks;
+- request body, code, upload, output text, and artifact size limits.
+
+Production requirements:
+
+1. Set a strong random `SANDBOX_API_KEY`; never use `SANDBOX_ALLOW_NO_AUTH=1`.
+2. Do not publish the sidecar to the internet. Use a private network or source restriction even when Bearer authentication is enabled.
+3. Grant `python_execute` only to necessary users, workspaces, and models.
+4. Keep `SANDBOX_READ_ONLY_ROOTFS=1` and budget total memory and CPU for maximum concurrency.
+5. For higher-risk multi-tenant deployments, replace the Docker runner with gVisor, Kata Containers, Firecracker, or another microVM isolation backend while preserving the same HTTP contract.
+
+## Capacity Planning
+
+`SANDBOX_MEMORY` and `SANDBOX_CPUS` are per-runner limits, while `SANDBOX_MAX_SESSIONS` is the number of active runners. They are not host-wide totals. With `SANDBOX_MEMORY=2g` and `SANDBOX_MAX_SESSIONS=4`, runners alone can theoretically approach 8 GiB, before accounting for Aivory, the sidecar, databases, caches, and image pulls.
+
+Start with lower concurrency on a small host:
+
+```dotenv
+SANDBOX_MEMORY=768m
+SANDBOX_CPUS=0.75
+SANDBOX_MAX_SESSIONS=2
+SANDBOX_MAX_CONCURRENT_EXECS=1
+SANDBOX_WORKSPACE_SIZE=256m
+```
+
+These are starting points. Generating PDFs or presentations, rendering complex charts, and processing large spreadsheets can require more memory. Do not use longer timeouts as the only response to resource exhaustion.
+
+## Upgrades and Images
+
+Use the same release tag for the application, sidecar, and runner. `sandbox-image-keepalive` keeps the runner image referenced so a cleanup job cannot remove it and force the next execution to cold-pull a large image and time out.
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose images
+```
+
+For custom runner dependencies, build a pinned image from the current `sandbox-service/Dockerfile.runner` and `runner-requirements.txt`. Do not install dependencies dynamically inside sessions.
+
+## Troubleshooting Order
+
+### The Admin Page Says the Sandbox Is Unavailable
+
+Check whether the effective `SANDBOX_BASE_URL` is empty, whether the address is reachable from the Aivory container, and whether admin settings override the environment. Inside a container, `127.0.0.1` points to that container, not another Compose service.
+
+### Health Check Fails
+
+```bash
+docker compose ps sandbox
+docker compose logs --tail=200 sandbox
+docker version
+curl http://127.0.0.1:48217/healthz
+```
+
+A `503` from `/healthz` normally means the sidecar cannot reach the Docker daemon. On first startup, it may also be pulling the runner image; inspect `image_ready` and the sidecar logs.
+
+### `401 unauthorized`
+
+The Aivory and sidecar `SANDBOX_API_KEY` values do not match, or a direct API call omitted `Authorization: Bearer ...`.
+
+### `429` or Session Busy
+
+The active-session, creation-concurrency, or execution-concurrency limit was reached, or the same session already has a running execution. Inspect load and stuck work before adjusting concurrency and queue timeout; do not raise every limit unconditionally.
+
+### Execution Times Out
+
+Check the admin execution timeout, `SANDBOX_EXEC_TIMEOUT_CAP_MS`, the Aivory-to-sidecar network, and runner memory pressure. The sidecar cleans up background processes created by a timed-out execution.
+
+### A File Does Not Appear in the Conversation
+
+Confirm that code writes it under `/workspace/outputs`, then check the per-file, file-count, total-size, and collection-time limits. Files written elsewhere remain in the workspace but are not automatically returned as artifacts for that execution.
+
+## Next Steps
+
+- To call or implement a compatible sidecar, read the [Sandbox API Reference](./api.mdx).
+- To tune resources, concurrency, archives, and request limits, read [Sandbox Variables](../deployment/environment-sandbox.mdx).
+- To configure user, model, and workspace tool permissions, read [Tools, MCP, and Sandbox](../admin/tools-sandbox.mdx).

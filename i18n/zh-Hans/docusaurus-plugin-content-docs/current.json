@@ -15,6 +15,10 @@
     "message": "管理员",
     "description": "The label for category 'Administration' in sidebar 'docsSidebar'"
   },
+  "sidebar.docsSidebar.category.Sandbox": {
+    "message": "Python 沙箱",
+    "description": "The label for category 'Sandbox' in sidebar 'docsSidebar'"
+  },
   "sidebar.docsSidebar.category.User guide": {
     "message": "用户指南",
     "description": "The label for category 'User guide' in sidebar 'docsSidebar'"

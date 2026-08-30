@@ -36,6 +36,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Sandbox',
+      items: ['sandbox/overview', 'sandbox/api'],
+    },
+    {
+      type: 'category',
       label: 'User guide',
       items: ['user-guide/conversations-files'],
     },

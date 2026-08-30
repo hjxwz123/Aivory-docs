@@ -27,6 +27,10 @@
     "message": "环境变量",
     "description": "The label of footer link with label=Environment variables linking to /docs/deployment/environment"
   },
+  "link.item.label.Sandbox API": {
+    "message": "沙箱 API",
+    "description": "The label of footer link with label=Sandbox API linking to /docs/sandbox/api"
+  },
   "link.item.label.Upgrade and backup": {
     "message": "升级与备份",
     "description": "The label of footer link with label=Upgrade and backup linking to /docs/deployment/upgrade-backup"

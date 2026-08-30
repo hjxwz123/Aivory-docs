@@ -1,0 +1,485 @@
+---
+title: 沙箱 API
+sidebar_position: 2
+description: Aivory Sandbox Sidecar HTTP API 的鉴权、会话、执行、文件、存储端点和错误响应参考。
+---
+
+# 沙箱 API
+
+本页描述 Aivory 官方 Sandbox Sidecar 当前实现的 HTTP 合约。它主要用于 Aivory 应用与 Sidecar 之间的内部通信，也可以作为实现 gVisor、microVM 或其他兼容执行后端时的协议参考。
+
+这不是面向最终用户的公共 API。Sidecar 能够驱动 Docker daemon；不要因为接口有 Bearer 鉴权就把它直接暴露到公网。
+
+## 基础地址与鉴权
+
+独立部署示例的基础地址为：
+
+```text
+http://127.0.0.1:48217
+```
+
+除 `GET /healthz` 外，所有端点都必须发送：
+
+```http
+Authorization: Bearer <SANDBOX_API_KEY>
+Content-Type: application/json
+```
+
+本文示例使用：
+
+```bash
+export SANDBOX_URL=http://127.0.0.1:48217
+export SANDBOX_API_KEY=replace-with-the-sidecar-key
+```
+
+未配置 `SANDBOX_API_KEY` 时，Sidecar 默认拒绝启动。`SANDBOX_ALLOW_NO_AUTH=1` 仅限绑定在可信本机的开发环境，不能用于生产。
+
+## 公共约定
+
+- 请求与响应使用 UTF-8 JSON。
+- 二进制文件放在 `data_base64` 字段中，使用标准 Base64，不使用 Data URL 前缀。
+- `session_id` 由 Sidecar 创建，为 32 位小写十六进制 UUID；客户端不能自行构造其他格式。
+- 相对工作区路径会解析到 `/workspace`；绝对路径必须位于 `/workspace` 下。
+- Sidecar 会再次解析符号链接后的真实路径，拒绝逃逸 `/workspace` 的读写。
+- 同一个 session 内的执行串行化，不同 session 受全局并发上限约束。
+- FastAPI 业务错误通常返回 `{"detail":"..."}`；鉴权与请求体中间件错误返回 `{"error":"..."}`。
+
+## 端点总览
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| `GET` | `/healthz` | 检查 Sidecar、Docker daemon 与 Runner 镜像状态 |
+| `POST` | `/sessions` | 创建 Runner session，可恢复持久工作区 |
+| `DELETE` | `/sessions/{session_id}` | 归档并释放 session，或彻底清空工作区 |
+| `POST` | `/exec` | 在 session 中执行 Python 并返回输出与产物 |
+| `POST` | `/files` | 向 session 工作区写入文件 |
+| `POST` | `/files/get` | 从 session 工作区读取文件 |
+| `POST` | `/files/list` | 列出 session 工作区文件 |
+| `POST` | `/files/reset-inputs` | 仅清空 Aivory 管理的上传与 Skill 输入目录 |
+| `POST` | `/storage/put` | 上传对象并返回预签名 GET URL |
+| `POST` | `/storage/delete` | 删除配置前缀内的对象 |
+| `POST` | `/storage/gc` | 清理过期的工作区归档与 MinerU 临时对象 |
+
+## 健康检查
+
+### `GET /healthz`
+
+这是唯一不要求 Bearer Key 的端点。它会实际调用 Docker daemon 获取服务端版本。
+
+```bash
+curl "$SANDBOX_URL/healthz"
+```
+
+成功响应，HTTP `200`：
+
+```json
+{
+  "ok": true,
+  "docker": "27.5.1",
+  "image": "ghcr.io/hjxwz123/aivory-sandbox:2.4.2",
+  "image_ready": true
+}
+```
+
+`image_ready=false` 表示 Sidecar 尚未在当前进程中确认 Runner 镜像已准备好。下一次创建 session 时可能同步拉取镜像，因此首次请求会更慢。Docker daemon 不可用时返回 HTTP `503`，`ok=false`。
+
+## Session
+
+### `POST /sessions`
+
+创建一个 Runner 容器。请求体可以是空对象。
+
+```json
+{
+  "idle_ttl_sec": 1800,
+  "archive_key": "conv_6211e497a1db",
+  "storage": {
+    "provider": "local",
+    "prefix": "workspaces/"
+  }
+}
+```
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `idle_ttl_sec` | 否 | session 空闲回收时间，单位秒；省略或 `0` 使用 Sidecar 默认值，实际值受 `SANDBOX_IDLE_TTL_CAP_SECONDS` 限制 |
+| `archive_key` | 否 | 稳定的归档键，Aivory 使用对话 ID；设置后可在新 session 中恢复同一对话的工作区 |
+| `storage` | 否 | 工作区归档存储；结构见[存储配置](#存储配置) |
+
+```bash
+curl -sS -X POST "$SANDBOX_URL/sessions" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"idle_ttl_sec":1800,"archive_key":"conv_example"}'
+```
+
+成功响应：
+
+```json
+{"session_id":"9fd8b918372d489ab6aa6843611148be"}
+```
+
+创建流程会确认或拉取 Runner 镜像、创建受限制容器、初始化工作区、预热 Matplotlib 字体，并尽力恢复归档。恢复完成后，`/workspace/uploads` 和 `/workspace/skills` 会被清空，等待 Aivory 按当前对话重新同步权威输入。
+
+达到 `SANDBOX_MAX_SESSIONS` 或创建队列已满时返回 `429`。Docker 创建或工作区初始化失败时返回 `500`。
+
+### `DELETE /sessions/{session_id}`
+
+释放 session。默认会在删除 Runner 前尽力归档工作区；没有有效存储配置时直接删除。
+
+普通释放：
+
+```bash
+curl -sS -X DELETE "$SANDBOX_URL/sessions/$SID" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+彻底清空，不创建新归档，并删除 `archive_key` 对应的旧归档：
+
+```json
+{
+  "discard": true,
+  "archive_key": "conv_6211e497a1db",
+  "storage": {
+    "provider": "local",
+    "prefix": "workspaces/"
+  }
+}
+```
+
+成功响应：
+
+```json
+{"ok":true}
+```
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `discard` | 否 | `true` 时跳过归档，并尝试删除已有归档；默认 `false` |
+| `archive_key` | 否 | `discard=true` 时需要清除的稳定归档键 |
+| `storage` | 否 | 本次归档或清理使用的存储配置；省略时 Sidecar 会尝试使用创建 session 时记住的配置 |
+
+## 执行 Python
+
+### `POST /exec`
+
+```json
+{
+  "session_id": "9fd8b918372d489ab6aa6843611148be",
+  "code": "from pathlib import Path\nPath('/workspace/outputs/result.txt').write_text('hello', encoding='utf-8')\nprint(2 + 2)",
+  "timeout_ms": 120000
+}
+```
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `session_id` | 是 | `/sessions` 返回的 session ID |
+| `code` | 是 | UTF-8 Python 源码；默认最大 1 MiB |
+| `timeout_ms` | 否 | 执行超时毫秒数；默认 120000，最小 1000，并受 `SANDBOX_EXEC_TIMEOUT_CAP_MS` 限制 |
+
+```bash
+curl -sS -X POST "$SANDBOX_URL/exec" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d "$(python3 -c 'import json,os; print(json.dumps({"session_id":os.environ["SID"],"code":"print(2 + 2)","timeout_ms":120000}))')"
+```
+
+成功响应：
+
+```json
+{
+  "stdout": "4\n",
+  "stderr": "",
+  "exit_code": 0,
+  "files": [
+    {
+      "name": "result.txt",
+      "mime_type": "text/plain",
+      "data_base64": "aGVsbG8="
+    }
+  ]
+}
+```
+
+`files` 只包含本次执行期间在 `/workspace/outputs` 中新增或变化、且符合产物限制的文件。超时通常仍返回 HTTP `200`，其中 `exit_code=124`，`stderr` 包含执行被终止的说明。session 已被回收或正在终止时返回 `404`；同一 session 被其他请求长时间占用或全局执行队列已满时返回 `429`。
+
+## 工作区文件
+
+### `POST /files`
+
+把文件写入 session 的 `/workspace`。相对路径会自动加上 `/workspace/`。
+
+```json
+{
+  "session_id": "9fd8b918372d489ab6aa6843611148be",
+  "path": "/workspace/uploads/data.csv",
+  "data_base64": "bmFtZSx2YWx1ZQphLDEK"
+}
+```
+
+```bash
+export DATA_BASE64="$(base64 < ./data.csv | tr -d '\n')"
+curl -sS -X POST "$SANDBOX_URL/files" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d "$(python3 -c 'import json,os; print(json.dumps({"session_id":os.environ["SID"],"path":"/workspace/uploads/data.csv","data_base64":os.environ["DATA_BASE64"]}))')"
+```
+
+成功响应：
+
+```json
+{"ok":true}
+```
+
+无效 Base64 或越界路径返回 `400`，文件超过 `SANDBOX_MAX_UPLOAD_BYTES` 返回 `413`，session 不存在返回 `404`。
+
+### `POST /files/get`
+
+读取 `/workspace` 中的普通文件。
+
+```json
+{
+  "session_id": "9fd8b918372d489ab6aa6843611148be",
+  "path": "/workspace/outputs/result.txt"
+}
+```
+
+成功响应：
+
+```json
+{"data_base64":"aGVsbG8="}
+```
+
+文件不存在返回 `404`；目录不能作为文件读取。路径限制与 `/files` 相同。
+
+### `POST /files/list`
+
+列出 `/workspace` 下的普通文件，用于管理员会话沙箱检查器。
+
+请求：
+
+```json
+{"session_id":"9fd8b918372d489ab6aa6843611148be"}
+```
+
+响应中的路径相对 `/workspace`：
+
+```json
+{
+  "files": [
+    {"path":"outputs/result.txt","size":5},
+    {"path":"uploads/data.csv","size":17}
+  ]
+}
+```
+
+当前实现最多返回 500 个文件，扫描深度最大为 6，并限制底层列表输出大小。这个端点只读。
+
+### `POST /files/reset-inputs`
+
+清空并重建 `/workspace/uploads` 和 `/workspace/skills`，但保留 `/workspace/downloads`、`/workspace/outputs` 和其他中间状态。调用方不能指定要删除的路径。
+
+请求：
+
+```json
+{"session_id":"9fd8b918372d489ab6aa6843611148be"}
+```
+
+活跃 session：
+
+```json
+{"ok":true,"session_gone":false}
+```
+
+session 已被空闲回收：
+
+```json
+{"ok":false,"session_gone":true}
+```
+
+session 被回收属于正常恢复信号，因此该场景仍返回 HTTP `200`。Aivory 收到后会创建新 session，并重新同步输入文件。
+
+## 存储配置
+
+`storage` 是由 Aivory 管理端解析并转发给 Sidecar 的内部配置。不要接受最终用户提供这些字段，因为其中可能包含对象存储凭据。
+
+### 本地归档
+
+```json
+{
+  "provider": "local",
+  "prefix": "workspaces/"
+}
+```
+
+本地模式要求运维在 Sidecar 环境设置并挂载 `SANDBOX_LOCAL_STORAGE_DIR`。它只适合单节点工作区归档，不支持生成预签名 URL，因此不能用于 `/storage/put` 的 MinerU 文件流转。
+
+### S3 或兼容 S3
+
+```json
+{
+  "provider": "s3",
+  "prefix": "aivory/",
+  "s3_bucket": "aivory-data",
+  "s3_region": "us-east-1",
+  "s3_endpoint": "https://minio.example.internal",
+  "s3_access_key": "access-key",
+  "s3_secret_key": "secret-key"
+}
+```
+
+`s3_endpoint` 可省略以使用 AWS S3。设置自定义 endpoint 时，Sidecar 使用 path-style 地址与 SigV4。
+
+### 阿里云 OSS
+
+```json
+{
+  "provider": "aliyun_oss",
+  "prefix": "aivory/",
+  "oss_bucket": "aivory-data",
+  "oss_endpoint": "https://oss-cn-hangzhou.aliyuncs.com",
+  "oss_access_key_id": "access-key-id",
+  "oss_access_key_secret": "access-key-secret"
+}
+```
+
+`prefix` 省略时默认为 `workspaces/`。对象 key 不能是绝对路径，不能包含 `..` 或 NUL。
+
+## 对象存储端点
+
+这些端点由 Aivory 内部的工作区与文档处理流程使用，不应直接提供给普通用户。
+
+### `POST /storage/put`
+
+上传对象，并返回短期预签名 GET URL。只应用于 `s3` 和 `aliyun_oss`；`local` 没有可供外部解析服务访问的 URL。
+
+```json
+{
+  "key": "mineru/document.pdf",
+  "data_base64": "JVBERi0xLjQK...",
+  "content_type": "application/pdf",
+  "expires_in": 3600,
+  "storage": {
+    "provider": "s3",
+    "prefix": "aivory/",
+    "s3_bucket": "aivory-data",
+    "s3_region": "us-east-1"
+  }
+}
+```
+
+成功响应：
+
+```json
+{
+  "provider": "s3",
+  "key": "aivory/mineru/document.pdf",
+  "url": "https://storage.example/...?signature=...",
+  "expires_in": 3600
+}
+```
+
+`expires_in` 省略时默认 3600 秒，最大值由 `SANDBOX_STORAGE_MAX_TTL` 限制。存储 SDK 或上游错误返回 `502`。
+
+### `POST /storage/delete`
+
+删除对象。`key` 可以是 `/storage/put` 返回的完整 key，也可以是尚未添加配置前缀的相对 key。Sidecar 只允许删除配置 `prefix` 内的对象。
+
+```json
+{
+  "key": "aivory/mineru/document.pdf",
+  "storage": {
+    "provider": "s3",
+    "prefix": "aivory/",
+    "s3_bucket": "aivory-data",
+    "s3_region": "us-east-1"
+  }
+}
+```
+
+成功响应：
+
+```json
+{"ok":true,"key":"aivory/mineru/document.pdf"}
+```
+
+### `POST /storage/gc`
+
+删除早于指定时间的工作区 `.tgz` 归档和 MinerU 临时对象。只扫描 Sidecar 已知的两个前缀，不会删除时间戳未知的对象。
+
+```json
+{
+  "max_age_seconds": 604800,
+  "storage": {
+    "provider": "local",
+    "prefix": "aivory/"
+  }
+}
+```
+
+成功响应：
+
+```json
+{"deleted":3,"scanned":12,"freed_bytes":10485760}
+```
+
+`max_age_seconds` 为 `0` 或负数时不执行删除并返回全零；存储未生效时也安全地返回全零。
+
+## 错误响应
+
+| HTTP 状态 | 常见原因 |
+| --- | --- |
+| `400` | session ID、Base64、工作区路径、存储 key 或存储配置无效 |
+| `401` | 缺少 Bearer Key 或 Key 不匹配 |
+| `404` | session 已回收、正在终止，或目标文件不存在 |
+| `413` | 请求体、代码或上传文件超过限制 |
+| `422` | JSON 字段缺失、类型错误或 Pydantic 校验失败 |
+| `429` | 活跃 session 达上限，或创建、执行、session 锁队列已满 |
+| `500` | Docker、容器初始化、工作区读写或运行时组件失败 |
+| `502` | S3/OSS 操作失败 |
+| `503` | `/healthz` 无法访问 Docker daemon |
+
+FastAPI 错误示例：
+
+```json
+{"detail":"session not found or not running"}
+```
+
+鉴权错误示例：
+
+```json
+{"error":"unauthorized"}
+```
+
+客户端应按 HTTP 状态和结构化字段处理错误，不应依赖完整英文错误文本。`404` session 丢失是预期的可恢复状态：创建新 session、重新同步输入，然后在业务允许的情况下重试一次。
+
+## 完整冒烟测试
+
+下面的流程创建 session、执行代码、接收产物，然后释放 session：
+
+```bash
+export SANDBOX_URL=${SANDBOX_URL:-http://127.0.0.1:48217}
+
+export SID="$(curl -sS -X POST "$SANDBOX_URL/sessions" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"archive_key":"api-smoke-test"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])')"
+
+curl -sS -X POST "$SANDBOX_URL/exec" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d "$(python3 -c 'import json,os; print(json.dumps({"session_id":os.environ["SID"],"code":"from pathlib import Path\nPath(\"/workspace/outputs/hello.txt\").write_text(\"hello\", encoding=\"utf-8\")\nprint(\"ok\")","timeout_ms":30000}))')" \
+  | python3 -m json.tool
+
+curl -sS -X DELETE "$SANDBOX_URL/sessions/$SID" \
+  -H "Authorization: Bearer $SANDBOX_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+预期 `/exec` 返回 `stdout` 为 `"ok\n"`、`exit_code` 为 `0`，且 `files` 中包含 `hello.txt`。
+
+完整部署、安全与生命周期说明见 [Python 沙箱说明](./overview.mdx)，所有 Sidecar 配置项见[沙箱变量](../deployment/environment-sandbox.mdx)。

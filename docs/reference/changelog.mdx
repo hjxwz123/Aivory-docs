@@ -10,6 +10,16 @@ This page follows the tags and release times on [GitHub Releases](https://github
 
 ## v2.4 Series
 
+### [v2.4.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.3) - 2026-08-31
+
+- Channel setup now lets administrators add models one at a time or fetch and bulk-select models from the upstream endpoint. Custom OpenAI-compatible roots such as `/v2` and `/v3` are accepted.
+- Tool-mode preferences are conversation-scoped: the administrator controls the default for new conversations, while users can override the mode only inside an individual conversation.
+- Concurrent sends on one branch are serialized and rejected or interrupted sends are reconciled. While an answer is streaming, one follow-up can be queued with its attachments and options, withdrawn back to the composer, and sent automatically when the current answer ends.
+- Added a read-only sandbox file drawer for listing folders, opening files, and previewing supported artifacts. Conversation ownership, safe relative paths, and browser preview isolation are enforced by the API.
+- Internal model calls now carry the selected model's `extra_params`; title and tool-route calls have more room to produce valid output. Image generation is marked unavailable until an enabled image model is configured.
+- Backup imports are validated and restored atomically, and the chat sidebar, landing cards, empty menus, and active-reply state received reliability and visual refinements.
+- Database migrations run automatically. For pinned Docker deployments, use `IMAGE_TAG=2.4.3` after all matching application, sandbox runner, and sidecar images are published. No new mandatory environment variable is required.
+
 ### [v2.4.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.2) - 2026-08-30
 
 - Password registration and OAuth/OIDC automatic provisioning are now independent, allowing provider-only signup without exposing the direct registration form.

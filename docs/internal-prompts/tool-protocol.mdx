@@ -1,0 +1,216 @@
+---
+title: Tool protocol and built-in skills
+sidebar_position: 6
+description: Exact prompt-mode tool protocol, tool-result wrappers, finalization prompts, and document-generation skill.
+---
+
+# Tool protocol and built-in skills
+
+Models with native function calling receive enabled tool definitions through the provider API. Models configured with `tool_mode=prompt` instead receive those same names, descriptions, and schemas as text plus a strict call protocol. The implementation is in [`prompt_tools.go`](https://github.com/hjxwz123/Aivory/blob/v2.4.6/server/internal/llm/prompt_tools.go).
+
+## Prompt-mode preamble
+
+The following is appended to the normal system prompt. The `<TOOL_DEFINITIONS>` section is generated from the tools actually allowed for this turn.
+
+```text
+## Available tools
+You can call any of the tools below by emitting EXACTLY this format and then STOPPING:
+
+<tool_call>{"name": "<tool>", "arguments": <args>}</tool_call>
+
+Important rules:
+- After emitting `</tool_call>` STOP. Do not write anything else and do not invent the result.
+- The orchestrator will execute the tool and reply with a `<tool_result>` block. Continue from there.
+- Never repeat a tool call with the same arguments. If the available evidence is sufficient, answer immediately.
+- When a tool schema offers a queries or urls array, batch independent requests that are already known.
+- If you don't need a tool, just answer the user directly.
+
+Tools:
+
+### <TOOL_NAME>
+<TOOL_DESCRIPTION>
+Input schema: <JSON_SCHEMA>
+```
+
+The provider stop sequence is exactly:
+
+```text
+</tool_call>
+```
+
+The model emits one call per round. The marker and JSON are removed from user-visible text. Prompt mode permits a bounded number of iterations and retries malformed JSON at most twice.
+
+## Built-in definitions inserted into the prompt
+
+These model-facing descriptions are injected verbatim when each built-in is enabled; their schemas are shown directly below each description. Administrator MCP tool definitions and administrator skills are runtime configuration and are not published here.
+
+### `aivory_web_search`
+
+```text
+Search the public web for current information. Use query for one search or queries to batch several known searches into one tool call. Returns titled snippets with URLs.
+Input schema: {"type":"object","properties":{"query":{"type":"string","description":"One search query. Use either query or queries."},"queries":{"type":"array","items":{"type":"string"},"maxItems":5,"description":"Up to 5 independent search queries. Prefer this when several searches are known in advance."},"top_k":{"type":"integer","minimum":1,"maximum":10,"description":"Maximum results per query."}}}
+```
+
+### `web_fetch`
+
+```text
+Fetch the main text content of web pages. Use url for one page or urls to batch several known pages into one tool call. SSRF-guarded: internal IPs are blocked.
+Input schema: {"type":"object","properties":{"url":{"type":"string","description":"One web URL. Use either url or urls."},"urls":{"type":"array","items":{"type":"string"},"maxItems":4,"description":"Up to 4 web URLs to fetch in one tool call."}}}
+```
+
+### `fetch_image`
+
+```text
+Download an image from a public HTTP(S) URL into this conversation's Python sandbox. Returns a stable path under /workspace/downloads/ that python_execute can open with Pillow or use in documents.
+Input schema: {"type":"object","properties":{"url":{"type":"string"},"filename":{"type":"string"}},"required":["url"]}
+```
+
+### `python_execute`
+
+```text
+Run Python in a persistent sandbox for math, data analysis, image editing, plotting, spreadsheet/CSV processing, editing existing PDF/Office documents, and generating downloadable files (PDF/PPTX/DOCX/XLSX/PNG). The session and its /workspace persist across calls AND across turns in this conversation, so call it several times in a row — inspect the inputs first, then edit or compute, and read again differently if the first attempt doesn't fit. Every conversation upload, including the original PDF/DOCX/PPTX/XLSX file, is staged without format conversion in /workspace/uploads/; prior image-generation outputs are staged there too, and public images fetched with fetch_image are stored in /workspace/downloads/. Run `import os; os.listdir('/workspace/uploads')` and inspect /workspace/downloads when needed, then use the real paths (for example python-docx/python-pptx/pypdf for documents, Pillow for images, and pandas for tables). Preserve the original file's layout and formatting when the user asks for a targeted edit. Write outputs, including edited images, plots, and documents, to /workspace/outputs to return them as downloadable artifacts. Produced files are attached to the assistant message automatically: refer to them by filename and never emit sandbox: or /workspace/outputs paths as download links. Stdout/stderr is returned.
+Input schema: {"type":"object","properties":{"code":{"type":"string"}},"required":["code"]}
+```
+
+### `image_generate`
+
+```text
+Generate a new image or faithfully edit one existing image. You must explicitly choose action=generate or action=edit from the user's intent. Generate never sends conversation images to the image API. For edit, select exactly one authoritative base_image: previous_generation for the nearest generated image on the active branch, or current_attachment plus its 1-based base_image_index for an image uploaded this turn. Other current-turn images become edit references. Do not invent file ids.
+Input schema: {"type":"object","properties":{"prompt":{"type":"string","description":"The requested new image or the exact edit instruction. For edits, describe only the requested change and preserve everything else."},"action":{"type":"string","enum":["generate","edit"],"description":"Use generate only when the user wants a new image. Use edit only when the user wants to modify an existing image."},"base_image":{"type":"string","enum":["none","previous_generation","current_attachment"],"description":"For generate use none. For edit, choose previous_generation only when continuing the prior generated result, or current_attachment when an image uploaded this turn is the authoritative base."},"base_image_index":{"type":"integer","minimum":1,"description":"Use only with base_image=current_attachment. This is the 1-based attachment position; omit it for previous_generation."},"n":{"type":"integer","default":1},"size":{"type":"string","description":"Optional explicit output size. OpenAI-format requests recognize the aspect ratio and the 1K, 2K, or 4K resolution tier from the exact user instruction; omitted resolution defaults to 2K. The final GPT Image 2 WIDTHxHEIGHT is normalized to legal multiples of 16. Edits preserve the selected base image's ratio unless the user requests another ratio. GPT Image 1.x is mapped to its supported fixed sizes."}},"required":["prompt","action","base_image"]}
+```
+
+### `use_skill`
+
+```text
+Load the full instructions for one of the skills the user/admin has registered (returned text contains the skill's complete how-to).
+Input schema: {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}
+```
+
+### `save_memory`
+
+```text
+Save a durable fact about the user into long-term memory. Use ONLY when the user explicitly says "remember…" or asks you to. Status defaults to ACTIVE.
+Input schema: {"type":"object","properties":{"memory_text":{"type":"string"},"slot":{"type":"string"},"value":{"type":"string"}},"required":["memory_text"]}
+```
+
+Source: [`builtins.go`](https://github.com/hjxwz123/Aivory/blob/v2.4.6/server/internal/tools/builtins.go).
+
+## Tool result and error wrappers
+
+After a call, the next user-layer message is exactly:
+
+```text
+<tool_result name="<TOOL_NAME>">
+<UNTRUSTED_TOOL_OUTPUT>
+</tool_result>
+Continue from here.
+```
+
+Execution errors use `tool_error`:
+
+```text
+<tool_error name="<TOOL_NAME>">
+<PUBLIC_ERROR_OUTPUT>
+</tool_error>
+Continue from here.
+```
+
+The main system trust boundary classifies tool output as reference material. Complete tool results are retained for compaction in a provider-neutral internal envelope; adapters do not replay that envelope as provider-native history.
+
+Malformed model call JSON receives this bounded retry message:
+
+```text
+<tool_error>
+Your <tool_call> JSON failed to parse: <PARSE_ERROR>
+Re-emit the tool call as ONE valid JSON object: <tool_call>{"name": "<tool>", "arguments": {...}}</tool_call>
+</tool_error>
+```
+
+After two failed retries, the visible prefix is treated as the final answer rather than looping forever.
+
+## Tool stopping and finalization
+
+When the call/time/iteration budget is exhausted, a final tool-free request receives:
+
+```text
+The tool execution budget is exhausted. Do not call or request any tools. Based only on the conversation and tool results already available, provide the best possible final answer now. Do not discuss the tool budget unless it prevents you from answering.
+```
+
+When the orchestrator detects duplicate or no-progress calls, it uses:
+
+```text
+Further tool calls would not add new evidence. Do not call or request any tools. Based only on the conversation and tool results already available, provide the best possible final answer now. Do not discuss this internal stopping condition unless it prevents you from answering.
+```
+
+The tool declaration is removed for this finalization round. If that round still calls a tool or returns no answer, the turn records `tool_budget_exceeded` or `tool_no_progress` instead of starting another loop.
+
+The model-facing tool-output variants are:
+
+```text
+Tool execution budget exhausted. Do not call any more tools. Use the tool results already available to provide the best possible final answer.
+
+This tool request was skipped because it duplicates an earlier request, repeats a failed path, or would add no new evidence. Do not repeat this request. Use the other results already available, and call a different tool only if decisive information is still missing.
+```
+
+Sanitized public execution errors are fixed as `The operation was canceled.`, `The tool timed out. Please try again.`, or `Tool execution failed. Please try again.`
+
+Source: [`tool_exec.go`](https://github.com/hjxwz123/Aivory/blob/v2.4.6/server/internal/llm/tool_exec.go).
+
+## Built-in document-generation skill
+
+When `python_execute` is enabled, Aivory exposes the reserved skill `document-generation`. A progressive-disclosure model sees this index entry:
+
+```text
+document-generation: MUST load this BEFORE generating any downloadable document (PDF / PPTX / DOCX / XLSX) — it contains the required recipes and self-checks.
+```
+
+Models without `use_skill` receive the full fixed skill inline. The exact skill text is:
+
+````text
+## Document-generation recipes (run inside python_execute, write to /workspace/outputs/)
+
+**PDF (preferred):** semantic HTML (h1/h2/p/ul/table/blockquote — not styled divs) + WeasyPrint; it handles page breaks, fonts, and tables natively.
+```python
+from weasyprint import HTML, CSS
+HTML(string=html).write_pdf("/workspace/outputs/report.pdf", stylesheets=[CSS(string="""
+@page { size: A4; margin: 25mm; }
+body { font-family: 'Noto Sans CJK SC','DejaVu Sans'; font-size: 11pt; line-height: 1.55; color: #1f2937; }
+h1 { font-size: 22pt; } h2 { font-size: 15pt; margin: 18pt 0 6pt; } h1, h2 { color: #0f172a; font-weight: 600; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid #e2e8f0; padding: 6pt 8pt; text-align: left; } th { background: #f1f5f9; font-weight: 600; }
+""")])
+```
+
+**PPT (.pptx):** author each slide as a semantic-HTML string and parse it into native PPTX shapes with BeautifulSoup + python-pptx — the sandbox has NO browser, never attempt playwright/screenshot routes.
+```python
+from bs4 import BeautifulSoup
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+prs = Presentation(); prs.slide_width, prs.slide_height = Inches(13.33), Inches(7.5)
+for html in slides_html:  # one string per slide, e.g. "<h1>Title</h1><p>Subtitle</p>"
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    tf = slide.shapes.add_textbox(Inches(0.8), Inches(0.6), Inches(11.7), Inches(6)).text_frame
+    tf.word_wrap = True
+    for el in BeautifulSoup(html, "html.parser").find_all(["h1", "h2", "p", "li", "img"]):
+        if el.name == "img" and el.get("src"):
+            slide.shapes.add_picture(el["src"], Inches(1), Inches(2.2), width=Inches(8)); continue
+        p = tf.add_paragraph() if tf.paragraphs[0].runs else tf.paragraphs[0]
+        r = p.add_run(); r.text = ("• " if el.name == "li" else "") + el.get_text()
+        r.font.name = "Noto Sans CJK SC"; r.font.bold = el.name in ("h1", "h2")
+        r.font.size = Pt({"h1": 40, "h2": 28}.get(el.name, 18))
+        r.font.color.rgb = RGBColor.from_string("0f172a" if r.font.bold else "1f2937")
+prs.save("/workspace/outputs/deck.pptx")
+```
+Map <table> via slide.shapes.add_table likewise. Charts/diagrams: render them inside Python (for example, a matplotlib PNG under /workspace/outputs) and then add_picture. Every original conversation upload, including PDF/DOCX/PPTX/XLSX and images, is available without format conversion under /workspace/uploads. For a targeted edit, open that original file with the matching library, change only the requested content, and save the result under /workspace/outputs so its existing layout and formatting are retained. Prior image-generation outputs are also staged under /workspace/uploads; public images downloaded with fetch_image are available under /workspace/downloads.
+
+**Word (.docx):** python-docx — set doc.styles['Normal'].font.name = 'Noto Sans CJK SC' (size Pt(11)), then add_heading / add_paragraph / add_table / add_picture.
+
+**Excel (.xlsx):** openpyxl or xlsxwriter (charts, conditional formatting, frozen panes all supported).
+
+**Self-check before presenting (no browser — never screenshots):** reopen each file structurally: os.path.getsize > 0; pypdf — page count + page-1 extract_text() shows expected content incl. CJK glyphs; python-pptx — slide count + title/bullet text present; DOCX/XLSX likewise. Always set Noto Sans CJK fonts so Chinese never renders as tofu boxes (□□□). On failure, fix and re-render (up to 3 attempts).
+````
+
+An administrator skill with the same reserved name intentionally shadows this built-in. Its private replacement body is not part of this catalog.
+
+Source: [`docgen_skill.go`](https://github.com/hjxwz123/Aivory/blob/v2.4.6/server/internal/llm/docgen_skill.go).

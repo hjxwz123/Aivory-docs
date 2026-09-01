@@ -52,7 +52,14 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Internal prompts',
-      items: ['internal-prompts/overview'],
+      items: [
+        'internal-prompts/overview',
+        'internal-prompts/main-chat',
+        'internal-prompts/task-prompts',
+        'internal-prompts/retrieval-memory-safety',
+        'internal-prompts/image-research-verify',
+        'internal-prompts/tool-protocol',
+      ],
     },
     {
       type: 'category',

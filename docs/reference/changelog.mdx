@@ -10,6 +10,22 @@ This page follows the tags and release times on [GitHub Releases](https://github
 
 ## v2.4 Series
 
+### [v2.4.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.6) - 2026-09-01
+
+- Reworked long-context compaction into incremental, observable summaries. Retired target-percent and merge-budget settings are migrated away, complete tool evidence remains available to compaction, and compare-and-swap persistence protects concurrent manual, inline, asynchronous, and multi-instance runs.
+- Prioritised the active conversation document during retrieval and added an end-to-end online-RAG timeout that fails open to the main chat when routing, retrieval, embedding, or full-document summarisation cannot finish in time.
+- Made branch workflows and generation state more reliable: paged and cached branch trees, isolated branch-local files, serialised switch/delete reconciliation, stable tail pinning during layout changes, and cleanup for stopped, rejected, deleted, and partially completed generations.
+- Split title and file/tool-route task model policies from the general task model policy, with the conversation model as a conservative fallback when a dedicated model is unavailable.
+- Hardened OpenAI Responses replay across mixed compatible gateways. Strict schema failures now receive one safe retry with prefixed item IDs and unsupported replay metadata removed, while encrypted reasoning and tool semantics remain intact.
+- No new mandatory environment variable is required. Migrations run at startup; version-pinned Docker deployments should use `IMAGE_TAG=2.4.6` after all matching application and sandbox images are available.
+- The fixed internal task prompts and system-prompt assembly rules are documented in [Internal prompt catalog](../internal-prompts/overview.mdx).
+
+### [v2.4.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.5) - 2026-08-31
+
+- Added user-managed MCP services, workspace capability and member-permission controls, and policy-aware model, tool, and resource catalogs.
+- Improved OpenAI Responses history replay, browser conversation titles, MCP network safety, discovery state, and authorization checks.
+- No new mandatory environment variable is required; database migrations run automatically. See the [full v2.4.5 release notes](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.5) for the complete migration and security details.
+
 ### [v2.4.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.3) - 2026-08-31
 
 - Channel setup now lets administrators add models one at a time or fetch and bulk-select models from the upstream endpoint. Custom OpenAI-compatible roots such as `/v2` and `/v3` are accepted.

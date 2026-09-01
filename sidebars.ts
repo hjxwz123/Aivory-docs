@@ -51,6 +51,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Internal prompts',
+      items: ['internal-prompts/overview'],
+    },
+    {
+      type: 'category',
       label: 'Reference',
       items: ['reference/changelog'],
     },

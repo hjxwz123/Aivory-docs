@@ -150,10 +150,9 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'Aivory',
       logo: {
         alt: 'Aivory',
-        src: 'img/aivory-mark.svg',
+        src: 'img/aivory-logo.svg',
       },
       items: [
         {

@@ -57,6 +57,15 @@ body {
   box-shadow: none;
 }
 
+.navbar__logo {
+  width: auto;
+  height: 2rem;
+}
+
+[data-theme='dark'] .navbar__logo {
+  filter: brightness(1.9) saturate(0.65);
+}
+
 /* The home page uses the site navbar as its single hero navbar.
    Scoping this to the body marker keeps documentation pages unchanged. */
 body.aivory-home-page {
@@ -122,8 +131,9 @@ body.aivory-home-page .navbar__brand {
 }
 
 body.aivory-home-page .navbar__logo {
-  width: 32px;
-  height: 32px;
+  width: auto;
+  height: 2rem;
+  filter: brightness(2) saturate(0.55);
 }
 
 body.aivory-home-page .navbar__title,
@@ -347,8 +357,9 @@ body.aivory-experience-page .aivory-navbar-cta:hover {
   }
 
   body:has(main.aivory-home-page) .navbar__logo {
-    width: 32px;
-    height: 32px;
+    width: auto;
+    height: 2rem;
+    filter: brightness(2) saturate(0.55);
   }
 
   body:has(main.aivory-home-page) .navbar__title,

@@ -1,0 +1,225 @@
+---
+title: Conversations and messages tables
+sidebar_position: 4
+description: Column-by-column reference for projects, conversations, messages, message_feedback, user_feedback, conversation_shares, memories, and the two conversation lease tables.
+---
+
+# Conversations and messages tables
+
+Nine conversation-domain tables. The core is the `messages` **message DAG** (self-referential `parent_id`) — branches, regenerations, and text-selection sub-conversations all build on it (notation per the [overview](./overview.mdx)).
+
+## `projects` — projects
+
+Containers for conversations and knowledge bases. 14 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `p_` + 12 hex chars |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `name` | TEXT | no | — | project name; unique per `(user_id, workspace_id)` scope (see below) |
+| `description` | TEXT | no | `''` | description |
+| `instructions` | TEXT | no | `''` | project-level system instructions injected into its conversations' context |
+| `accent` | TEXT | no | `'violet'` | theme color key (frontend palette) |
+| `emoji` | TEXT | no | `''` | icon emoji |
+| `pinned` | INTEGER | no | `0` | pinned flag |
+| `kb_id` | TEXT | **yes** | `NULL` | FK→`knowledge_bases(id)`, `SET NULL` (project's default library; deleting the library keeps the project) |
+| `auto_add_uploads` | INTEGER | no | `0` | uploads inside the project automatically enter its knowledge base |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+| `is_public` | INTEGER | no | `1` | workspace sharing switch: `1` = shared with members, `0` = creator and workspace admins only. Ignored on personal rows |
+| `workspace_id` | TEXT | no | `''` | ※ ALTER-added: soft reference to `workspaces.id`; `''` = personal |
+
+- **Indexes**: `idx_projects_user(user_id)`; the name-uniqueness index is replaced during migration with the three-column form `idx_projects_user_name_unique` ON `(user_id, COALESCE(workspace_id,''), lower(trim(name)))` (`store.go:591-593`) — the same user may reuse a name across personal space and workspaces.
+- **Incoming**: `conversations.project_id` (SET NULL).
+
+## `conversations` — conversations
+
+22 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `c_` + 12 hex chars |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `project_id` | TEXT | **yes** | `NULL` | FK→`projects(id)`, `SET NULL` |
+| `title` | TEXT | no | `'新对话'` | title ("New conversation"); auto-rewritten by the `task.title` job |
+| `provider` | TEXT | no | `''` | provider attribution snapshot (no FK) |
+| `model_id` | TEXT | no | `''` | selected model (**unconstrained snapshot** — deleting the model leaves history intact) |
+| `fast` | INTEGER | no | `0` | fast-mode conversation (real model resolved server-side, masked to users) |
+| `kb_ids` | TEXT (JSON) | no | `'[]'` | attached knowledge base ids |
+| `rag_mode` | TEXT | no | `'auto'` | retrieval policy: `auto` (server-routed) / `inject` (full injection). Legacy `tool` and unknown values normalize to `auto` (`store/conversations.go:20-29`) |
+| `summary_blocks` | TEXT (JSON) | no | `'[]'` | summary blocks produced by context compaction |
+| `active_leaf_id` | TEXT | **yes** | `NULL` | current active leaf message id (soft reference, no FK — the DAG's "reading pointer") |
+| `provider_state` | TEXT (JSON) | no | `'{}'` | provider session state (e.g. OpenAI Responses replay state; the sandbox session id lives here too) |
+| `pinned` | INTEGER | no | `0` | pinned |
+| `archived` | INTEGER | no | `0` | archived. **Workspace rows have no archive view** — migration resets archived workspace rows to 0 (`store.go:524-530`) |
+| `starred` | INTEGER | no | `0` | starred |
+| `inline_source_conv` | TEXT | no | `''` | text-selection sub-conversation: source conversation id; non-empty marks a hidden sub-conversation |
+| `inline_parent_id` | TEXT | no | `''` | sub-conversation: anchored source message id |
+| `inline_quote` | TEXT | no | `''` | sub-conversation: quoted original text |
+| `is_public` | INTEGER | no | `0` (fresh installs) | whether a workspace conversation is shared. **Dialect nuance**: CREATE defaults to `0` (fresh databases); upgraded databases receive it via ALTER with default `1` (preserving historical sharing), see `store.go:226-229` |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+| `workspace_id` | TEXT | no | `''` | ※ ALTER-added: soft reference to `workspaces.id`; `''` = personal |
+
+- **Indexes**: `idx_conv_user(user_id)`, `idx_conv_project(project_id)`, `idx_conv_user_updated(user_id, archived, pinned DESC, updated_at DESC)`; migration also creates `idx_conv_inline(inline_source_conv)` and `idx_conv_workspace_updated(workspace_id, archived, pinned DESC, updated_at DESC)` (`store.go:563,578`).
+- **Incoming**: `messages` (CASCADE), `message_feedback`, `user_feedback` (SET NULL), `conversation_shares` (CASCADE), both lease tables (CASCADE), and `documents`/`files`/`chunks` `conversation_id`.
+
+## `messages` — messages (DAG)
+
+30 columns. The self-referential `parent_id` forms a tree: branches and regenerations create sibling subtrees; `conversations.active_leaf_id` points at the active leaf.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `msg_` + 12 hex chars; also the anchor for SSE reconnect (`Last-Event-ID`) |
+| `conversation_id` | TEXT | no | — | FK→`conversations(id)`, CASCADE |
+| `parent_id` | TEXT | **yes** | `NULL` | FK→`messages(id)`, CASCADE — the **self-referential** edge |
+| `role` | TEXT | no | — | `user` / `assistant` (the app only ever writes these two; no CHECK) |
+| `provider` | TEXT | no | `''` | provider snapshot |
+| `model_id` | TEXT | no | `''` | model that served the turn (**unconstrained snapshot**) |
+| `model_label` | TEXT | no | `''` | model display-name snapshot — stays readable after catalog renames/deletions |
+| `fast` | INTEGER | no | `0` | this turn ran in fast mode; the user boundary masks `model_id`/`model_label`/`provider` |
+| `blocks` | TEXT (JSON) | no | `'[]'` | content blocks with kinds `text` / `thinking` / `tool_call` / `tool_output` / `citation` / `image` / `document` / `artifact` / `research` / `error` (enum per `llm/types.go:17`) |
+| `raw` | TEXT | **yes** | `NULL` | raw upstream response (kept when applicable) |
+| `stop_reason` | TEXT | **yes** | `NULL` | free-text stop reason (no CHECK). Values emitted by the orchestrator/providers include: `end_turn`, `stop`, `stopped` (user stop), `max_iterations`, `tool_budget_exceeded`, `content_moderation`, `quota_exceeded`, `insufficient_credits`, `error` |
+| `attachments` | TEXT (JSON) | no | `'[]'` | file references (pointing at `files.id`) |
+| `selected_user_skill_ids` | TEXT (JSON) | no | `'[]'` | private skill ids applied to this user turn (branch/regeneration fidelity) |
+| `citations` | TEXT (JSON) | no | `'[]'` | RAG/search citations |
+| `input_tokens` | INTEGER → BIGINT | no | `0` | input tokens |
+| `context_tokens` | INTEGER → BIGINT | no | `0` | real prompt footprint of the final successful upstream request (`0` = provider reported no usage) |
+| `output_tokens` | INTEGER → BIGINT | no | `0` | output tokens |
+| `cache_read_tokens` | INTEGER → BIGINT | no | `0` | cache read tokens |
+| `cache_write_tokens` | INTEGER → BIGINT | no | `0` | cache write tokens |
+| `cost` | REAL → DOUBLE PRECISION | no | `0` | turn cost (admin-visible) |
+| `currency` | TEXT | no | `'USD'` | cost currency |
+| `credits` | REAL → DOUBLE PRECISION | no | `0` | credits charged to the user for this turn (user-facing, unlike admin-only cost) |
+| `status` | TEXT | no | `'complete'` | `complete` / `streaming` / `error` |
+| `error` | TEXT | no | `''` | failure detail when `status='error'` |
+| `gen_ms` | INTEGER → BIGINT | no | `0` | wall-clock generation time (ms) |
+| `search_text` | TEXT | no | `''` | visible plain text **projected at write time** (text blocks only; excludes reasoning/tool/image data). Content search scans this column instead of `LOWER()`-ing the whole `blocks` JSON. Pre-existing rows were backfilled once (`store.go:770-777`) |
+| `verify` | TEXT (JSON) | no | `''` | Verify-mode auditor result `{verdict, auditor_model_id?, auditor_label?, findings:[{severity,quote,issue}], at?}` (`llm/verify.go:39-46`; `?` keys omitted when empty); `''` = never audited |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `feedback` | TEXT | no | `''` | ※ ALTER-added (**legacy compatibility mirror**): old single-value rating `''` / `like` / `dislike` (`store/models.go:495`). New writes go to `message_feedback`; legacy rows were migrated by `BackfillLegacyMessageFeedback` |
+| `author_id` | TEXT | no | `''` | ※ ALTER-added: **speaker** attribution inside shared workspace conversations (empty on personal rows) |
+
+- **Indexes**: `idx_messages_conv(conversation_id)`, `idx_messages_parent(parent_id)`, `idx_messages_conv_created(conversation_id, created_at)`, `idx_messages_role_created(role, created_at)`, `idx_messages_model_role_created(model_id, role, created_at)`.
+- **Notes**: a browser disconnect **does not abort generation** — the server keeps writing under a detached context (90-minute cap) and persists the answer; reconnects replay it from the event buffer (see [Cloudflare proxy notes](../../deployment/cloudflare-proxy.mdx)).
+
+## `message_feedback` — model quality feedback
+
+One row per (assistant message, evaluating user). 12 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `mfb_` + 12 hex chars |
+| `message_id` | TEXT | no | — | FK→`messages(id)`, CASCADE |
+| `conversation_id` | TEXT | no | — | FK→`conversations(id)`, CASCADE |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `workspace_id` | TEXT | no | `''` | snapshot (no FK) |
+| `model_id` | TEXT | no | `''` | snapshot (no FK) — deleting a model never erases quality history |
+| `channel_id` | TEXT | no | `''` | snapshot (no FK) |
+| `rating` | TEXT | no | — | `like` / `dislike` (CHECK) |
+| `reasons` | TEXT (JSON) → **JSONB** | no | `'[]'` (PG `'[]'::jsonb`) | dislike reason multi-select |
+| `comment` | TEXT | no | `''` | optional note |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Unique**: `UNIQUE(message_id, user_id)`. **Indexes**: five, covering `updated_at`, `(model_id, updated_at)`, `(rating, updated_at)`, `conversation_id`, `(user_id, message_id)`.
+- **Notes**: admins read this from the user-feedback page; the legacy `messages.feedback` column is a compatibility mirror only and is no longer maintained by new write paths.
+
+## `user_feedback` — product issue reports
+
+User-submitted product issues, unrelated to model quality. 15 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `uf_` + 12 hex chars |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `message_id` | TEXT | **yes** | `NULL` | FK→`messages(id)`, `SET NULL` (report survives message deletion) |
+| `conversation_id` | TEXT | **yes** | `NULL` | FK→`conversations(id)`, `SET NULL` |
+| `conversation_title` | TEXT | no | `''` | title snapshot — the report stays intelligible after thread deletion |
+| `description` | TEXT | no | — | required problem description |
+| `page_path` | TEXT | no | `''` | frontend route where the issue happened |
+| `user_agent` | TEXT | no | `''` | browser UA |
+| `viewport_width` | INTEGER | no | `0` | viewport width |
+| `viewport_height` | INTEGER | no | `0` | viewport height |
+| `screenshot` | BLOB → **BYTEA** | **yes** | `NULL` | optional page screenshot **bytes in-database** (not object storage — identical retention on local and object-storage deployments) |
+| `screenshot_mime` | TEXT | no | `''` | screenshot MIME |
+| `screenshot_width` | INTEGER | no | `0` | screenshot width |
+| `screenshot_height` | INTEGER | no | `0` | screenshot height |
+| `created_at` | INTEGER → BIGINT | no | `now()` | submission time |
+
+- **Indexes**: `(created_at DESC, id DESC)`, `(user_id, created_at DESC)`.
+
+## `conversation_shares` — public shares
+
+Host of read-only share links. 6 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | **the public token itself**: 192-bit hex from `genToken()`, used in `/share/:id` |
+| `conversation_id` | TEXT | no | — | FK→`conversations(id)`, CASCADE |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `title` | TEXT | no | `''` | title at share time |
+| `snapshot` | TEXT (JSON) | no | `'[]'` | frozen JSON copy of the active message path at share time (cost/sensitive fields stripped) — later private messages never leak |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+
+- **Unique**: `idx_conv_shares_conv(conversation_id)` — at most one live share per conversation; **revoking = deleting the row**, cutting access completely. Index `idx_conv_shares_user(user_id)`.
+
+## `memories` — durable user facts
+
+Facts extracted from conversations and maintained by the memory worker. 17 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `mem_` + 12 hex chars |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `memory_text` | TEXT | no | — | one-sentence fact |
+| `memory_type` | TEXT | no | `''` | extractor-prompt taxonomy: `location` / `preference` / `identity` / `schedule` / `habit` / `goal` / `constraint` (`llm/memory_worker.go:115`; no CHECK) |
+| `slot` | TEXT | no | `''` | noun key (e.g. `favorite_language`) — a new value in the same slot marks old rows STALE |
+| `value` | TEXT | no | `''` | concrete value of the slot |
+| `status` | TEXT | no | `'ACTIVE'` | `ACTIVE` (stable fact) / `QUERY_DEPENDENT` (currency depends on the question) / `STALE` (superseded) / `UNKNOWN_CURRENT` (conflict, currency unclear — `llm/memory_worker.go:252-283`). Only ACTIVE + QUERY_DEPENDENT are injected into system prompts |
+| `confidence` | REAL → DOUBLE PRECISION | no | `0.8` | 0..1 |
+| `source_message_ids` | TEXT (JSON) | no | `'[]'` | provenance message ids |
+| `supersedes` | TEXT (JSON) | no | `'[]'` | old memory ids this one replaces |
+| `superseded_by` | TEXT (JSON) | no | `'[]'` | back-link (who replaced this) |
+| `affected_domains` | TEXT (JSON) | no | `'[]'` | affected slot domains |
+| `reason` | TEXT | no | `''` | status-change reason |
+| `valid_from` | INTEGER → BIGINT | **yes** | `NULL` | validity window start |
+| `valid_until` | INTEGER → BIGINT | **yes** | `NULL` | validity window end |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Indexes**: `idx_memories_user_status(user_id, status)`, `idx_memories_user_slot(user_id, slot)`.
+
+## `conversation_compaction_leases` — compaction lease
+
+Cross-process mutex for context compaction (safe replicas even without Redis). 3 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `conversation_id` | TEXT | no (PK) | — | FK→`conversations(id)`, CASCADE |
+| `owner_token` | TEXT | no | — | lease token (prevents releasing someone else's lease) |
+| `expires_at` | INTEGER → BIGINT | no | — | expiry in unix seconds |
+
+- **Index**: `idx_conversation_compaction_leases_expires(expires_at)` (stale-lease sweep).
+
+## `conversation_generation_leases` — generation lease
+
+Serializes one principal's appends on one branch. 5 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `conversation_id` | TEXT | no (PK part) | — | FK→`conversations(id)`, CASCADE |
+| `branch_key` | TEXT | no (PK part) | — | branch key |
+| `principal_id` | TEXT | no (PK part) | — | principal (user) id |
+| `owner_token` | TEXT | no | — | lease token |
+| `expires_at` | INTEGER → BIGINT | no | — | expiry |
+
+- **PK**: composite `(conversation_id, branch_key, principal_id)`. **Index**: `expires_at`.
+- **Notes**: other members, explicit branch edits, and regenerations are **not** blocked by this lock — they proceed independently.
+
+## Related pages
+
+- [Conversations and files user guide](../../user-guide/conversations-files.mdx) — branching/regeneration UX
+- [Knowledge bases and RAG](../../admin/knowledge-rag.mdx) — admin UI for compaction thresholds and the memory worker
+- [Platform operations](../../admin/platform-operations.mdx) — remaining runtime settings pages

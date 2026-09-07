@@ -20,7 +20,7 @@ When using a domain or HTTPS reverse proxy, set `ALLOWED_ORIGINS=https://chat.ex
 | Local reverse proxy | Running Caddy, Nginx, or Traefik on one server | The application listens only on the loopback address; the proxy owns 80/443 and terminates TLS |
 | Cloud load balancer/CDN | The cloud platform already provides an HTTPS entry point | The load balancer terminates TLS, and the backend is only exposed to the load balancer or the private network |
 
-In every case, never expose PostgreSQL, Redis, Qdrant, or `sandbox` through the proxy. They should stay only on the Docker internal network or a private network.
+In every case, never expose PostgreSQL, Redis, Qdrant, or `sandbox` through the proxy. They should stay only on the Docker internal network or a private network. If you front Aivory with Cloudflare (proxied DNS or a Tunnel), see the [Cloudflare Proxy guide](./cloudflare-proxy.mdx) for SSE streaming, upload-size, and origin-TLS specifics.
 
 ## Same-Host Reverse Proxy
 

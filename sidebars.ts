@@ -18,6 +18,7 @@ const sidebars: SidebarsConfig = {
         'deployment/environment-frontend',
         'deployment/arm-x86',
         'deployment/domain-tls-oauth',
+        'deployment/cloudflare-proxy',
         'deployment/upgrade-backup',
       ],
     },
@@ -64,7 +65,25 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Reference',
-      items: ['reference/changelog'],
+      items: [
+        'reference/changelog',
+        {
+          type: 'category',
+          label: 'Database & Schema',
+          collapsible: true,
+          items: [
+            'reference/database/overview',
+            'reference/database/users-auth',
+            'reference/database/channels-model-calls',
+            'reference/database/conversations-messages',
+            'reference/database/files-knowledge',
+            'reference/database/billing',
+            'reference/database/workspaces-members',
+            'reference/database/tools-sandbox',
+            'reference/database/system-audit',
+          ],
+        },
+      ],
     },
   ],
 }

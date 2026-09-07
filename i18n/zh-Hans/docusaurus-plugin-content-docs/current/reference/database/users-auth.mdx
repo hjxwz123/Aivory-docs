@@ -1,0 +1,128 @@
+---
+title: 用户与认证表
+sidebar_position: 2
+description: users、refresh_tokens、login_histories、oauth_providers、oauth_identities 五表的逐列参考，含 2FA、会话家族与第三方登录。
+---
+
+# 用户与认证表
+
+本页覆盖身份域 5 张表（列类型记法见[总览页的命名与类型约定](./overview.mdx)；**※附加列** = 只由 `store.Migrate` 的 ALTER 添加、不在 `schema.sql` 的 CREATE TABLE 中）。
+
+## `users` — 用户主表
+
+登录、角色、会员归属、积分余额与 2FA 的单一真相源，也是全库外键枢纽。共 22 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 主键，`u_` + 12 位十六进制 |
+| `email` | TEXT | 否 | — | 登录邮箱，全库唯一 |
+| `password_hash` | TEXT | 否 | — | bcrypt 哈希；OAuth 首登账号是随机口令（配合 `password_set=0` 强制补设） |
+| `name` | TEXT | 否 | `''` | 显示名 |
+| `role` | TEXT | 否 | `'user'` | 取值 `user` / `admin`（校验 `store/users.go:326`） |
+| `status` | TEXT | 否 | `'active'` | `active` 正常 / `pending` 邮箱未验证（`auth_handlers.go:364`）/ `banned` 管理员封禁（`admin_handlers.go:830`）/ `deleting` 异步删号中（`users.go:1396`） |
+| `token_ver` | INTEGER | 否 | `0` | 令牌版本：改密/封禁/登出全部设备时 +1；中间件每请求与 access token 的 `tv` 声明比对 → 跨副本即时吊销 |
+| `settings` | TEXT（JSON） | 否 | `'{}'` | 每用户偏好 JSON 对象（默认模型、工具模式、引导完成标记 `onboarded` 等；一次性回填见 `store.go:796-805`） |
+| `group_id` | TEXT | 否 | `'ug_free'` | 会员层级；**软引用** `user_groups.id`（无外键约束） |
+| `group_expires_at` | INTEGER → BIGINT | 否 | `0` | ※附加列：兑换码/购买带来的限时会员到期秒数（`0` = 不过期/无窗口） |
+| `previous_group_id` | TEXT | 否 | `''` | ※附加列：限时会员到期后应恢复的层级 id |
+| `totp_secret` | TEXT | 否 | `''` | base32 TOTP 密钥；空 = 未配置 2FA |
+| `totp_enabled` | INTEGER | 否 | `0` | `1` = 登录需要 2FA 验证码 |
+| `password_set` | INTEGER | 否 | `1` | `0` = 从未自选口令的 OAuth 账号，登录时强制走设置口令流程 |
+| `password_changed_at` | INTEGER → BIGINT | 否 | `0` | 最近一次改密的 unix 秒（`0` = 注册后从未改过） |
+| `last_seen_at` | INTEGER → BIGINT | 否 | `0` | 最近一次鉴权活动（管理端在线状态） |
+| `credits_permanent` | REAL | 否 | `0` | 永久积分余额的**显示镜像**（非权威） |
+| `credits_permanent_micros` | INTEGER → BIGINT | 否 | `0` | **权威**永久积分余额，定点 1e-6 |
+| `credit_cycle_anchor` | INTEGER → BIGINT | 否 | `now()` | 当前用户组定时积分周期起点 |
+| `quota_cycle_anchor` | INTEGER → BIGINT | 否 | `now()` | 当前用户组模型配额周期起点 |
+| `sort_order` | INTEGER | 否 | `0` | 管理后台拖拽排序（旧库由一次性回填按创建序铺平，`store.go:788-795`） |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+
+- **主键**：`id`。**外键**：无出向外键。被几乎所有用户域表以 `user_id` 引用——多数 `ON DELETE CASCADE`，`billing_usage`/`usage_stats`/`payment_orders` 为 `SET NULL`（删号匿名化统计/订单归属）。
+- **唯一/索引**：`email` UNIQUE（内联）；`idx_users_sort_order(sort_order, created_at DESC)` 在迁移阶段创建（`store.go:573`）。
+- **备注**：删号是异步多步流程——先把待删物理路径登记进 [`pending_storage_cleanup`](./system-audit.mdx)，再删行，CASCADE 清掉绝大多数子表。
+
+## `refresh_tokens` — 会话与设备
+
+刷新令牌（旋转式）与"活跃会话"视图的宿主。共 10 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `jti` | TEXT | 否（PK） | — | 刷新令牌 id；旋转：刷新即旧 jti 作废 |
+| `session_id` | TEXT | 否 | `''` | 会话家族 id；迁移把遗留空值回填为原 jti（`store.go:538-543`） |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，`ON DELETE CASCADE` |
+| `expires_at` | INTEGER → BIGINT | 否 | — | 过期秒数；默认签发 `REFRESH_TTL`=720h（30 天） |
+| `revoked` | INTEGER | 否 | `0` | `1` = 已吊销（单设备登出/管理端踢出） |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 签发时间 |
+| `user_agent` | TEXT | 否 | `''` | 设备上下文（"活跃会话"视图） |
+| `ip` | TEXT | 否 | `''` | 登录来源 IP（反代可信时才取 XFF，见 Cloudflare 页） |
+| `location` | TEXT | 否 | `''` | 尽力而为的归属地（来自反代 geo 头） |
+| `last_seen` | INTEGER → BIGINT | 否 | `0` | 该会话最近一次刷新时间 |
+
+- **主键**：`jti`。**索引**：`idx_refresh_tokens_user_id(user_id)`、`idx_refresh_tokens_user_session(user_id, session_id)`（均在迁移阶段创建，`store.go:564-565`）。
+- **备注**：与 `login_histories` 不同，本表行会随登出/轮换删除，不是审计真相源。每个 access token 还携带 `sid`（会话家族），中间件对照 DB 使按设备吊销跨副本生效。
+
+## `login_histories` — 成功登录审计
+
+不可变的成功登录流水。共 7 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `lh_` + 12 位十六进制 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `login_at` | INTEGER → BIGINT | 否 | `now()` | 登录时间 |
+| `ip` | TEXT | 否 | `''` | 来源 IP |
+| `location` | TEXT | 否 | `''` | 归属地（尽力而为） |
+| `user_agent` | TEXT | 否 | `''` | 客户端 UA |
+| `method` | TEXT | 否 | `'password'` | 登录方式：`password` / `password_2fa` / `oauth` / `oauth_2fa`（常量 `store/login_histories.go:11-16`） |
+
+- **索引**：`idx_login_histories_user_time(user_id, login_at DESC, id DESC)`。
+- **备注**：登出与会话轮换**不会**删除这些行；管理员可在用户详情下钻查看。
+
+## `oauth_providers` — 第三方登录配置
+
+管理员配置的 OAuth / 社交登录提供商。共 18 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `oa_` + 12 位十六进制 |
+| `kind` | TEXT | 否 | — | `google` / `github` / `apple` / `oidc` / `oauth2`（`internal/oauth/oauth.go`） |
+| `name` | TEXT | 否 | — | 登录按钮上显示的标签；`lower(trim(name))` 唯一 |
+| `icon` | TEXT | 否 | `''` | emoji 或上传的图标 URL（自定义提供商用） |
+| `client_id` | TEXT | 否 | `''` | OAuth 客户端 id |
+| `client_secret` | TEXT | 否 | `''` | **明文**；Apple 存的是 AuthKey `.p8` 私钥（运行时签出 client-secret JWT，TTL 30min） |
+| `issuer_url` | TEXT | 否 | `''` | 期望的 OIDC `iss`（仅通用类型） |
+| `jwks_url` | TEXT | 否 | `''` | 签名公钥集 URL（仅通用类型被信任） |
+| `auth_url` | TEXT | 否 | `''` | 授权端点（`oidc`/`oauth2` 用；内置类型忽略，端点来自代码默认值） |
+| `token_url` | TEXT | 否 | `''` | 令牌端点（同上） |
+| `userinfo_url` | TEXT | 否 | `''` | UserInfo 端点（`oauth2` 类型用） |
+| `scopes` | TEXT | 否 | `''` | 空格分隔的 scope 覆盖 |
+| `team_id` | TEXT | 否 | `''` | Apple 开发者团队 id |
+| `key_id` | TEXT | 否 | `''` | Apple AuthKey id |
+| `subject_namespace` | TEXT | 否 | `''` | 内部信任域生成标记（区分新旧 oidc 行，遗留回填 `MigrateLegacyOAuthProviderKinds`） |
+| `enabled` | INTEGER | 否 | `1` | 是否在登录页展示 |
+| `sort_order` | INTEGER | 否 | `0` | 登录按钮排序 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`idx_oauth_providers_name_unique` ON `lower(trim(name))`（UNIQUE）。
+- **备注**：自定义 issuer/JWKS 只对 `oidc`/`oauth2` 生效——陈旧的行内 override **无法**移动内置端点（`oauth.go:121-125`）。PKCE 用于 `google/oidc/oauth2`；ID-token 校验路径用于 `google/apple/oidc`。
+
+## `oauth_identities` — 身份链接
+
+把"提供商 + 不可变 subject"链到本地账号。共 5 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `provider_id` | TEXT | 否（PK 之一） | — | **软引用** `oauth_providers.id`（无 FK 约束） |
+| `subject` | TEXT | 否（PK 之一） | — | 提供商侧稳定用户标识 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `email` | TEXT | 否 | `''` | 登录时的邮箱快照（**不**作为匹配键） |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 首次链接时间 |
+
+- **主键**：复合 `(provider_id, subject)`。**索引**：`idx_oauth_identities_user(user_id)`。
+- **备注**：以提供商不可变 subject 为键，邮箱变更后重登仍能找回账号；解链走 `/api/me/identities`。
+
+## 相关页面
+
+- [登录方式与第三方登录配置](../../admin/access-auth.mdx) — 对应管理界面
+- [Cloudflare 反代要点](../../deployment/cloudflare-proxy.mdx) — 登录历史里 IP 的取值规则
+- [首次启动与管理员](../../admin/first-run.mdx) — 第一个 `users` 行如何产生

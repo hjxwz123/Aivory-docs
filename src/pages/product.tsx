@@ -39,6 +39,9 @@ export default function ProductPage(): ReactNode {
   const [mode, setMode] = useState<keyof typeof modes>('personal')
   const current = modes[mode]
 
+  // Legacy fallback for engines without :has(); modern browsers already match
+  // body:has(main.aivory-experience-page) pre-hydration, so this is a visual
+  // no-op there. Keep the mirrored rule sets in sync (see custom.css).
   useEffect(() => {
     document.body.classList.add('aivory-experience-page')
     return () => document.body.classList.remove('aivory-experience-page')

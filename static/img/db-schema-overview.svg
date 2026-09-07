@@ -1,0 +1,205 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 760" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1320" height="760" rx="14" fill="#0f172a"/>
+  <text x="660" y="34" text-anchor="middle" font-size="19" font-weight="700" fill="#e2e8f0">Aivory 数据库表结构总览 · Database Schema Overview (v2.4.6)</text>
+  <text x="660" y="56" text-anchor="middle" font-size="11.5" fill="#94a3b8">57 张表，SQLite（个人版）与 PostgreSQL（完整版）同构 — 权威定义：server/internal/store/schema.sql / schema_pg.sql（随二进制内嵌）</text>
+
+  <!-- ================= ROW 1 ================= -->
+  <!-- G1 identity -->
+  <g>
+    <rect x="20" y="76" width="288" height="240" rx="10" fill="#111c33" stroke="#6366f1" stroke-width="1.4"/>
+    <text x="34" y="97" font-size="14" font-weight="700" fill="#a5b4fc">用户与认证 · 5 表</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#dbe6ff">
+      <rect x="32" y="114" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="127">users</text>
+      <rect x="32" y="134" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="147">refresh_tokens</text>
+      <rect x="32" y="154" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="167">login_histories</text>
+      <rect x="32" y="174" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="187">oauth_providers</text>
+      <rect x="32" y="194" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="207">oauth_identities</text>
+    </g>
+    <text x="34" y="232" font-size="9.5" fill="#8ea0c0">会话家族 = session_id + jti 轮换；token_ver 使改密/踢出</text>
+    <text x="34" y="245" font-size="9.5" fill="#8ea0c0">即时生效。oauth 链接以 (provider_id, subject)</text>
+    <text x="34" y="258" font-size="9.5" fill="#8ea0c0">为主键，邮箱变更不断链。</text>
+    <text x="34" y="284" font-size="9.5" fill="#64748b">api_key / client_secret / payment config 均为明文存储</text>
+    <text x="34" y="297" font-size="9.5" fill="#64748b">（仅 API 层掩码）— 备份必须加密。</text>
+  </g>
+
+  <!-- G2 conversations -->
+  <g>
+    <rect x="352" y="76" width="288" height="240" rx="10" fill="#111c33" stroke="#22d3ee" stroke-width="1.4"/>
+    <text x="366" y="97" font-size="14" font-weight="700" fill="#67e8f9">对话与消息 · 9 表</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#dbe6ff">
+      <rect x="364" y="114" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="127">projects</text>
+      <rect x="364" y="134" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="147">conversations</text>
+      <rect x="364" y="154" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="167">messages (DAG)</text>
+      <rect x="364" y="174" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="187">message_feedback</text>
+      <rect x="364" y="194" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="207">user_feedback</text>
+      <rect x="364" y="214" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="227">conversation_shares</text>
+      <rect x="364" y="234" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="247">memories</text>
+      <rect x="364" y="254" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="267">conversation_compaction_leases</text>
+      <rect x="364" y="274" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="287">conversation_generation_leases</text>
+    </g>
+    <text x="366" y="306" font-size="9.5" fill="#8ea0c0">messages.parent_id 自引用构成消息树（分支/重生成）。</text>
+  </g>
+
+  <!-- G3 knowledge -->
+  <g>
+    <rect x="684" y="76" width="288" height="240" rx="10" fill="#111c33" stroke="#34d399" stroke-width="1.4"/>
+    <text x="698" y="97" font-size="14" font-weight="700" fill="#6ee7b7">文件与知识库 · 7 表</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#dbe6ff">
+      <rect x="696" y="114" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="127">knowledge_bases</text>
+      <rect x="696" y="134" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="147">knowledge_base_shares</text>
+      <rect x="696" y="154" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="167">documents</text>
+      <rect x="696" y="174" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="187">chunks</text>
+      <rect x="696" y="194" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="207">vector_points</text>
+      <rect x="696" y="214" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="227">files</text>
+      <rect x="696" y="234" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="247">artifacts</text>
+    </g>
+    <text x="698" y="270" font-size="9.5" fill="#8ea0c0">级联链：documents → chunks → vector_points。</text>
+    <text x="698" y="283" font-size="9.5" fill="#8ea0c0">个人版向量存 vector_points；完整版仅 Qdrant</text>
+    <text x="698" y="296" font-size="9.5" fill="#8ea0c0">collection aivory_c&lt;dim&gt;，此表留空。</text>
+  </g>
+
+  <!-- G4 models -->
+  <g>
+    <rect x="1016" y="76" width="288" height="240" rx="10" fill="#111c33" stroke="#f59e0b" stroke-width="1.4"/>
+    <text x="1030" y="97" font-size="14" font-weight="700" fill="#fcd34d">模型渠道与调用日志 · 6 表</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#dbe6ff">
+      <rect x="1028" y="114" width="264" height="18" rx="4" fill="#1e293b"/><text x="1036" y="127">channels</text>
+      <rect x="1028" y="134" width="264" height="18" rx="4" fill="#1e293b"/><text x="1036" y="147">models</text>
+      <rect x="1028" y="154" width="264" height="18" rx="4" fill="#1e293b"/><text x="1036" y="167">model_tags</text>
+      <rect x="1028" y="174" width="264" height="18" rx="4" fill="#1e293b"/><text x="1036" y="187">model_skills</text>
+      <rect x="1028" y="194" width="264" height="18" rx="4" fill="#1e293b"/><text x="1036" y="207">usage_logs（可删除）</text>
+      <rect x="1028" y="214" width="264" height="18" rx="4" fill="#1e293b"/><text x="1036" y="227">usage_stats（仅追加）</text>
+    </g>
+    <text x="1030" y="250" font-size="9.5" fill="#8ea0c0">成功请求经数据库触发器镜像到 usage_stats；</text>
+    <text x="1030" y="263" font-size="9.5" fill="#8ea0c0">删日志不改统计。生成的图片没有独立表：</text>
+    <text x="1030" y="276" font-size="9.5" fill="#8ea0c0">落 messages + artifacts（source 区分来源）。</text>
+    <text x="1030" y="300" font-size="9.5" fill="#64748b">删除渠道级联删其 models；conversations.model_id 是无约束快照。</text>
+  </g>
+
+  <!-- ================= ROW 2 ================= -->
+  <!-- G5 workspaces -->
+  <g>
+    <rect x="20" y="350" width="288" height="320" rx="10" fill="#111c33" stroke="#a78bfa" stroke-width="1.4"/>
+    <text x="34" y="371" font-size="14" font-weight="700" fill="#c4b5fd">工作空间与成员 · 6 表</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#dbe6ff">
+      <rect x="32" y="388" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="401">workspaces</text>
+      <rect x="32" y="408" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="421">workspace_members</text>
+      <rect x="32" y="428" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="441">workspace_invites</text>
+      <rect x="32" y="448" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="461">workspace_policies</text>
+      <rect x="32" y="468" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="481">workspace_kb_member_permissions</text>
+      <rect x="32" y="488" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="501">workspace_audit_logs</text>
+    </g>
+    <text x="34" y="526" font-size="9.5" fill="#8ea0c0">成员角色 admin/member/guest + 14 个 can_* 细粒度列；</text>
+    <text x="34" y="539" font-size="9.5" fill="#8ea0c0">policy 只能收窄平台能力。审计行无 FK，</text>
+    <text x="34" y="552" font-size="9.5" fill="#8ea0c0">故意活过工作空间删除。</text>
+    <text x="34" y="576" font-size="9.5" fill="#64748b">业务表以 workspace_id 列归属空间（软引用），</text>
+    <text x="34" y="589" font-size="9.5" fill="#64748b">空串 '' = 个人数据。</text>
+  </g>
+
+  <!-- G6 billing -->
+  <g>
+    <rect x="352" y="350" width="288" height="320" rx="10" fill="#111c33" stroke="#f472b6" stroke-width="1.4"/>
+    <text x="366" y="371" font-size="14" font-weight="700" fill="#f9a8d4">订阅积分计费 · 15 表</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#dbe6ff">
+      <rect x="364" y="388" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="401">user_groups</text>
+      <rect x="364" y="408" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="421">credit_ledger</text>
+      <rect x="364" y="428" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="441">credit_reservations</text>
+      <rect x="364" y="448" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="461">credit_adjustment_notifications</text>
+      <rect x="364" y="468" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="481">quota_ledger</text>
+      <rect x="364" y="488" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="501">billing_usage</text>
+      <rect x="364" y="508" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="521">credit_packages</text>
+      <rect x="364" y="528" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="541">model_group_quotas</text>
+      <rect x="364" y="548" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="561">redeem_codes / redeem_redemptions</text>
+      <rect x="364" y="568" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="581">payment_channels / payment_methods</text>
+      <rect x="364" y="588" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="601">payment_orders</text>
+      <rect x="364" y="608" width="264" height="18" rx="4" fill="#1e293b"/><text x="372" y="621">payment_order_attempts / payment_events</text>
+    </g>
+    <text x="366" y="646" font-size="9.5" fill="#8ea0c0">金额一律 micros 定点整数；价格按结算货币最小单位。</text>
+    <text x="366" y="659" font-size="9.5" fill="#8ea0c0">credit_ledger 永不被日志清理删除。</text>
+  </g>
+
+  <!-- G7 capabilities -->
+  <g>
+    <rect x="684" y="350" width="288" height="320" rx="10" fill="#111c33" stroke="#84cc16" stroke-width="1.4"/>
+    <text x="698" y="371" font-size="14" font-weight="700" fill="#bef264">能力与集成 · 7 表</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#dbe6ff">
+      <rect x="696" y="388" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="401">skills</text>
+      <rect x="696" y="408" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="421">prompts</text>
+      <rect x="696" y="428" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="441">user_skills</text>
+      <rect x="696" y="448" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="461">user_prompts</text>
+      <rect x="696" y="468" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="481">mcp_servers</text>
+      <rect x="696" y="488" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="501">user_mcp_servers</text>
+      <rect x="696" y="508" width="264" height="18" rx="4" fill="#1e293b"/><text x="704" y="521">image_styles</text>
+    </g>
+    <text x="698" y="546" font-size="9.5" fill="#8ea0c0">user_* 为私有副本（source_id 溯源，SET NULL）；</text>
+    <text x="698" y="559" font-size="9.5" fill="#8ea0c0">私人技能无 assets，不能向沙箱注入文件。</text>
+    <text x="698" y="572" font-size="9.5" fill="#8ea0c0">MCP 行缓存 discovered_tools 快照；headers 可含凭据。</text>
+    <text x="698" y="596" font-size="9.5" fill="#64748b">沙箱会话状态不在数据库中：sidecar 内存 +</text>
+    <text x="698" y="609" font-size="9.5" fill="#64748b">/workspace 按 conversation id 归档到对象存储。</text>
+  </g>
+
+  <!-- G8 system -->
+  <g>
+    <rect x="1016" y="350" width="288" height="320" rx="10" fill="#111c33" stroke="#94a3b8" stroke-width="1.4"/>
+    <text x="1030" y="371" font-size="14" font-weight="700" fill="#cbd5e1">系统配置与审计 · 2 表</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#dbe6ff">
+      <rect x="1028" y="388" width="264" height="18" rx="4" fill="#1e293b"/><text x="1036" y="401">settings（全局 k/v）</text>
+      <rect x="1028" y="408" width="264" height="18" rx="4" fill="#1e293b"/><text x="1036" y="421">pending_storage_cleanup</text>
+    </g>
+    <text x="1030" y="446" font-size="9.5" fill="#8ea0c0">settings.value 为 JSON 编码；绝大多数运行时配置</text>
+    <text x="1030" y="459" font-size="9.5" fill="#8ea0c0">（模型策略/RAG/配额/审核/公告）存在这里，</text>
+    <text x="1030" y="472" font-size="9.5" fill="#8ea0c0">热加载生效，多副本经 Redis cfg:invalidate 广播。</text>
+    <text x="1030" y="485" font-size="9.5" fill="#8ea0c0">一次性数据回填的幂等标记位也写在这里。</text>
+    <text x="1030" y="512" font-size="9.5" fill="#64748b">pending_storage_cleanup：异步删号时先登记路径</text>
+    <text x="1030" y="525" font-size="9.5" fill="#64748b">再删库，启动时清扫，防磁盘/对象孤儿。</text>
+  </g>
+
+  <!-- ================= arrows ================= -->
+  <g stroke="#94a3b8" stroke-width="1.3" fill="none" marker-end="url(#arr)">
+    <!-- users.user_id -> conversations -->
+    <path d="M308,143 L352,143"/>
+    <!-- messages -> files/documents (conversation_id) -->
+    <path d="M640,167 L684,167"/>
+    <!-- knowledge_bases.embedding_model_id -> models -->
+    <path d="M972,123 C988,123 996,143 1016,143"/>
+    <!-- workspace_members.user_id -> users (vertical up) -->
+    <path d="M120,350 L120,316"/>
+    <!-- billing FK -> models (up through strip) -->
+    <path d="M470,350 L470,332 L1150,332 L1150,316"/>
+  </g>
+  <g stroke="#64748b" stroke-width="1.2" stroke-dasharray="4 3" fill="none" marker-end="url(#arrc)">
+    <!-- users.group_id -> user_groups (soft) -->
+    <path d="M250,316 C250,340 340,340 372,350"/>
+    <!-- usage_logs -> usage_stats mirror (adjacent rows inside G4) -->
+    <path d="M1040,212 L1040,214" marker-end="url(#arrc)"/>
+  </g>
+  <g font-size="8.5" fill="#9fb0cc">
+    <text x="330" y="138" text-anchor="middle">user_id</text>
+    <text x="662" y="162" text-anchor="middle">conversation_id</text>
+    <text x="994" y="118" text-anchor="middle">embedding_model_id</text>
+    <text x="126" y="338">user_id · owner_id (CASCADE)</text>
+    <text x="810" y="328" text-anchor="middle">FK → models / user_groups（model_skills、model_group_quotas、redeem…）</text>
+    <text x="288" y="344" text-anchor="middle">group_id（软引用）</text>
+    <text x="1292" y="224" text-anchor="end">镜像：AFTER INSERT 触发器（排除 status=error）</text>
+  </g>
+
+  <!-- legend -->
+  <g font-size="10.5" fill="#94a3b8">
+    <line x1="40" y1="700" x2="72" y2="700" stroke="#94a3b8" stroke-width="1.3" marker-end="url(#arr)"/>
+    <text x="80" y="704">外键（箭头指向父表）</text>
+    <line x1="230" y1="700" x2="262" y2="700" stroke="#64748b" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrc)"/>
+    <text x="270" y="704">软引用 / 无约束快照 id / 触发器镜像</text>
+    <text x="560" y="704">个人版：单文件 SQLite（DATA_DIR/aivory.db，WAL）+ 内嵌 vector_points + 进程内队列/缓存</text>
+    <text x="560" y="722">完整版：PostgreSQL（57 表同构）+ Redis（限流/nonce/pub-sub/asynq 队列）+ Qdrant（collection aivory_c&lt;dim&gt;）</text>
+    <text x="40" y="722" font-size="9.5">时间列均为 unix 秒（SQLite INTEGER / PG BIGINT）；布尔标志刻意保持 INTEGER 0/1；JSON 一律放 TEXT 列。</text>
+  </g>
+</svg>

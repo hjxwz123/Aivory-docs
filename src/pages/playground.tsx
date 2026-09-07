@@ -9,6 +9,9 @@ import styles from './experience.module.css'
 export default function PlaygroundPage(): ReactNode {
   const {i18n} = useDocusaurusContext()
   const isEnglish = i18n.currentLocale === 'en'
+  // Legacy fallback for engines without :has(); modern browsers already match
+  // body:has(main.aivory-experience-page) pre-hydration, so this is a visual
+  // no-op there. Keep the mirrored rule sets in sync (see custom.css).
   useEffect(() => {
     document.body.classList.add('aivory-experience-page')
     return () => document.body.classList.remove('aivory-experience-page')

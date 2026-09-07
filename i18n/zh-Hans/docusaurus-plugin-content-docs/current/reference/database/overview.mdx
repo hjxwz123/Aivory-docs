@@ -1,0 +1,266 @@
+---
+title: 数据库总览与运维
+sidebar_position: 1
+description: Aivory 数据层权威参考的入口：57 张表如何存储、迁移如何执行、如何备份恢复，以及常用运维 SQL。
+---
+
+# 数据库总览与运维
+
+本组页面是 Aivory v2.4.6 关系数据模型的完整参考：**57 张表、667 个有效列**逐一列出，零省略。权威 schema 内嵌在 Go 二进制里：
+
+- SQLite（个人版/开发）：`server/internal/store/schema.sql`（1087 行，经 `//go:embed` 打进二进制，`store.go:22-23`）
+- PostgreSQL（完整版）：`server/internal/store/schema_pg.sql`（1017 行，`store.go:25-26`）
+
+两个文件声明**完全相同的 57 张表**（列名与语义一致，仅方言类型不同），启动时由 `store.Migrate()` 幂等应用。最终生效结构 = 内嵌 `CREATE TABLE` + `store.Migrate` 中约 130 条附加 `ALTER TABLE ADD COLUMN`（少数列只存在于 ALTER 里，如 `users.group_expires_at`、`messages.feedback`、`conversations.workspace_id`，正文中以 **※附加列** 标注）。
+
+:::caution 不要参考 server/migrations/
+`server/migrations/0001_init.sql` 是早期初始快照，**没有任何运行时代码引用它**，不代表当前结构。当前结构的唯一真相是上面两个 `schema*.sql` 文件加上 `store.go` 的附加迁移步骤。
+:::
+
+## 页面导航
+
+| 页面 | 表数 | 内容 |
+| --- | --- | --- |
+| [用户与认证](./users-auth.mdx) | 5 | `users`、`refresh_tokens`、`login_histories`、`oauth_providers`、`oauth_identities` |
+| [渠道、模型与用量](./channels-model-calls.mdx) | 6 | `channels`、`models`、`model_tags`、`model_skills`、`usage_logs`、`usage_stats` |
+| [对话与消息](./conversations-messages.mdx) | 9 | `projects`、`conversations`、`messages`、`message_feedback`、`user_feedback`、`conversation_shares`、`memories`、两张会话租约表 |
+| [文件与知识库](./files-knowledge.mdx) | 7 | `files`、`knowledge_bases`、`knowledge_base_shares`、`documents`、`chunks`、`vector_points`、`artifacts` |
+| [订阅、积分与支付](./billing.mdx) | 15 | `user_groups`、积分/配额账本、充值包、兑换码、支付渠道/方式/订单/事件 |
+| [工作空间与成员](./workspaces-members.mdx) | 6 | `workspaces`、成员、邀请、策略、库级权限、审计日志 |
+| [能力与集成](./tools-sandbox.mdx) | 7 | `skills`、`prompts`、私有副本 `user_*`、`mcp_servers`、`user_mcp_servers`、`image_styles` |
+| [系统与审计](./system-audit.mdx) | 2 | `settings`（全局键值）、`pending_storage_cleanup`（删号清理队列） |
+
+合计 5+6+9+7+15+6+7+2 = **57 张表**。Aivory 没有 `schema_migrations` 之类的迁移记账表（见下文[迁移机制](#迁移机制没有外部迁移工具)），因此不需要把它放在哪一页。
+
+## 数据模型总览
+
+下图按领域分组展示表与关键外键方向；逐表逐列细节见上面的页面导航。
+
+![Aivory 数据库 57 张表按领域分组的总览图，标注了主要外键与两种版本的存储引擎差异](/img/db-schema-overview.svg)
+
+## 总览：两种版本的数据存在哪里
+
+Aivory 只有一个 Go 后端二进制，启动时按 `DATABASE_URL` / `REDIS_URL` / `QDRANT_URL` 选择存储引擎（见[部署与环境变量](../../deployment/environment.mdx)）。**没有任何一张表是个人版独有的**——57 张表在两种版本中都会创建，区别只在向量、缓存与队列落在哪个引擎：
+
+| 数据类别 | 个人版（SQLite） | 完整版（PostgreSQL + Redis + Qdrant） |
+| --- | --- | --- |
+| 全部 57 张关系表 | 单文件 `DATA_DIR/aivory.db`，WAL 模式（`DATABASE_URL=/app/data/aivory.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`，`deploy/docker-compose.personal.yml:28`） | `postgres` 容器的命名卷 `pgdata`（`postgres:16-alpine`） |
+| RAG 向量 | `vector_points` 表（内嵌精确余弦检索，`VECTOR_BACKEND=sqlite` 固定） | Qdrant（`qdrant/qdrant:v1.12.4`，卷 `qdrantdata`），集合按维度命名 `aivory_c<dim>`（`server/internal/vector/qdrant.go`）；`vector_points` 保持为空 |
+| 限流计数、请求签名 nonce、停止/封禁/配置广播（pub/sub）、SSE 断线重放缓冲 | 进程内存（单容器，够用） | Redis 7（卷 `redisdata`，`--appendonly yes`） |
+| RAG 摄取异步队列 | 进程内队列 | asynq（跑在 Redis 上） |
+| 上传文件、生成产物、本地对象存储、后台备份 ZIP | `DATA_DIR` 下由服务端启动创建的 `uploads/`（本地对象存储在 `uploads/object-storage/`）、`artifacts/`、`backups/` 目录（bind mount） | 同样在 `DATA_DIR`（`app` 容器 bind mount），管理员可改配 S3/OSS |
+| 管理员运行时配置（模型策略、RAG 参数、配额、审核、公告等） | [`settings`](./system-audit.mdx) 表（DB 键值，热加载） | 同左；多副本间经 Redis 频道 `cfg:invalidate` 广播失效 |
+
+要点：
+
+- `vector_points` 在两种方言里都存在，且个人版真实写入——**故意保留**，这样逻辑备份（`pg_dump` / `.backup`）不依赖具体向量引擎即可带走全部关系数据（`schema.sql:793-795`）。Qdrant 数据是它的"另一份真相"，必须单独备份（见[备份范围](../../deployment/upgrade-backup.mdx)）。
+- 个人版 compose 显式清空 `REDIS_URL=""`、`QDRANT_URL=""`，防止从完整版复制来的 `.env` 值悄悄启用外部存储。
+- SQLite 是单写者：`store.Open` 对 SQLite 固定 `SetMaxOpenConns(1)` 串行化写、每个连接执行 `PRAGMA foreign_keys = ON`；PostgreSQL 走连接池（max open 20 / idle 10 / idle 5min / lifetime 1h，`store.go:44-50,73-76`）。因此**个人版只支持单实例，禁止 NFS 共享数据目录或水平扩容**。
+
+## 命名与类型约定
+
+读任何一张表之前先记住这几条全局约定。各分页的"类型"列使用记法 `SQLite类型`，方言不同处写作 `INTEGER → BIGINT`（SQLite → PostgreSQL）：
+
+| 约定 | 说明 |
+| --- | --- |
+| 文本主键 | 绝大多数表 `id TEXT PRIMARY KEY`，值形如 `前缀_` + 12 位十六进制（48 bit 随机，`genID`，`store/ids.go:14-19`），如 `u_a1b2c3d4e5f6`、`oa_0f1e2d3c4b5a`、`msg_9e8d7c6b5a43`、`kb_1a2b3c4d5e6f`、`qr_7f6e5d4c3b2a`。例外：`usage_logs.id`（自增整型）、`usage_stats.source_log_id`（整型）；没有 `id` 列的共 15 张表使用复合或替代单列主键（`model_skills`、`model_group_quotas`、`workspace_members`、`workspace_policies`、`workspace_kb_member_permissions`、`oauth_identities`、`knowledge_base_shares`、`vector_points`、`refresh_tokens`、`settings`、`usage_stats`、`pending_storage_cleanup`、`payment_order_attempts`、`conversation_compaction_leases`、`conversation_generation_leases`） |
+| 高熵令牌 | 以 id 直接充当不可猜能力令牌的场合（公开分享 `conversation_shares.id`、`workspaces.invite_token`、`workspace_invites.token`）用 `genToken()`：48 位十六进制 = 192 bit（`ids.go:25-30`） |
+| 时间 | **unix 秒**整数。SQLite `INTEGER DEFAULT (strftime('%s','now'))`；PG 换成 `BIGINT DEFAULT (extract(epoch from now())::bigint)`（避免 2038 与大 token 求和溢出）。下文默认值里的 `now()` 即指这个方言默认表达式 |
+| 布尔标志 | `INTEGER` 0/1（如 `enabled`、`pinned`、`fast`）。PG 方言**刻意保留 INTEGER 而非 BOOLEAN**，因为 Go store 层以 `int` 读写（`schema_pg.sql:9-11`） |
+| JSON | 存进 `TEXT` 列（`blocks`、`kb_ids`、`features`、`permissions`、`settings.value` 等），PG 也绝大多数用 TEXT——store 层跨方言不变。仅两处 PG 例外：`message_feedback.reasons` 为 `JSONB`（SQLite 为 TEXT），`vector_points.embedding`/`user_feedback.screenshot` 为 `BYTEA`（SQLite 为 `BLOB`） |
+| 空串当"无" | 可空引用大量用 `''` 而非 NULL 表示"未关联"（`model_id`、`conversation_id`、`fallback_channel_id`）；`workspace_id=''` 恒等于**个人数据** |
+| REAL → DOUBLE PRECISION | 计费金额类列（`cost`、`credits`、`price_*`、`credit_ledger.amount`、`payment_orders.credits`）PG 升为 DOUBLE PRECISION。**注意**：若干显示/限额镜像列在 PG 仍是 `REAL`（PG 的 REAL 是 4 字节浮点）：`users.credits_permanent`、`user_groups.credit_allowance`、`credit_packages.credits`、`redeem_codes.credits`、`redeem_redemptions.credits`、`model_group_quotas.limit_value`、`workspace_policies.member_monthly_credit_limit`——这些列只用于展示/宽松阈值，权威金额一律走 `*_micros` 定点整数 |
+| AUTOINCREMENT → BIGSERIAL | 仅 `usage_logs.id` 用到；`usage_stats.source_log_id` 两侧都是整型主键（SQLite `INTEGER PRIMARY KEY`，PG `BIGINT`） |
+| 明文机密 | `channels.api_key`、`oauth_providers.client_secret`（Apple 存 `.p8`）、`payment_channels.config`、`mcp_servers.headers`/`user_mcp_servers.headers` 在库内**明文**存储，只有 API 层掩码。备份文件必须加密、限权 |
+| 口令 | `users.password_hash` 为 bcrypt（`store/ids.go`），非明文 |
+
+## 迁移机制：没有外部迁移工具
+
+Aivory **不使用** goose / golang-migrate / Flyway，**没有 `schema_migrations` 版本表**。机制是**启动期自定义幂等演进**（`cmd/api/main.go` → `store.Open → store.Migrate → store.Seed`，`store.go:100-807`）：
+
+1. **预检**：`columnExists()` 探针（`SELECT col FROM tbl WHERE 1=0`）记录若干列在本次启动前是否存在，作为"是否刚被本进程添加"的判据。
+2. **规范化**：技能名去重（`dedupeSkillNames`）、唯一文本字段归一（`normalizeUniqueTextFields`）。
+3. **应用内嵌 schema**：`db.Exec(schemaSQL 或 schemaPGSQL)`——全部是 `CREATE TABLE IF NOT EXISTS`，对老库无副作用。
+4. **退役清理**：删除已废弃的 settings 键（`summary_target_percent`、`summary_merge_max_tokens`）。
+5. **附加列演进**（约 130 条 `ALTER TABLE ADD COLUMN`）：SQLite 上"列已存在"报错是**预期内**并被忽略；PG 用 `ADD COLUMN IF NOT EXISTS` 干净空转。
+6. **一次性数据修复 UPDATE**：角色折叠（`workspace_members` 遗留 `owner` → `admin`、非法值 → `guest`）、工作空间会话归档复位、`session_id` 回填、支付快照回填、`documents.uploaded_by_user_id` 溯源，以及在[系统与审计](./system-audit.mdx)一页完整列出的回填/清理幂等标记键。
+7. **删除遗留列**：`chunks.embedding`（向量搬家）——PG `DROP COLUMN IF EXISTS`；SQLite 先尝试 `DROP COLUMN`，失败则在事务内 `RENAME → CREATE → INSERT-SELECT 复制行 → DROP → 重建 vector_points`（`store.go:809-885`）。
+8. **后置索引**：依赖附加列的索引在 ALTER 之后创建；部分唯一索引在这里**替换** schema 文件里的旧定义（项目/库名按 `(user, workspace, name)` 三列、技能/提示词/MCP 的名字唯一按个人/空间作用域拆成两组部分唯一索引，`store.go:577-618`）。
+9. **列一致性守卫**：对每张表探针检查所有附加列必须存在——因为第 5 步刻意吞错，真失败会在这里**大声中止启动**，而不是等线上查询报 "no such column"（`store.go:620-671`）。
+10. **回填与镜像**：安装 `usage_stats` 触发器、`BackfillUsageStats`，然后是一批**以 settings 标记位（或列存在性）为闸**的一次性回填（`msg_search_text_backfill_v1`、`user_sort_order_backfill_v1`、`user_onboarded_backfill_v1`、`oauth_pwset_backfill_v1`、`user_group_billing_prices_backfill_v2`），键集分页、尽力而为、跑完盖章。这些标记位本身就是 `settings` 表的行——这就是 Aivory 的"迁移记账"。
+11. **`Seed`**：`INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO NOTHING` 写入默认 settings + 永远存在的 `ug_free` 组。**不播种任何管理员**——第一个管理员只能走首次初始化界面（`POST /api/setup`，见[首次启动](../../admin/first-run.mdx)）。
+
+### 关于手动改库
+
+:::danger
+数据库结构（DDL）的唯一变更通道是改 Go 源码：`schema*.sql` + 一条新 ALTER + 加入列一致性守卫，三处同改，随下次发版自动应用。直接在生产库上手加列不会被应用感知（列守卫/查询都不认识它），还可能让下一次发版的迁移行为偏离预期。
+:::
+
+手工 **DML**（数据行）操作守则：
+
+- 先备份（见下一节），并在维护窗口操作。
+- 个人版：SQLite 虽有 WAL 支持并发读，但外部连接**写**会与应用争锁（`busy_timeout(5000)` 之后报错）；确认应用停止或极短事务内完成。
+- 完整版：把整个手工修补包放进一个事务；`PRAGMA foreign_keys` 在 SQLite 是连接级的，应用连接已开，但**外部 sqlite3 工具默认不开外键**——用 `sqlite3` 修数据前先 `PRAGMA foreign_keys = ON;`。
+- 保持布尔列 0/1、JSON 列合法、时间列 unix 秒。改 `settings.value` 时特别注意它是 JSON 编码——裸 `true` 和 `"true"` 不是一回事。
+- 优先使用管理后台（含「备份与迁移」页的配置导出/导入）而不是手改 SQL。
+
+## 备份与恢复（数据层视角）
+
+[升级、备份与恢复](../../deployment/upgrade-backup.mdx) 负责备份范围矩阵、原则与验收；本节只给该页没有的具体命令。
+
+### SQLite（个人版）：热备份
+
+运行中的 WAL 库**不要直接 `cp`**（主文件 + `-wal` 旁文件可能撕裂）。应用镜像不带 `sqlite3` CLI，推荐用一次性容器执行在线 `.backup`（它通过 SQLite 连接读页，天然一致）：
+
+```bash
+cd /path/to/aivory/deploy
+docker run --rm -v "$PWD/data-personal:/data" alpine:3 sh -c '
+  apk add --no-cache sqlite >/dev/null &&
+  sqlite3 /data/aivory.db ".backup /data/aivory-snapshot.db" &&
+  sqlite3 /data/aivory-snapshot.db "PRAGMA integrity_check;"'
+```
+
+文件级完整恢复则应**停止 app 容器**后打包整个 `DATA_DIR`（数据库、向量、上传、产物、归档、备份目录是一个整体）。
+
+### PostgreSQL（完整版）：pg_dump / pg_restore
+
+```bash
+cd /path/to/aivory/deploy
+# 自定义压缩格式，含 schema+data；用户名/库名默认 aivory（compose 可覆盖）
+docker compose --env-file .env -f docker-compose.prod.yml \
+  exec -T postgres pg_dump -U aivory -d aivory -Fc \
+  > aivory-db-$(date +%F).dump
+
+# 恢复（目标库须已存在且可清空；--clean --if-exists 处理已有对象）
+cat aivory-db-<date>.dump | docker compose --env-file .env -f docker-compose.prod.yml \
+  exec -T postgres pg_restore -U aivory -d aivory --clean --if-exists --no-owner
+```
+
+`usage_stats` 的镜像触发器不在逻辑转储的表数据里——`pg_restore` 之后由应用启动时 `Migrate` 重新安装，无需（也不应）手工重建。
+
+### Qdrant：快照
+
+Qdrant 在 compose 中**不发布任何宿主端口**（仅内网），所以快照命令走容器内：
+
+```bash
+cd /path/to/aivory/deploy
+# 集合按维度命名，常见为 aivory_c1536（text-embedding-3-small）或 aivory_c256（内置本地嵌入）
+docker compose --env-file .env -f docker-compose.prod.yml exec qdrant \
+  curl -s -X POST -H "api-key: ${QDRANT_API_KEY:-aivory-internal-qdrant}" \
+  http://localhost:6333/collections/aivory_c1536/snapshots
+# 快照文件落在 qdrantdata 卷的 /qdrant/snapshots 下，随后打包带走：
+docker compose --env-file .env -f docker-compose.prod.yml cp qdrant:/qdrant/snapshots ./qdrant-snapshots
+```
+
+丢失 Qdrant 数据不等于丢失知识库：关系侧 `documents`/`chunks` 仍在，但向量检索失效——需要重建向量（管理后台「存储与上传」提供向量维护入口；也可重新上传文档触发再摄取）。
+
+### Redis：持久化与丢失后果
+
+完整版以 `--appendonly yes` 运行 AOF，卷 `redisdata`。但 Redis **不是任何真相的权威存储**；丢失/清空 Redis 的后果是：
+
+- 限流与登录失败计数归零（重新累积即可）；
+- 请求签名 nonce 去重集合清空（短暂的回放防护窗口，建议清后重启应用进程）；
+- 进程间 pub/sub（停止生成、封禁、`cfg:invalidate`）本来就只影响在线时刻；
+- SSE 断线重放缓冲丢失：正在流式中的回答**服务端仍会写完并持久化**，只是无法逐事件回放，刷新后从库里读到完整消息；
+- asynq 里排队的 RAG 摄取任务丢失：未 `ready` 的 `documents` 会被心跳看门狗判定滞留，可重新触发摄取。
+
+运维建议：把 `pgdata` + Qdrant 快照 + `DATA_DIR` 当作"必须一致"的三件套同时备份；Redis 卷按 AOF 默认策略顺带保即可。
+
+## 常见数据运维 SQL
+
+时间谓词按方言替换：SQLite 用 `strftime('%s','now')`，PostgreSQL 用 `extract(epoch from now())::bigint`。以下示例两种引擎通用，差异处标注。
+
+```sql
+-- 1) 最近 24 小时活跃用户
+SELECT id, email, name, last_seen_at
+FROM users
+WHERE last_seen_at > strftime('%s','now') - 86400 AND status = 'active'
+ORDER BY last_seen_at DESC;
+-- PG 把 strftime('%s','now') 换成 extract(epoch from now())::bigint（下同）
+
+-- 2) 近 30 天各模型 token 消耗与成本（用分析真相表，不受日志清理影响）
+SELECT s.model_id, m.label, m.currency,
+       SUM(s.input_tokens)  AS input_tokens,
+       SUM(s.output_tokens) AS output_tokens,
+       SUM(s.cost)          AS cost
+FROM usage_stats s
+LEFT JOIN models m ON m.id = s.model_id          -- 模型删除后 s.model_id 仍可统计（快照）
+WHERE s.created_at > strftime('%s','now') - 30 * 86400
+GROUP BY s.model_id, m.label, m.currency
+ORDER BY cost DESC;
+
+-- 3) 失败的上游请求（诊断明细）
+SELECT created_at, user_id, model_id, purpose, channel_id, fallback, error
+FROM usage_logs
+WHERE status = 'error'
+ORDER BY id DESC LIMIT 100;
+
+-- 4) 卡住的 RAG 摄取：状态长期停留在中间态、心跳超时
+SELECT id, kb_id, filename, status, ingest_updated_at
+FROM documents
+WHERE status IN ('pending','parsing','embedding')
+  AND ingest_updated_at < strftime('%s','now') - 90 * 60;   -- 90 分钟无心跳视为僵尸候选
+
+-- 5) 永久积分余额排行（micros 除以 1e6）
+SELECT u.email, u.credits_permanent_micros / 1000000.0 AS credits
+FROM users u
+WHERE u.credits_permanent_micros > 0
+ORDER BY u.credits_permanent_micros DESC LIMIT 20;
+
+-- 6) 未领取的管理员调账通知
+SELECT user_id, direction, amount_micros / 1000000.0 AS amount, reason, created_at
+FROM credit_adjustment_notifications
+WHERE claimed_at = 0;
+
+-- 7) 兑换码使用情况
+SELECT r.code, r.kind, r.used_count, r.max_uses, COUNT(x.id) AS redemptions
+FROM redeem_codes r
+LEFT JOIN redeem_redemptions x ON x.code_id = r.id
+GROUP BY r.id, r.code, r.kind, r.used_count, r.max_uses
+ORDER BY redemptions DESC;
+
+-- 8) 异步删号残留检查：正常应为空；非空说明物理清理被打断，重启应用会清扫
+SELECT path, user_id, created_at FROM pending_storage_cleanup ORDER BY created_at;
+
+-- 9) 清理 180 天前的诊断日志（不影响统计——镜像只发生在 INSERT 时）
+DELETE FROM usage_logs WHERE created_at < strftime('%s','now') - 180 * 86400;
+
+-- 10) 某知识库的规模与状态分布
+SELECT d.status, COUNT(DISTINCT d.id) AS docs, COALESCE(SUM(d.chunk_count),0) AS chunks
+FROM documents d
+WHERE d.kb_id = 'kb_1a2b3c4d5e6f'
+GROUP BY d.status;
+
+-- 11) 工作空间成员权限盘点
+SELECT w.name AS workspace, u.email, wm.role,
+       wm.can_create_skills, wm.can_delete_kb_content
+FROM workspace_members wm
+JOIN workspaces w ON w.id = wm.workspace_id
+JOIN users u ON u.id = wm.user_id
+ORDER BY w.name, u.email;
+
+-- 12) 定时积分周期账本核对（timed 扣费按组窗口聚合）
+SELECT user_id, group_id, cycle_anchor, SUM(amount_micros) / 1000000.0 AS spent
+FROM credit_ledger
+WHERE kind = 'timed_debit'
+GROUP BY user_id, group_id, cycle_anchor
+ORDER BY spent DESC LIMIT 20;
+
+-- 13) SQLite 专项健康检查（外部 sqlite3 工具执行）
+PRAGMA integrity_check;      -- 应为 ok
+PRAGMA foreign_key_check;    -- 应为空
+SELECT name, SUM(pgsize)/1024/1024 AS mb FROM dbstat GROUP BY name ORDER BY mb DESC LIMIT 10;
+```
+
+:::tip
+SQLite 的 `dbstat` 需要编译时开启 `SQLITE_ENABLE_DBSTAT_VIRT`（mattn/go-sqlite3 默认带了）；若报表不存在，用 `du -h` 看 `DATA_DIR` 即可。
+:::
+
+## 相关页面
+
+- [升级、备份与恢复](../../deployment/upgrade-backup.mdx) — 版本固定、备份范围矩阵、验收与回滚流程
+- [环境变量参考](../../deployment/environment.mdx) 与 [高级环境变量](../../deployment/environment-advanced.mdx) — `DATABASE_URL`/`REDIS_URL`/`QDRANT_URL`/`VECTOR_BACKEND` 的取值规则
+- [Cloudflare 反代要点](../../deployment/cloudflare-proxy.mdx) — 与数据库无关但常一起排障
+- [首次启动与管理员](../../admin/first-run.mdx) — 为什么库里第一个 `users` 行来自 setup 向导而非种子
+- [渠道与模型](../../admin/channels-models.mdx)、[知识库与 RAG](../../admin/knowledge-rag.mdx)、[工具与沙箱](../../admin/tools-sandbox.mdx)、[计费与权益](../../admin/billing.mdx) — 各表对应的管理员界面
+- [沙箱概览](../../sandbox/overview.mdx) — 为什么沙箱会话状态不在数据库里

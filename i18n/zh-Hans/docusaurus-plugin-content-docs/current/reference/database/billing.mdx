@@ -1,0 +1,332 @@
+---
+title: 订阅、积分与支付表
+sidebar_position: 6
+description: user_groups、积分/配额账本、充值包、兑换码与支付渠道/方式/订单/事件共 15 张表的逐列参考。
+---
+
+# 订阅、积分与支付表
+
+计费域 15 张表（175 列）。全局要点：**金额一律 micros 定点整数**（`*_micros`，1e-6）或**结算货币最小单位**的 `*_amount_minor`；REAL 列都是显示镜像。`settlement_currency`、`credits_per_usd`（`0` = 整个积分体系关闭）等开关在 [`settings`](./system-audit.mdx)（记法约定见[总览](./overview.mdx)）。
+
+## `user_groups` — 会员层级/套餐
+
+共 20 列。永远存在一行 `ug_free`（`is_default=1`，由 `Seed` 播种）。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `ug_` + 12 位十六进制；默认层固定 `ug_free` |
+| `name` | TEXT | 否 | — | 层级名；`lower(trim(name))` 唯一 |
+| `description` | TEXT | 否 | `''` | 描述 |
+| `features` | TEXT（JSON） | 否 | `'[]'` | 订阅页卖点字符串数组 |
+| `monthly_price_amount_minor` | INTEGER → BIGINT | 否 | `0` | 月付价（结算货币最小单位）。旧列 `price_amount_minor`/`price_usd`/`price_cny` 由迁移一次性回填（`store.go:720-740`） |
+| `yearly_price_amount_minor` | INTEGER → BIGINT | 否 | `0` | 年付价 |
+| `is_default` | INTEGER | 否 | `0` | `1` = 新注册用户默认层（全库恰有一行为 1） |
+| `sort_order` | INTEGER | 否 | `0` | 订阅页排序 |
+| `max_projects` | INTEGER | 否 | `0` | 成员可建项目上限（`0` = 无限） |
+| `max_kbs` | INTEGER | 否 | `0` | 可建知识库上限 |
+| `max_workspaces` | INTEGER | 否 | `0` | ※附加列：可**拥有**的工作空间上限 |
+| `max_storage_mb` | INTEGER | 否 | `0` | 非图片上传存储配额（MB，`0` = 无限；图片不计） |
+| `credit_allowance` | REAL | 否 | `0` | 定时积分额度的显示镜像 |
+| `credit_allowance_micros` | INTEGER → BIGINT | 否 | `0` | **权威**定时积分额度（定点） |
+| `credit_period_seconds` | INTEGER | 否 | `0` | 定时积分刷新周期（`0` = 无定时积分，只有永久积分） |
+| `is_public` | INTEGER | 否 | `1` | ※附加列：是否在订阅页列出 |
+| `is_purchasable` | INTEGER | 否 | `1` | 公开层级是否可下单（可临时暂停结账） |
+| `permissions` | TEXT（JSON） | 否 | `'{}'` | 规范化组能力/资源策略（RBAC 上限；空对象规范化为宽松策略，`user_group_permissions.go`） |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`idx_user_groups_name_unique`（UNIQUE ON `lower(trim(name))`）。
+
+## `credit_ledger` — 扣费真相账本
+
+**计费记录**，永不随 `usage_logs` 清理删除。共 11 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 流水 id |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `group_id` | TEXT | 否 | — | 扣费发生时所在层级（软引用，无 FK——层级删除不断账） |
+| `cycle_anchor` | INTEGER → BIGINT | 否 | `0` | 周期锚点（=`users.credit_cycle_anchor`） |
+| `cycle_start` | INTEGER → BIGINT | 否 | `0` | 本周期起点 |
+| `kind` | TEXT | 否 | — | `timed_debit`（定时额度）/ `permanent_debit`（永久余额），常量 `store/credits.go:15-16` |
+| `amount` | REAL → DOUBLE PRECISION | 否 | — | 显示镜像 |
+| `amount_micros` | INTEGER → BIGINT | 否 | `0` | **权威**扣费额（定点） |
+| `source_type` | TEXT | 否 | `''` | 来源类型（如消息轮） |
+| `source_id` | TEXT | 否 | `''` | 来源 id（幂等追溯用） |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 扣费时间 |
+
+- **索引**：`idx_credit_ledger_timed(user_id, group_id, cycle_anchor, cycle_start, kind)`（周期窗口聚合）、`idx_credit_ledger_user_time(user_id, created_at)`（均迁移期创建，`store.go:574-575`）。
+
+## `credit_reservations` — 生成前预扣
+
+结算前锁定额度防超扣。共 10 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 预扣 id |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `amount_micros` | INTEGER → BIGINT | 否 | — | 预扣额，`CHECK (> 0)` |
+| `actual_micros` | INTEGER → BIGINT | 否 | `0` | 结算实际额，`CHECK (>= 0)` |
+| `source_type` | TEXT | 否 | `''` | 来源类型 |
+| `source_id` | TEXT | 否 | `''` | 来源 id |
+| `status` | TEXT | 否 | `'reserved'` | 状态机 `reserved` → `settling` → `settled` → `released`（CHECK） |
+| `expires_at` | INTEGER → BIGINT | 否 | — | 悬挂预扣回收时间，`CHECK (> 0)` |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **唯一**：`UNIQUE(source_type, source_id)`——同一来源双预扣在库级挡住。**索引**：`(user_id, status, expires_at)`。
+
+## `credit_adjustment_notifications` — 调账通知
+
+管理员手工调整永久积分后给用户的一次性弹窗通知。共 7 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 通知 id |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `direction` | TEXT | 否 | — | `add` / `remove`（CHECK） |
+| `amount_micros` | INTEGER → BIGINT | 否 | — | 调整额（正数），`CHECK (> 0)` |
+| `reason` | TEXT | 否 | `''` | 管理员填写的原因 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `claimed_at` | INTEGER → BIGINT | 否 | `0` | **原子置位**（用户拉取时 CAS），刷新/多设备不会重复弹 |
+
+- **索引**：`idx_credit_adjustment_notifications_user_pending(user_id, claimed_at, created_at, id)`。
+
+## `quota_ledger` — 配额窗口账本
+
+按窗口的模型/全局配额预扣与实扣。共 14 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `qr_` + 12 位十六进制 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `scope_type` | TEXT | 否 | — | `CHECK (非空白)`。取值：`model_chat` / `model_image` / `daily_image` / `daily_token`（`store/quotas.go:107-110`） |
+| `model_id` | TEXT | 否 | `''` | 模型级配额时有值（软引用） |
+| `group_id` | TEXT | 否 | `''` | 层级窗口归属（软引用） |
+| `cycle_anchor` | INTEGER → BIGINT | 否 | `0` | 周期锚点 |
+| `window_start` | INTEGER → BIGINT | 否 | — | 窗口起点，`CHECK (> 0)` |
+| `limit_type` | TEXT | 否 | — | `count` / `cost`（CHECK） |
+| `reserved_micros` | INTEGER → BIGINT | 否 | `0` | 预扣 |
+| `actual_micros` | INTEGER → BIGINT | 否 | `0` | 实扣 |
+| `status` | TEXT | 否 | `'reserved'` | `reserved` / `finalized` / `released`（CHECK） |
+| `expires_at` | INTEGER → BIGINT | 否 | — | `CHECK (> window_start)` |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`idx_quota_ledger_scope(user_id, scope_type, model_id, group_id, cycle_anchor, window_start, status)`。
+
+## `billing_usage` — 逐消息计费行
+
+每条消息/用途的不可变计费记录。共 12 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 行 id |
+| `user_id` | TEXT | **是** | `NULL` | FK→`users(id)`，`SET NULL`（删号匿名化） |
+| `conversation_id` | TEXT | 否 | `''` | 快照 |
+| `message_id` | TEXT | 否 | `''` | 快照 |
+| `model_id` | TEXT | 否 | `''` | 快照 |
+| `purpose` | TEXT | 否 | `''` | 与 `usage_logs.purpose` 同词表（`chat`/`task.*`/`image`/`embedding`/`verify`） |
+| `cost_micros` | INTEGER → BIGINT | 否 | `0` | 成本（定点），`CHECK (>= 0)` |
+| `images_count` | INTEGER | 否 | `0` | 图片数 |
+| `input_tokens` | INTEGER | 否 | `0` | 输入 token |
+| `output_tokens` | INTEGER | 否 | `0` | 输出 token |
+| `currency` | TEXT | 否 | `'USD'` | `CHECK (非空白)` |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 时间 |
+
+- **索引**：`(message_id, purpose, created_at)`、`(user_id, created_at)`。
+
+## `credit_packages` — 永久积分充值包
+
+共 9 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 包 id |
+| `name` | TEXT | 否 | — | 商品名 |
+| `description` | TEXT | 否 | `''` | 描述 |
+| `credits` | REAL | 否 | — | 面额积分（PG 保持 REAL/float4，金额计算走 micros 换算） |
+| `price_amount_minor` | INTEGER → BIGINT | 否 | `0` | 售价（结算货币最小单位） |
+| `enabled` | INTEGER | 否 | `1` | 是否可售 |
+| `sort_order` | INTEGER | 否 | `0` | 排序 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`idx_credit_packages_order(sort_order, name)`。遗留"永久积分包"的特殊行由 `MigrateLegacyCreditPackage` 迁移。
+
+## `model_group_quotas` — 模型×层级配额
+
+共 5 列。**语义要点**：模型在本表**无行 = 对所有层级开放**；一旦出现行，**只有列出的层级可用**；`limit_value=0` = 开放但计入统计。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `model_id` | TEXT | 否（PK 之一） | — | FK→`models(id)`，CASCADE |
+| `group_id` | TEXT | 否（PK 之一） | — | FK→`user_groups(id)`，CASCADE |
+| `period_seconds` | INTEGER | 否 | `604800` | 窗口长度（默认 7 天），`CHECK (> 0)` |
+| `limit_type` | TEXT | 否 | `'count'` | `cost`（按模型币种）/ `count`（次数），CHECK |
+| `limit_value` | REAL | 否 | `0` | 窗口上限（`0` = 开放），PG 保持 REAL |
+
+- **主键**：复合 `(model_id, group_id)`。**索引**：`idx_mgq_group(group_id)`。
+
+## `redeem_codes` — 兑换码
+
+共 14 列。码格式 `XXXX-XXXX-XXXX`，Crockford base32 去歧义字符（`ids.go:32-38`）。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `rc_` + 12 位十六进制 |
+| `code` | TEXT | 否 | — | 码文本，全库 UNIQUE |
+| `kind` | TEXT | 否 | `'group'` | `group`（送层级）/ `credits`（送永久积分）。积分码时 `group_id` 只是满足 FK 的占位，**绝不生效** |
+| `group_id` | TEXT | 否 | — | FK→`user_groups(id)`，CASCADE |
+| `duration_days` | INTEGER | 否 | `30` | 会员时长（`0` = 永久），`CHECK (>= 0)` |
+| `credits` | REAL | 否 | `0` | `kind=credits` 时授予的积分，`CHECK (>= 0)` |
+| `max_uses` | INTEGER | 否 | `1` | 可兑换次数，`CHECK (> 0)` |
+| `used_count` | INTEGER | 否 | `0` | 已用次数，`CHECK (>= 0 AND <= max_uses)` |
+| `expires_at` | INTEGER → BIGINT | 否 | `0` | **码本身**的兑换截止（`0` = 无截止） |
+| `enabled` | INTEGER | 否 | `1` | `0` = 吊销但保留行（审计史） |
+| `note` | TEXT | 否 | `''` | 备注 |
+| `batch_name` | TEXT | 否 | `''` | 批次名 |
+| `created_by` | TEXT | 否 | `''` | 创建管理员 id（软引用） |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+
+- **索引**：`idx_redeem_codes_code(code)`、`idx_redeem_codes_batch(batch_name)`。
+
+## `redeem_redemptions` — 兑换审计
+
+共 8 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 兑换 id |
+| `code_id` | TEXT | 否 | — | FK→`redeem_codes(id)`，CASCADE |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `group_id` | TEXT | 否 | — | FK→`user_groups(id)`，CASCADE（授予的层级） |
+| `previous_group_id` | TEXT | 否 | `''` | 兑换前层级（到期恢复用） |
+| `credits` | REAL | 否 | `0` | 授予的积分（审计） |
+| `granted_at` | INTEGER → BIGINT | 否 | — | 生效时间（**无默认**，显式写入） |
+| `expires_at` | INTEGER → BIGINT | 否 | — | 会员到期时间 |
+
+- **唯一**：`UNIQUE(code_id, user_id)`——同一用户不能对同一码双兑（多人码的每人一次保障）。**索引**：`user_id`、`code_id`。
+
+## `payment_channels` — 支付渠道
+
+共 9 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `paych_` + 12 位十六进制 |
+| `name` | TEXT | 否 | — | 渠道名；`lower(trim(name))` 唯一 |
+| `provider` | TEXT | 否 | — | `stripe` / `epay` / `waffo`（常量 `payment/payment.go:58-60`） |
+| `environment` | TEXT | 否 | `'live'` | `live` / `test`（`store/payments.go:25-26`；旧行按渠道模式一次性回填） |
+| `config` | TEXT（JSON） | 否 | `'{}'` | 供应商特定 JSON **含凭据明文**——仅 API 层掩码 |
+| `enabled` | INTEGER | 否 | `1` | 是否启用 |
+| `sort_order` | INTEGER | 否 | `0` | 排序 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：名字 UNIQUE + `idx_payment_channels_order(sort_order, name)`。删除前需先删其 `payment_methods`（见下 RESTRICT）且无挂起订单（应用层校验）。
+
+## `payment_methods` — 支付方式
+
+渠道暴露给用户的可选项。共 10 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `paym_` + 12 位十六进制 |
+| `channel_id` | TEXT | 否 | — | FK→`payment_channels(id)`，**`ON DELETE RESTRICT`**——先删方式才能删渠道 |
+| `name` | TEXT | 否 | — | 展示名；`(channel_id, lower(trim(name)))` 唯一 |
+| `type` | TEXT | 否 | — | 方式类型（自由字符串，如 `alipay`、`card`——EPay 走 `params["type"]` 映射） |
+| `icon` | TEXT | 否 | `''` | 图标 |
+| `config` | TEXT（JSON） | 否 | `'{}'` | 方式级配置 |
+| `enabled` | INTEGER | 否 | `1` | 是否可选 |
+| `sort_order` | INTEGER | 否 | `0` | 排序 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+## `payment_orders` — 支付订单
+
+**商业快照 + 可变处理态**：创建时复制 provider/渠道/方式/商品/金额，管理员后续改目录不影响历史订单。共 38 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 订单 id |
+| `user_id` | TEXT | **是** | `NULL` | FK→`users(id)`，`SET NULL`（删号订单留档） |
+| `user_email` | TEXT | 否 | — | 下单者邮箱快照 |
+| `provider` | TEXT | 否 | — | 渠道商类型快照 |
+| `environment` | TEXT | 否 | `'live'` | `live` / `test`（test 单仅管理员可发起） |
+| `channel_id` | TEXT | 否 | — | 快照（**无 FK**——渠道可被删而订单不动） |
+| `channel_name` | TEXT | 否 | — | 快照 |
+| `method_id` | TEXT | 否 | — | 快照 |
+| `method_name` | TEXT | 否 | — | 快照 |
+| `method_type` | TEXT | 否 | — | 快照 |
+| `method_config` | TEXT（JSON） | 否 | `'{}'` | 下单时刻的方式配置快照 |
+| `product_type` | TEXT | 否 | — | `credit_package` / `user_group`（`store/payments.go:19-20`） |
+| `product_id` | TEXT | 否 | — | 商品 id 快照 |
+| `product_name` | TEXT | 否 | — | 商品名快照 |
+| `amount_minor` | INTEGER → BIGINT | 否 | — | 目录价（不含税） |
+| `paid_amount_minor` | INTEGER → BIGINT | 否 | `0` | 供应商侧实际收款总额 |
+| `tax_amount_minor` | INTEGER → BIGINT | 否 | `0` | 结账时加收的税额（Waffo Pancake 类含 VAT/GST 渠道） |
+| `currency` | TEXT | 否 | — | 目录币种 |
+| `provider_amount_minor` | INTEGER → BIGINT | 否 | `0` | 供应商结算金额（旧行回填=`amount_minor`，`store.go:544-547`） |
+| `provider_currency` | TEXT | 否 | `''` | 供应商结算币种（回填=`currency`） |
+| `conversion_rate` | TEXT | 否 | `''` | 换算率（字符串保精度） |
+| `credits` | REAL → DOUBLE PRECISION | 否 | `0` | 权益：授予积分（product=credit_package 时） |
+| `user_group_id` | TEXT | 否 | `''` | 权益：目标层级 |
+| `billing_cycle` | TEXT | 否 | `''` | `monthly` / `yearly`（`store/payments.go:22-23`） |
+| `provider_order_id` | TEXT | 否 | `''` | 供应商订单号 |
+| `provider_payment_id` | TEXT | 否 | `''` | 供应商支付号（如 Stripe PaymentIntent） |
+| `checkout_session_id` | TEXT | 否 | `''` | Stripe Checkout 会话 id |
+| `checkout_url` | TEXT | 否 | `''` | 结账跳转 URL |
+| `checkout_expires_at` | INTEGER → BIGINT | 否 | `0` | 结账链接过期时间 |
+| `last_reconciled_at` | INTEGER → BIGINT | 否 | `0` | 最近一次对账时间 |
+| `reconcile_error` | TEXT | 否 | `''` | 最近一次对账失败原因 |
+| `status` | TEXT | 否 | `'pending'` | 状态机：`pending` / `processing` / `fulfilled` / `failed` / `cancelled`（**英式拼写**） / `expired`（`store/payments.go:28-33`） |
+| `failure_code` | TEXT | 否 | `''` | 失败码（含 `admin_manual_close` 人工关单） |
+| `failure_message` | TEXT | 否 | `''` | 失败详情 |
+| `paid_at` | INTEGER → BIGINT | 否 | `0` | 支付确认时间 |
+| `fulfilled_at` | INTEGER → BIGINT | 否 | `0` | 权益发放完成时间 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`(user_id, created_at DESC, id)`、`(channel_id, status, created_at)`、`(status, created_at)`；两个**部分唯一索引**（迁移创建）：`(provider, channel_id, provider_order_id) WHERE provider_order_id<>''` 与 `(provider, channel_id, provider_payment_id) WHERE provider_payment_id<>''`（`store.go:576`）。
+
+## `payment_order_attempts` — 结账尝试
+
+一个商业订单可有多次 checkout 尝试。共 9 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `merchant_order_id` | TEXT | 否（PK） | — | 发给网关的商户单号 |
+| `order_id` | TEXT | 否 | — | FK→`payment_orders(id)`，CASCADE |
+| `provider` | TEXT | 否 | — | 网关类型 |
+| `channel_id` | TEXT | 否 | — | 渠道快照 |
+| `provider_order_id` | TEXT | 否 | `''` | 网关返回的单号 |
+| `status` | TEXT | 否 | `'issued'` | `issued` / `paid`（`store/payments.go:35-36`） |
+| `paid_at` | INTEGER → BIGINT | 否 | `0` | 本次尝试的支付时间 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`(order_id, created_at, merchant_order_id)`；部分唯一 `(provider, channel_id, provider_order_id) WHERE provider_order_id<>''`。
+- **备注**：EPay 续付**复用**未完成的 `merchant_order_id`——没有可信证据证明旧网关引用已终结时，绝不发新引用（歧义遗留订单 fail-closed）。
+
+## `payment_events` — 已验签供应商通知
+
+共 8 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 本地事件 id |
+| `provider` | TEXT | 否 | — | 网关类型 |
+| `channel_id` | TEXT | 否 | — | 渠道 |
+| `event_id` | TEXT | 否 | — | 供应商事件 id |
+| `order_id` | TEXT | 否 | — | FK→`payment_orders(id)`，CASCADE |
+| `event_type` | TEXT | 否 | `''` | 供应商事件类型原值（如 Stripe `checkout.session.completed`；自由文本） |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 接收时间 |
+| `processed_at` | INTEGER → BIGINT | 否 | `0` | 履约完成时间（`0` = 未处理） |
+
+- **唯一**：`UNIQUE(provider, channel_id, event_id)`——第一道幂等闸；履约还会再锁订单二次校验，供应商发两个不同 event id 也拿不了两次权益。**索引**：`(order_id, created_at, id)`。
+
+## 相关页面
+
+- [计费与权益管理](../../admin/billing.mdx) — 对应管理界面
+- [支付沙箱与对账](../../deployment/environment-advanced.mdx) — 支付相关高级环境变量

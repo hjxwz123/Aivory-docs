@@ -1,95 +1,202 @@
 ---
 title: Knowledge bases, RAG, and storage
 sidebar_position: 3
-description: Configure embeddings, document parsing, vector retrieval, object storage, and safe operational workflows for knowledge bases.
+description: Configure the embedding model and vector backend, document parsing and OCR, retrieval and injection parameters, upload policy, and knowledge-base operations.
 ---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Knowledge bases, RAG, and storage
 
-A knowledge base lets the model retrieve document snippets within an access-restricted scope before answering. Reliable RAG is more than uploading files: it depends on working embeddings, correct dimensions, successful parsing and indexing, appropriate storage boundaries, and access control for users and workspaces.
+:::info Applies to
 
-## Workflow and acceptance checkpoints
+Aivory v2.4.6 and later. Relevant screens: "Capabilities & integrations → Documents" (RAG and embedding settings), "System → Storage & uploads", and the user-facing knowledge bases under `/kb`. Screenshots show the Chinese admin UI; English labels are cited inline.
 
-A typical flow:
+:::
 
-1. A user uploads a file, or an administrator creates a knowledge base resource.
-2. The system validates size and type, and stores the original object.
-3. The parser extracts text, tables, or image-related content.
-4. The text is chunked, and the embedding model generates vectors.
-5. Vectors and document metadata are written to the vector backend of the current deployment.
-6. When a user asks a question, the system retrieves only from scopes the user has permission to access and provides relevant snippets to the model as context.
+Knowledge bases let the model retrieve document snippets from a permission-scoped corpus before answering. Reliable RAG is not just "upload a file": it depends on a working embedding model, a consistent vector dimension, successful parsing and indexing, and access control over users and workspaces.
 
-Upload completion does not mean the document is already searchable. Wait until the document status shows completed, then run a retrieval test with a sentence you can verify exactly in the file. On failure, keep the original file, check the task errors and model/service logs, and don't repeatedly re-upload the same file to mask the root cause.
+## Workflow and acceptance points
 
-## Embedding models and dimensions
+```text
+upload → validate type/size and store the raw object → parse (text/tables/OCR)
+→ chunk → embedding model produces vectors → write to the vector backend
+→ at question time, retrieve only within the caller's permission scope → inject snippets
+```
 
-Add a real embedding model under channels and models, or set a deployment-level embedding fallback. Without an external embedding model, the system can fall back to a basic local embedding; that is fine for trials, but it should not be the long-term baseline for high-quality semantic retrieval.
+:::warning Uploaded ≠ searchable
 
-The most important constraint is dimension consistency: `EMBEDDING_DIM`, the dimension in the model settings, and the model's real output must be identical. A dimension mismatch causes indexing failures, empty retrieval results, or the isolation of incompatible vectors.
+Documents move through `pending → parsing → embedding → ready / failed` in an async queue; while ingest is unfinished, the composer blocks sending. Wait for the ready state, then test retrieval with a sentence **exactly verifiable** in the file. On failure, keep the original file and read the task error and app logs — do not re-upload the same file repeatedly to mask the root cause.
 
-When changing the embedding model, vendor, or dimension, follow this process:
+:::
 
-1. Record the old model, the old dimension, and the business scope of the current knowledge bases.
-2. Add the new embedding model and validate it with a small sample document.
-3. Update the relevant model or deployment settings.
-4. Trigger a vector rebuild of the affected knowledge bases in the admin backend.
-5. Run retrieval acceptance on both old content and newly uploaded content, and only retire the old model after confirming all indexes have finished building.
+### Ingest states and the async queue
 
-Never delete the only copy of the original files or backups during a rebuild. Vectors can be rebuilt; original documents and metadata usually cannot be recovered accurately once lost.
-
-## Vector backends: Personal edition and Full edition
-
-| Deployment | Where vectors live | Operational impact |
+| State | Meaning | Admin action |
 | --- | --- | --- |
-| Personal edition | Embedded vectors in the SQLite database | `aivory.db` and files are under `DATA_DIR`; single instance, must not live on a network file system |
-| Full edition | Qdrant data volume | Protect Qdrant together with PostgreSQL and files as one consistent backup unit |
+| pending | Stored and queued, waiting for a worker | Normal wait |
+| parsing | Extracting text/tables or calling OCR | Large scans legitimately take a while |
+| embedding | Chunking and vectorizing now | Watch for a stalled heartbeat |
+| ready | Searchable | Run the one-sentence retrieval acceptance |
+| failed | A stage errored | Read the task error and logs, fix, then re-ingest the original file |
 
-The Personal edition already has vector retrieval; you don't need to deploy Qdrant separately for RAG. The Full edition uses its internal Qdrant by default; unless you have a deliberate external-service design, don't expose its port or let the application connect to an uncontrolled instance.
+Full-edition ingest runs on the Redis queue (asynq) with two lanes — `rag` (slow: OCR and heavy documents) and `rag-fast` (plain text) — each 4 workers deep; Personal uses an in-process queue with identical behavior but single-process throughput. A heartbeat/recovery loop re-queues abandoned documents, and each document pipeline has its own timeout, so a **giant scan that keeps failing should be split outside Aivory** rather than retried forever.
 
-`VECTOR_BACKEND` is deployment-level topology configuration. The official Personal edition is fixed to SQLite vectors, and the official Full edition is fixed to Qdrant; change it only for custom deployments and only if you understand the consequences. See [Environment variables](../deployment/environment.mdx).
+### Formats and parsing paths
 
-## Document parsing and OCR
+| Input | Path | Notes |
+| --- | --- | --- |
+| txt / md / source code / csv / json / yaml | Local read | Small source/text files may be injected whole per the line cap |
+| PDFs with a text layer, docx / pptx / xlsx | Local structured parsing | Heading breadcrumbs shape the chunks |
+| Scanned PDFs / image-based documents | Requires MinerU OCR | Needs object-storage presigned URLs — see below |
+| Images (png/jpg/gif/webp/bmp…) | Multimodal attachments; OCR when text is needed | Common raster formats bypass the extension allowlist |
 
-Plain text, Office files, spreadsheets, and PDFs with a text layer can be handled by the local parsing pipeline. Scanned documents, image-only PDFs, complex layouts, or high-quality OCR scenarios usually require an external parsing service such as MinerU.
+## Embedding model and dimension
 
-When configuring MinerU, fill in an API address and key reachable from the application, and first validate with one non-sensitive scanned PDF. Without configuration, don't expect images and scanned documents to automatically produce high-quality text; the system may store only placeholder content or limited extraction results.
+1. Add an embedding-kind model under "AI & models → Models" (a channel supporting `/v1/embeddings`, with the real `request_id` and **Dimension** filled in).
+2. Go to "Capabilities & integrations → Documents" and select it under the embedding-model section.
 
-Troubleshooting order for parsing failures:
+| Field | Description | Example | Default |
+| --- | --- | --- | --- |
+| Embedding model | Vectorization model for knowledge bases and documents; selectable only from kind=embedding models | `text-embedding-3-small` | unconfigured |
 
-1. Confirm the file isn't corrupted, doesn't exceed the upload limit, and isn't password-protected or an unreadable format.
-2. Check network, authentication, quota, and timeouts of the corresponding parsing service.
-3. Confirm the object storage address is reachable by the parsing service; some external parsing flows require downloadable object URLs.
-4. Review document task errors, application logs, and provider responses to determine whether parsing, embedding, or the vector write failed.
+:::danger The embedding model locks after first save
 
-Never expose private buckets, internal file servers, or databases to the public internet just to make OCR succeed.
+To prevent stale chunks from mismatching the vector store, the embedding model **cannot be changed** once configured — the lock notice on the page is intentional. If you truly must switch (new vendor or dimension), plan the vector rebuild for every affected knowledge base first, and never delete the only copy of the original files: vectors can be rebuilt, lost documents and metadata usually cannot. If the selected model is deleted, the page shows a dangling-model warning; pick a replacement and re-index all knowledge bases.
 
-## Storage and upload policies
+:::
 
-The "Storage & uploads" page manages where application objects are kept, upload limits, and retention boundaries. Local storage by default suits single machines: objects such as avatars are written to a local object directory, and user uploads and artifacts live under the application data directory. It is simple and easy to back up, but not suitable for multiple application replicas sharing it at the same time.
+Deployment-level fallback: the `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` / `EMBEDDING_DIM` environment variables (defaults `text-embedding-3-small` / 1536) apply when the admin UI has no selection. With nothing configured at all, Aivory falls back to a built-in local hash embedder — **256-dimensional, dev-grade** — fine for trials, not a long-term semantic-search baseline.
 
-When you need multiple replicas, cross-node access, or collaboration with external parsing services, use controlled object storage and follow least privilege:
+The critical invariant: `EMBEDDING_DIM`, the model record's Dimension, and the model's real output size must agree. Qdrant isolates collections by dimension (`aivory_c<dim>`), so incompatible vectors are walled off — which presents as "retrieval returns nothing".
 
-- Use a separate bucket/prefix and don't share administrator credentials with other business systems.
-- Grant only the necessary read, write, list, or presign permissions; avoid an account-wide admin key.
-- Define lifecycle, versioning, encryption, region, and access-log policies.
-- Treat object storage credentials and configuration as sensitive; backend configuration exports may include them.
-- Test upload, download, thumbnails, parsing, share snapshots, and deletion before migrating real user files.
+## Vector backend: Personal vs Full
 
-Upload caps, single-file size limits, total quotas, and administrator icon/skill asset limits jointly shape the user experience. Before raising limits, also assess the reverse proxy's request body cap, disk/object-storage cost, parsing memory, and backup size.
+<Tabs>
+<TabItem value="personal" label="Personal (SQLite embedded vectors)">
 
-## Permissions, workspaces, and sharing
+- `VECTOR_BACKEND=sqlite` (pinned by the official Personal compose); vectors live in the `vector_points` table of `aivory.db` with exact cosine search.
+- Database, uploads, artifacts, and backups all sit in one `DATA_DIR`; single instance only, never on a network filesystem.
+- You **do not need — and should not add** — Qdrant just for RAG.
 
-A knowledge base is not a globally public search. Administrators should combine users, user groups, and workspaces to check who can upload, view, retrieve, edit, or delete documents.
+</TabItem>
+<TabItem value="full" label="Full (Qdrant)">
 
-- Put different customers, teams, or data classifications in different knowledge bases and workspaces.
-- Use read-only sharing by default; grant edit or upload permissions only to people genuinely responsible for maintaining the material.
-- Before sharing a conversation, check whether referenced snippets, attachments, preview images, and tool artifacts will be pulled into the read-only snapshot.
-- After user deletion, workspace removal, or permission changes, verify that old sessions and old knowledge bases no longer expose content they shouldn't.
+- `VECTOR_BACKEND=auto`: setting `QDRANT_URL` activates Qdrant; the official Full compose already runs an internal `qdrant` service (never port-published).
+- Don't expose Qdrant's port or point the app at uncontrolled instances; collections are separated by dimension automatically.
+- `VECTOR_BACKEND` is deployment topology; invalid combinations abort boot. Read [Environment variables](../deployment/environment.mdx) before changing topology.
 
-The admin-side "Documents & knowledge", "Content resources", and "Files" pages are good for checking status, cleaning up orphaned resources, and handling user feedback. Confirm backup and retention policies before deleting, because the deletion scope of vectors, original files, and artifacts is not always identical.
+</TabItem>
+</Tabs>
 
-## Backup and recovery
+Either way the 57-table schema is identical: even Full creates `vector_points` but keeps it empty, so logical backups and migration tooling stay engine-agnostic.
 
-Backups must cover relational data, vectors, and original files together. For the Personal edition, focus on the whole `DATA_DIR`; for the Full edition, focus on the consistency of PostgreSQL, Qdrant, Redis, the sandbox archive volume, and `DATA_DIR`.
+## Retrieval and injection parameters
 
-The full backend backup can be used for migration and recovery, but before restoring, stop writes, save a copy of the current data, and validate in an isolated environment. After recovery, check administrator configuration, attachments, knowledge base states, vector retrieval, and object storage access. For the detailed process, see [Upgrades, backup, and recovery](../deployment/upgrade-backup.mdx).
+The "retrieval & injection" section on "Capabilities & integrations → Documents" decides whether an uploaded document is injected whole or retrieved by relevance:
+
+| Field | Description | Default |
+| --- | --- | --- |
+| Full-text injection threshold (tokens) | Prose documents (PDF/Office/Markdown/logs) estimated at or below this size are injected in full every turn; above it, they are vectorized and retrieved | 8000 |
+| Code/text full-text cap (lines) | Source, config, and .txt files at or below this line count are injected whole; longer ones go through retrieval | built-in |
+| Retrieved snippets (Top-K) | Snippets fetched per query for vectorized documents (when dynamic Top-K is off) | 8 |
+| Dynamic Top-K (by similarity) | Instead of a fixed count, inject every snippet meeting the threshold | off |
+| Similarity threshold (0–1) | Cosine-similarity floor | 0.5 |
+| Rerank knowledge-base results | Uses a separate OpenAI-compatible rerank service only when the conversation attaches a knowledge base; falls back to the original order on failure | off |
+
+Rerank fields: Base URL must end in **`/v1`** (the backend appends `/rerank`; it does not go through model channels), API key (sent as Bearer; blank if the service is unauthenticated), and model name.
+
+Retrieval core behavior (`AIVORY_*` variables, see [Advanced environment variables](../deployment/environment-advanced.mdx)): dense-vector and keyword legs each take top-30, fused by reciprocal-rank fusion (k=60); a 30-second online budget, on which retrieval **fails open** — the answer continues without evidence; structure-aware chunking targets ~2000 characters per child chunk, ~4800 per parent, 250 overlap.
+
+### Retrieval-quality tuning quick lookup
+
+| Symptom | Adjust first |
+| --- | --- |
+| The answer is clearly in the document but nothing is retrieved | Lower the similarity threshold or raise Top-K, or enable dynamic Top-K; confirm the document is `ready` |
+| Plenty of hits, lots of noise polluting the answer | Raise the similarity threshold, lower Top-K, or enable reranking |
+| Small documents get answers ripped out of context | Lower the full-text injection threshold so that size class is injected whole |
+| Everything broke after switching embedding models | Dimension or model mismatch: reconcile the locked model, dimension, and rebuild results |
+| Long documents sporadically get uncited answers | The 30 s retrieval budget failed open: check embedding-service latency and network |
+| Exact part numbers or IDs miss | Lean on the keyword leg: raise Top-K, or verify the document wasn't treated as vector-only |
+
+## Document parsing and OCR (MinerU)
+
+- Born-digital files (text, PDFs with a text layer, Office, text inside images) go through the local parsing chain.
+- **Scans, image-based PDFs, and complex layouts** need the MinerU cloud parser. Configure it via the `MINERU_API_URL` / `MINERU_API_KEY` environment variables (boot defaults) or the MinerU section on "Capabilities & integrations → Documents" (**MinerU endpoint**, **API token**; the cloud default is `https://mineru.net`).
+
+:::note MinerU requires object storage
+
+Non-plain-text uploads reach MinerU through S3/OSS: the backend uploads directly and hands MinerU a presigned URL. **Configure complete S3 or Aliyun OSS under "Storage & uploads" before enabling MinerU**, or the page refuses to save ("MinerU requires a complete S3 or Aliyun OSS configuration"). Local-storage single-node installs cannot use the MinerU path.
+
+:::
+
+Parse-failure triage, in order:
+
+1. File not corrupted, within upload limits, not a password-protected PDF.
+2. Parsing service network, auth, quota, and timeouts.
+3. Object-storage URL reachable by the parsing service (presigned download works).
+4. Document task status, app logs, and the provider response, to tell apart parse, embedding, and vector-write failures.
+
+Never expose a private bucket, internal file server, or database to the public internet just to make OCR succeed.
+
+## Storage and upload policy
+
+"System → Storage & uploads" governs object placement, upload limits, and archive retention (full fields in [System, backup, and operations](./platform-operations.mdx)). The RAG-relevant boundaries:
+
+| Item | Rule |
+| --- | --- |
+| Server hard cap | `MAX_UPLOAD_BYTES`, default 50 MiB; no admin-UI limit may exceed it |
+| Image cap | Admin "Max image upload size (MB)", default 5 MB |
+| Non-image file cap | Admin "Max file upload size (MB)"; 0 = inherit the server cap |
+| Type allowlist | Admin `upload_allowed_extensions`; blank uses the safe default set (Office/PDF/text/images/common source). **Executables, macro documents, archives, and .html/.svg are deliberately excluded.** The *last* extension decides (`evil.pdf.exe` is treated as exe); common raster image formats are always allowed |
+| Reverse proxy | The proxy's request-body limit must be ≥ the app limit, or uploads surface as 413/connection resets |
+
+Before raising limits, re-evaluate disk/object-storage cost, parser memory, and backup size.
+
+## Permissions, citations, and sharing
+
+- Knowledge bases are not a global public search: retrieval covers only the personal, project, workspace, and explicitly shared libraries the asking user can access (read-only vs upload-allowed).
+- User-side flow: create a knowledge base in the app → consistent embedding dimension → upload files → wait for indexing → attach in a conversation or project. Admins can audit every user's libraries, projects, and generated images under "Data & operations → Content resources", and inspect, preview, or delete files under "Files" (deletion clears the database record, the vector index, and the on-disk object together).
+- **Citations and sharing**: publicly sharing an answer embeds its cited snippets, attachment previews, and tool artifacts into a read-only, cost-stripped snapshot. Check before sharing; after user deletion, workspace removal, or permission changes, verify old share links and libraries no longer expose content.
+- **Project-level automation**: a project can bind one knowledge base and enable "auto-add uploads", so user uploads land in the library and conversations default to searching it; with the conversation's `rag_mode` on auto, the file-routing model decides skip/retrieve/full-text. When explaining "why wasn't this library used", check those two switches first, then the thresholds.
+
+![Documents & RAG page: embedding model, retrieval & injection, MinerU](/img/admin-documents-rag.png)
+
+### End-to-end acceptance checklist
+
+Run this once before trusting the feature:
+
+1. Admin side: the embedding model is configured and its recorded dimension matches the model's real output ("Capabilities & integrations → Documents").
+2. On the user side, create a knowledge base and upload a small text file containing a distinctive string.
+3. Wait for the status to reach ready; the composer blocking sends until indexing completes is normal.
+4. In a new conversation, attach the library and ask using the exact sentence from the file: the answer should cite it, with the citation pointing at the right file and snippet.
+5. Ask the same question from a second account: it must not retrieve the first account's content — cross-user visibility is a configuration bug, not model hallucination.
+6. Test a table document and a scanned sample separately: tables should hit via structured chunks (chunk types include text/parent/table/image_caption); scans need both object storage and the MinerU path working.
+
+## Capacity, cost, and FAQs
+
+| Dimension | Facts |
+| --- | --- |
+| Single-document size | The pipeline enforces a per-document timeout (on the order of 70–75 minutes); split giant scans outside Aivory first |
+| Concurrency | Full: two lanes × 4 workers; Personal: bounded by the single process — batch large imports |
+| Storage growth | Vector volume ≈ chunks × dimension × 4 bytes; 1536-dim with ~2000-char child chunks adds a few tens of MB per ~10M characters of Chinese-scale corpus |
+| Query latency | Retrieval fails open at 30 s; a slow embedding service first shows up as "fewer citations", not errors |
+
+Frequently asked:
+
+- **"How do knowledge bases relate to projects?"** A knowledge base is a document collection; a project is a unit of work (it can bind one knowledge base and auto-add uploads). A conversation can attach multiple knowledge bases.
+- **"Do vectors disappear when I delete a document?"** Yes — deleting a document cascades to its chunks and vectors; deleting via the Files page clears record, index, and disk object together.
+- **"If a knowledge base is public, who sees it?"** Library-level `is_public` opens it to workspace members only — not the internet. The only internet-visible artifacts are conversation share links.
+
+## Switching models, rebuilding, and backups
+
+Standard procedure for changing the embedding model or migrating vector stores:
+
+1. Record the old model, old dimension, and the business scope of affected knowledge bases.
+2. Add the new embedding model and validate dimension and retrieval quality on a small sample.
+3. Perform the switch in the admin UI (mind the lock rule and dangling-model recovery path above).
+4. Use **Vector check** under "System → Backup & Migration": run "Check vectors" first (report: expected / present / missing / empty / skipped), then "Rebuild missing vectors" for the gaps.
+5. Accept retrieval against both old and newly uploaded content; keep the old model online until every index is done.
+
+Backups must cover relational data, vectors, and raw files together: for Personal, the whole `DATA_DIR`; for Full, PostgreSQL, Qdrant, Redis, the sandbox archive volume, and `DATA_DIR` form one consistency unit. The full-backup ZIP already packages Qdrant vectors, and import restores them automatically, reporting the result. Details: [Upgrades, backup, and restore](../deployment/upgrade-backup.mdx).

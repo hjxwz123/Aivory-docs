@@ -1,97 +1,200 @@
 ---
 title: Channels, models, and policies
 sidebar_position: 2
-description: Connect model providers securely, import or create models, and configure policies for defaults, fallbacks, and auxiliary tasks.
+description: Connect model providers per protocol family, auto-discover or manually create models, and configure model policies, fallback channels, capability flags, and quotas.
 ---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Channels, models, and policies
 
-A channel stores "how to connect to an upstream provider"; a model stores "which specific model can be called through that connection". Managing them separately lets the same model ID coexist across different accounts, regions, gateways, or cost policies.
+:::info Applies to
 
-The minimum conditions for users to chat normally: there is an enabled, usable channel; at least one enabled chat model is linked to that channel; and a valid default chat model is selected in the model policies. For the complete first-run flow, see [Administrator first-run setup](./first-run.mdx).
+Aivory v2.4.6 and later. This covers the "AI & models" rail: Channels / Models / Model tags / Model policy / Context & memory / Moderation. Screenshots show the Chinese admin UI unless noted; English labels are cited inline.
+
+:::
+
+A channel stores "how to connect to an upstream provider" (protocol type + Base URL + credentials); a model stores "which specific model can be called through that connection" (request ID + capabilities + pricing + policy). Managing them separately lets the same model ID coexist across different accounts, regions, gateways, or cost policies.
+
+The minimum conditions for users to chat: an enabled, working channel; at least one enabled chat model linked to it; and a valid "Default chat model" in the model policy. Full walkthrough: [Administrator first-run setup](./first-run.mdx).
 
 ## Planning channels
 
-Create channels around credentials and failure boundaries rather than stuffing every provider into one connection.
-
 | Scenario | Recommendation |
 | --- | --- |
-| The same provider has production and test Keys | Create two channels with names that clearly mark the environment; never let a test Key become the default model |
-| The same model is available through two gateways | Create two channels and two model records for independent ordering, disabling, or fallback |
-| Traffic must be split by team, region, or cost | Use a separate channel for each contract, region, or budget pool |
-| The provider has no model-list endpoint | Keep the channel and add models manually; list import is not a prerequisite for using a channel |
+| Same provider, prod and test keys | Two channels, names marking the environment; never let a test key back the default model |
+| Same model reachable via two gateways | Two channels + two model records for independent ordering, disabling, or fallback |
+| Splitting by team, region, or cost | One channel per contract, region, or budget pool |
+| Provider offers no model-listing endpoint | Keep the channel and "New model" manually; list import is not a precondition for using a channel |
 
-API Keys in channels should only be saved through the admin backend. Never write provider Keys into `VITE_*`, frontend pages, public examples, browser request parameters, or application logs. When rotating a key, first create or update a controlled channel and verify with a real model request, then disable the old credential; don't delete it outright and break user conversations.
+Channel API keys belong only in the admin UI (stored server-side in the channel record; the UI shows masked state). Never put provider keys into `VITE_*` variables, frontend pages, public examples, browser request parameters, or application logs.
 
-## Adding and verifying channels
+## Creating a channel: field-by-field
 
-When creating a channel in "AI & models → Channels", fill in the name, provider type or API format, Base URL, API Key, and enabled state.
+The dialog shares these fields across all types:
 
-1. Choose the API format based on the provider's protocol. The same model name does not imply API compatibility.
-2. Fill in the complete Base URL. OpenAI-compatible gateways usually end with `/v1`, but don't apply that rule to every provider automatically.
-3. Enable the channel only after you have confirmed the credentials are correct.
-4. Right after saving, add one test chat model and send a short request to verify network, authentication, model authorization, and quota.
+| Field | Description | Example | Default |
+| --- | --- | --- | --- |
+| Name | Admin-facing label; never affects requests | `OpenAI prod` | required |
+| Type | Upstream protocol family: OpenAI / Claude / Gemini / Mock, etc. | `OpenAI` | required |
+| API format | Chat models only; selects the conversation protocol variant | chat / responses | per type |
+| Base URL | Upstream API root; blank uses the vendor default | `https://api.openai.com/v1` | vendor default |
+| API key | Server-side secret; blank when editing keeps the saved key | `sk-…` | empty |
+| Enabled | Disabling instantly removes every model under it from new requests | on | on |
 
-Common mistakes include: a Base URL missing the version path, entering the web console address instead of the API address, a proxy rewriting requests to the wrong path, a Key without permission for the target model, a provider that only allows IPs from specific regions, or insufficient account balance. When a model call fails, check the channel and the upstream response first; don't start by changing the default policy.
+<Tabs>
+<TabItem value="openai" label="OpenAI-compatible">
 
-## Automatic import and manual model creation
+- Set **Type** to OpenAI; nearly every compatible gateway (Azure-compatible endpoints, one-api-style routers, local Ollama/vLLM OpenAI endpoints) lives in this family.
+- **Base URL**: the upstream API root, which may end in `/v1`, `/v2`, `/v3`, or a custom gateway path; blank means `https://api.openai.com`. Pasting the *web console* address instead of the API address is the single most common mistake.
+- **API format**: OpenAI has two conversation protocols (chat completions vs responses). Trust the provider docs; the same model name does not imply both work.
+- To also use embedding or image capabilities from this channel, just create models of those kinds under it — the channel itself doesn't switch.
 
-There are two ways to add models:
+</TabItem>
+<TabItem value="claude" label="Anthropic Claude">
 
-- **Auto-add models supported by the channel**: request the model list from the channel and import whatever is discoverable. Best for OpenAI-compatible providers that allow model listing.
-- **Manual creation**: fill in the provider's real request ID, display name, capability type, and associated channel. Best for providers that don't open the model list, private gateways, or inference-only Keys.
+- Set **Type** to Claude; signing and headers follow the Anthropic protocol.
+- Blank Base URL means the official endpoint; behind a proxy gateway, enter the compatible root the gateway exposes.
+- Claude capability differences (vision, tool calling) vary by model — trust the checkboxes on each model record, not the family name.
 
-After an import you still need to check every record: whether it should be visible to users, whether it is enabled, which capability it is—chat/embedding/image/audio—whether the request ID matches the provider documentation, and whether cost, context, and multimodal capabilities are described correctly. Automatic import does not replace these operational judgments.
+</TabItem>
+<TabItem value="gemini" label="Google Gemini">
 
-Different channels can have exactly the same model ID. For example, when channel A and channel B both support `gpt-5`, each can have its own `gpt-5` record. They don't overwrite each other, because the runtime uses the model record together with its associated channel to decide how to send the request.
+- Set **Type** to Gemini; blank Base URL uses the official endpoint.
+- Function calling and multimodal support differ noticeably across Gemini generations; validate "Deep research" and "Vision" with a test conversation before enabling for users.
 
-Disabling a channel makes its models unavailable for new requests; disabling or deleting a model affects default policies, fallback policies, user pickers, and ongoing operational flows. Before a production change, check whether the model is referenced by the default model, task models, workspace policies, plans, or user favorites.
+</TabItem>
+<TabItem value="mock" label="Mock (integration testing)">
 
-## Model types and capabilities
+- Issues no real network calls and returns controlled fake responses — for frontend work and demos.
+- The `ENABLE_MOCK_PROVIDER=true` environment variable seeds a mock channel automatically; never enable it in production or point the default policy at a mock model.
 
-A model should only be assigned roles it actually supports:
+</TabItem>
+</Tabs>
 
-| Type | Purpose | Configuration focus |
+![Channel list and editor: type, API format, Base URL, API key](/img/admin-channels.png)
+
+_Channel list and editor dialog. "Key set / no key" shows state only; key contents are never echoed back._
+
+### Validate immediately after saving
+
+1. Save and enable the channel.
+2. Click "Fetch from upstream" in the dialog: a returned model list proves address, key, and network all work.
+3. A failed listing does **not** mean the channel is unusable — many providers restrict listing. Add one known model ID and send a real short request to verify network, auth, model entitlement, and quota.
+
+## Model discovery and bulk import
+
+Three paths:
+
+- **Fetch models from a channel** (recommended for routine deltas): on "AI & models → Models", choose a saved channel; Aivory reads its current upstream list, separates "available / already added", and hides entries Aivory doesn't support yet. Bulk-add what you tick; duplicates are skipped with an explicit report.
+- **"Fetch from upstream" inside the channel editor**: tick models while creating the channel — best for first-time onboarding.
+- **Manual "New model"**: for providers with no listing endpoint, private gateways, or inference-only keys.
+
+:::note Import is not judgment
+
+Auto-import doesn't decide what should be user-visible, whether a model is chat/image/embedding, or whether pricing and context descriptions are right. Review enabled state, capability flags, and billing fields record by record before exposing anything.
+
+:::
+
+![Models list: channel, capabilities, and enabled state per model](/img/admin-models.png)
+
+_Models list. The same request ID can exist once per channel without conflict._
+
+## Model record fields
+
+The editor is grouped into Basic / Chat behaviour / Pricing / Permissions / Tags / Skills / Image generation. Core fields:
+
+| Field | Description | Example | Default |
+| --- | --- | --- | --- |
+| Channel | Upstream used for requests | `OpenAI prod` | required |
+| Fallback channel | Retries automatically **before the user sees an error**; must match the primary channel's type and format — only URL and key may differ | backup gateway | none |
+| Kind | chat / image / embedding | `chat` | required |
+| Label / `request_id` | Display name for humans; the request ID is the literal model ID sent upstream | `GPT flagship` / real ID | required |
+| Tool mode | native (function calling) / prompt (simulated) / none | native | per kind |
+| Built-in tools | Platform tools pre-ticked for this model ("default all" or custom) | custom | all |
+| MCP tools | MCP services pre-ticked for this model; only globally enabled, already-synced services can run | custom | off |
+| Provider-hosted tools | None by default; add explicit request JSON per tool only after its own security review | — | empty |
+| Vision / Stream / Deep research | Capability declarations affecting upload entry and research mode | on | per model |
+| Fast model | Marks THE model for "Fast" mode: hidden from the advanced picker, name never shown to users, deep research forced off | — | no |
+| System prompt | Appended to every request for this model | — | empty |
+| param_controls / extra upstream params (JSON) | User-adjustable parameter mapping and merged extra JSON; precedence: built-in params > param controls > extra params | `{"temperature":0.7}` | empty |
+| Dimension | Required for embedding models; must equal the model's real output size | `1536` | — |
+| Compaction threshold (tokens) | Overrides the global trigger for this model; 0 = use global | — | 0 |
+| Input/output/cache-read/cache-write price per 1M, price per image | Drive credit deduction and the Usage & billing analytics | per provider | 0 |
+| Enabled (visible to users) | Off removes it from pickers and new requests | — | on |
+
+:::tip The classic mis-flag symptom
+
+"A model appears in the picker but the first request fails" almost always means capability flags disagree with the upstream: non-function-calling models marked native, chat models marked embedding, or assuming every model handles vision/JSON/streaming. Run one minimal request per claimed capability.
+
+:::
+
+## Model policy and context compaction
+
+"AI & models → Model policy" holds system-level model selection. Empty slots fall back to the conversation model (or task model) as labeled; **the default chat model is the only hard requirement**:
+
+| Field | Purpose | Guidance |
 | --- | --- | --- |
-| Chat model | Ordinary conversations, tool calling, tasks, and fallback | Request ID, context, output limit, vision and tool capabilities |
-| Embedding model | Vector generation after knowledge base chunking | Output dimension must match `EMBEDDING_DIM` and the index |
-| Image model | Image generation or editing | Capabilities, sizes, cost, file retention policy |
-| Audio model | Speech recognition or related input capabilities | Upstream format, file size, duration, and quota |
+| Default chat model | Main model for new conversations | validated, cost-controlled |
+| Title generation model | Titles in the conversation list | low-latency, non-thinking |
+| Query routing model | Decides whether a query needs tools in auto mode | low-latency, non-thinking |
+| File routing model | Chooses skip / snippet retrieval / full-text before assembling file context | reliably emits JSON |
+| Other internal task model | Memory extraction, research planning and verification, search query generation | stable mid-tier |
+| Verify (auditor) model | Second model auditing answers in review mode | pick "None" to disable |
+| Image prompt model | Polishes prompts before drawing | "None" to skip |
+| Default tool mode | Default tool-calling mode for new chats (auto / on / off) | auto |
 
-Don't mark an arbitrary chat model as an embedding model, and don't assume every model from the same provider supports images, tools, JSON, or streaming. Wrong capability flags usually show up as "the model appears in the picker, but the very first request fails".
+![Model policy page with the internal task model slots](/img/admin-model-policy.png)
 
-## Model policies
+"AI & models → Context & memory" governs long-conversation compaction and memory. Key values and defaults:
 
-Maintain system-level selection rules in "Settings → Model policies".
+| Field | Description | Default |
+| --- | --- | --- |
+| Enable compaction / Enable memory | Master switches | on / on |
+| Keep recent rounds | Recent turns preserved verbatim during compaction | 6 |
+| Compact above (tokens) | Estimated prompt size that triggers compaction | 32000 |
+| Target low-water (%) | Post-compaction target as a share of the trigger (25–80) | — |
+| Retain latest messages (%) | Share of newest messages kept verbatim (10–50) | — |
+| Summary output cap | Max output tokens per summarization request | 8192 |
+| Compaction request budget | Total input + reserved output budget per background summary request | — |
+| Summary model | Blank uses the current conversation model | empty |
 
-- **Default chat model**: the main model for new conversations, and the only hard prerequisite for a first chat.
-- **Task model**: used by background or auxiliary tasks. Recommended, but ordinary chat works without it.
-- **Tool-routing model**: can help automatic tool mode decide when to call tools; when left empty, the regular policy applies.
-- **Verification model**: used for answer review or validation. It adds cost and latency; choose a stable model suited to verification tasks.
-- **Fallback model**: the degraded choice when the primary model's first-token wait exceeds the threshold or it is unavailable. The fallback model must be verified independently, and its capabilities, privacy level, and cost must match what you promise.
+![Context & memory page: compaction thresholds and summary model](/img/admin-context-memory.png)
 
-Right after setting the default model, start one ordinary text conversation; after setting a fallback, simulate an unavailable primary channel during a controlled window to verify the degradation. Never make an unverified cheap model the global fallback outright.
+## Ordering, tags, visibility, and quotas
 
-## Ordering, labels, visibility, and quotas
+- **Model tags** ("AI & models → Model tags") feed picker filters — make operational semantics like "recommended / economy / long-context / image" explicit.
+- Visibility and per-model allowances go through user groups and the model's Permissions block: model-group quotas (by cost or call count, rolling window) decide which groups may use a model and whether overage burns credits or is refused. See [Plans, credits, and payments](./billing.mdx).
+- Start by exposing only a few validated models; widen by cost, context, speed, or data-handling boundaries.
 
-Model ordering and labels affect discoverability in the user picker, and are a good way to make operational semantics such as "Recommended", "Economy", "Long context", and "Image" explicit. For different user groups, plans, or workspaces, you need user groups, credits, model quotas, and permission policies to restrict which models are visible and how much can be consumed.
+![Models list rendered in the English admin UI](/img/admin-models-tab-en.jpg)
 
-Start from "users see only a few verified models by default". As demand grows, add categories by cost, context, speed, or data-processing boundaries; don't expose every model a provider allows importing by default.
+## Change management and troubleshooting
 
-## Provider-hosted tools
+The safe channel/model change flow:
 
-Aivory never configures provider-hosted tools automatically for OpenAI or other channels' models. All models ship without such tools by default. If a provider genuinely supports them and you explicitly want users to be able to call them, add a compatible tool request configuration in that model's tool settings.
+1. Record the current default model, every policy slot, and the plans, workspace policies and quotas referencing the model.
+2. Create or edit the channel and store new credentials.
+3. Send short requests with the target model; check streaming, tools, image, or embedding behavior in practice.
+4. Only then change enabled state, ordering, and global policies.
+5. Watch Usage, error records and user feedback; retire the old channel/model once steady. When rotating keys, validate the new key before disabling the old credential — never delete your way out of a live conversation.
 
-Treat this configuration as its own security assessment: clarify which users see it, what data is sent to the provider, how fees are accounted for, the degradation path on failure, and whether provider tools duplicate or conflict in permission terms with Aivory's built-in web search, Python, and MCP.
+### Common test-connection failures
 
-## Changes and troubleshooting
+| Symptom | Check first |
+| --- | --- |
+| 401 / auth failure | Key copied fully and not revoked; leaving the key blank while editing keeps the old value — it does not clear it |
+| 404 / model not found | `request_id` matching provider docs character-for-character; right API format (chat vs responses) |
+| Base URL errors | Console web address pasted instead of API root; missing version path a gateway requires |
+| Listing fetch fails | Whether the provider allows listing, server egress and DNS, inference-only key |
+| Timeouts / dropped streams | Network path and proxy timeouts; a reverse proxy buffering the SSE stream ([Domain, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx)) |
+| Models exist but chat fails | Model kind, enabled state, channel enabled state, default policy pointing at it |
+| Same ID hits the wrong upstream | The channel linked to the model record — not the display name |
+| Fallback channel never fires | Fallback must share the primary channel's type and API format, or it won't retry |
 
-A safe channel/model change process:
+:::warning Disable/delete blast radius
 
-1. Record the current default model, fallback model, plans referencing the model, and quotas.
-2. Create or modify the channel and save the new credentials.
-3. Send a short request with the target model and check real capabilities such as streaming responses, tools, images, or embeddings.
-4. Only then change model enabled states, ordering, and global policies.
-5. Watch usage, error records, and user feedback before disabling the old channel or old model.
+Disabling a channel instantly makes all its models unusable for new requests; deleting a channel cascades to its model records. Before disabling or deleting a model, confirm no policy slot, verifier, image-prompt or summary model, workspace policy, plan quota, or user favorite references it.
 
-If "Auto-import" fails, first check whether the provider allows listing models; if "the model exists but chat fails", check the model type, model request ID, channel enabled state, and default policy; if "the wrong upstream is picked for the same ID", check the channel associated with the model record, not just the display name.
+:::

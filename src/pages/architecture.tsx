@@ -49,6 +49,9 @@ export default function ArchitecturePage(): ReactNode {
   const [isPlaying, setIsPlaying] = useState(false)
   const playbackRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Legacy fallback for engines without :has(); modern browsers already match
+  // body:has(main.aivory-experience-page) pre-hydration, so this is a visual
+  // no-op there. Keep the mirrored rule sets in sync (see custom.css).
   useEffect(() => {
     document.body.classList.add('aivory-experience-page')
     return () => {

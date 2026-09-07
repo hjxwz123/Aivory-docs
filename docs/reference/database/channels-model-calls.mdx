@@ -1,0 +1,168 @@
+---
+title: Channels, models and usage tables
+sidebar_position: 3
+description: Column-by-column reference for channels, models, model_tags, model_skills, usage_logs, and usage_stats, including tool capability flags, pricing, and the usage mirror.
+---
+
+# Channels, models and usage tables
+
+Six tables covering model supply and call records (notation per the [overview](./overview.mdx)).
+
+## `channels` — upstream provider channels
+
+One channel = one provider account (base_url + key). 9 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `ch_` + 12 hex chars |
+| `name` | TEXT | no | — | channel name; `lower(trim(name))` unique |
+| `type` | TEXT | no | — | `openai` / `claude` / `gemini` / `mock` (schema comment); the admin API validator additionally accepts the aliases `anthropic` and `google` (`api/admin_handlers.go:194-208`) |
+| `api_format` | TEXT | no | `''` | valid only for openai channels: `chat` or `responses` (Chat Completions vs Responses API); must be empty otherwise |
+| `base_url` | TEXT | no | `''` | upstream base URL (empty = official default endpoint) |
+| `api_key` | TEXT | no | `''` | provider key stored **in plaintext**, masked only by the API |
+| `enabled` | INTEGER | no | `1` | enabled flag |
+| `sort_order` | INTEGER | no | `0` | drag ordering |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **FKs**: none outgoing. **Incoming**: `models.channel_id` (CASCADE) — the only hard FK into this table; constraint-free soft references also exist (`models.fallback_channel_id`, `usage_logs.channel_id`).
+- **Index**: `idx_channels_name_unique` (UNIQUE ON `lower(trim(name))`).
+- **Notes**: deleting a channel CASCADE-deletes its models. `mock` appears in the schema comment and in provider code (a mock implementation is used when no API key is set, `llm/openai_provider.go:36`), but the admin API's type validator rejects the literal `mock`.
+
+## `models` — model catalog
+
+One callable model per row, carrying full capability, tooling, pricing, and moderation metadata. 34 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `m_` + 12 hex chars |
+| `channel_id` | TEXT | no | — | FK→`channels(id)`, CASCADE |
+| `kind` | TEXT | no | `'chat'` | `chat` / `image` / `embedding` (`api/admin_channel_model_import.go:241`) |
+| `request_id` | TEXT | no | — | model name sent upstream; `lower(trim(request_id))` unique within a channel |
+| `label` | TEXT | no | — | display name |
+| `description` | TEXT | no | `''` | description |
+| `icon` | TEXT | no | `''` | icon (emoji/URL) |
+| `fallback_channel_id` | TEXT | no | `''` | backup channel retried when a primary request fails (`''` = none) |
+| `enabled` | INTEGER | no | `1` | listed flag |
+| `sort_order` | INTEGER | no | `0` | picker ordering |
+| `tool_mode` | TEXT | no | `'native'` | tool calling style: `native` (provider function calling) / `prompt` (prompt-simulated) / `none` (tools disabled) |
+| `vision` | INTEGER | no | `1` | accepts image input |
+| `stream` | INTEGER | no | `1` | supports SSE streaming |
+| `research_enabled` | INTEGER | no | `1` | expose Deep Research for this model |
+| `fast` | INTEGER | no | `0` | THE single fast-mode model platform-wide (invariant enforced by the app, no DB constraint) |
+| `system_prompt` | TEXT | no | `''` | extra system prompt appended for this model |
+| `param_controls` | TEXT (JSON) | no | `'[]'` | whitelist of user-tunable parameter controls; each item declares a `key` (common: `temperature`, `top_p`, `max_tokens`, `thinking`, `effort`), a `type` (toggle/select) and a value→upstream-request-body `map` (`llm/param_controls.go`) |
+| `extra_params` | TEXT (JSON) | no | `'{}'` | admin-only upstream request defaults; native provider request fields win (deep-merge) |
+| `official_tools` | TEXT (JSON) | no | `'[]'` | provider-hosted tools `[{name,icon,request}]` (legacy string arrays upgraded during migration) |
+| `builtin_tools` | TEXT (JSON) | **yes** | `NULL` | local default tools; **NULL = all** (backwards compatible), `'[]'` = none |
+| `mcp_server_ids` | TEXT (JSON) | **yes** | `NULL` | default attached admin MCP services; NULL/`[]` = none |
+| `tags` | TEXT (JSON) | no | `'[]'` | `model_tags` ids for picker filtering |
+| `moderation_enabled` | INTEGER | no | `0` | screen prompts before generation |
+| `moderation_mode` | TEXT | no | `'keyword'` | `keyword` (word list) / `model` (moderation model via the `task.moderation` call) |
+| `price_input` | REAL → DOUBLE PRECISION | no | `0` | per-million input-token price |
+| `price_output` | REAL → DOUBLE PRECISION | no | `0` | per-million output-token price |
+| `price_cache_read` | REAL → DOUBLE PRECISION | no | `0` | cache-read price |
+| `price_cache_write` | REAL → DOUBLE PRECISION | no | `0` | cache-write price |
+| `price_per_image` | REAL → DOUBLE PRECISION | no | `0` | per-image price |
+| `currency` | TEXT | no | `'USD'` | pricing currency |
+| `dim` | INTEGER | no | `0` | embedding output dimension (selects the Qdrant collection `aivory_c<dim>`) |
+| `compaction_token_threshold` | INTEGER | no | `0` | per-model compaction trigger (`0` = use the global `compaction_token_trigger`) |
+| `image_timeout_sec` | INTEGER | no | `0` | image generation timeout in seconds (`0` = default) |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Indexes**: `idx_models_channel(channel_id)`, `idx_models_kind(kind, enabled)`, `idx_models_channel_request_unique` (UNIQUE ON `(channel_id, lower(trim(request_id)))`).
+- **Incoming references**: `knowledge_bases.embedding_model_id` (no CASCADE — deleting an embedding model still referenced by a KB is rejected), `model_group_quotas.model_id`, `model_skills.model_id` (CASCADE); `conversations.model_id` / `messages.model_id` are **unconstrained snapshots**.
+- **Notes**: `python_execute` and web search are withheld from a model's tool declarations unless their backends are configured (`cmd/api/main.go:131-137`) — a behavior of the runtime, not this table, often mistaken for a data issue.
+
+## `model_tags` — model tags
+
+Admin-managed picker filter labels. 4 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `mtag_` + 12 hex chars |
+| `name` | TEXT | no | — | tag name; `lower(trim(name))` unique |
+| `sort_order` | INTEGER | no | `0` | ordering |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+
+- **Notes**: the model side stores tag ids as a JSON array in `models.tags`, not rows here — deleting a tag does not cascade (the app keeps both sides in sync).
+
+## `model_skills` — model default skills join
+
+Pure join table. 2 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `model_id` | TEXT | no (PK part) | — | FK→`models(id)`, CASCADE |
+| `skill_id` | TEXT | no (PK part) | — | FK→`skills(id)`, CASCADE |
+
+- **PK**: composite `(model_id, skill_id)`.
+
+## `usage_logs` — deletable diagnostic detail
+
+One row per upstream call (**errors included**); prunable from the admin "Usage" page. 25 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | INTEGER → BIGSERIAL | no (PK) | autoincrement | the only autoincrement integer: SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` (`schema.sql:827`), PG `BIGSERIAL` |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `conversation_id` | TEXT | **yes** | `NULL` | owning conversation (soft reference, no FK) |
+| `message_id` | TEXT | **yes** | `NULL` | owning message (soft reference) |
+| `model_id` | TEXT | no | — | model that actually served the call (soft snapshot) |
+| `purpose` | TEXT | no | — | `chat` / `image` / `embedding` / `verify` / `task.`-prefixed internal calls (`task.title`, `task.router`, `task.rag_evidence_judge`, `task.rag_map_reduce`, `task.compact`, `task.memory_extract`, `task.memory_adjudicate`, `task.downgrade`, `task.research_plan`, `task.research_verify`, `task.research_validate`, `task.moderation`, `task.search_queries`, `task.tool_route`, `task.image_intent` — `llm/task_llm.go:52-99`) |
+| `input_tokens` | INTEGER → BIGINT | no | `0` | input tokens |
+| `output_tokens` | INTEGER → BIGINT | no | `0` | output tokens |
+| `cache_read_tokens` | INTEGER → BIGINT | no | `0` | cache read tokens |
+| `cache_write_tokens` | INTEGER → BIGINT | no | `0` | cache write tokens |
+| `images_count` | INTEGER | no | `0` | generated image count |
+| `cost` | REAL → DOUBLE PRECISION | no | `0` | row cost (in the model's `currency`) |
+| `currency` | TEXT | no | `'USD'` | cost currency |
+| `credits` | REAL → DOUBLE PRECISION | no | `0` | credits charged for this row (`0` = free/unconverted) |
+| `channel_id` | TEXT | no | `''` | channel that actually served the request |
+| `fallback` | INTEGER | no | `0` | `1` = served via the model's fallback channel (`fallback_channel_id`) |
+| `status` | TEXT | no | `'ok'` | `ok` / `error` (failed requests are logged too) |
+| `error` | TEXT | no | `''` | upstream failure detail (admin-only) |
+| `request_method` | TEXT | no | `''` | sanitized upstream request scene for `status='error'` rows |
+| `request_url` | TEXT | no | `''` | same |
+| `request_headers` | TEXT | no | `''` | same (sanitized) |
+| `request_body` | TEXT | no | `''` | same; governed by the admin logging switch `log_request_bodies` |
+| `ttft_fallback_model` | TEXT | no | `''` | non-empty = a TTFT-timeout **model-level** fallback served this row (orthogonal to channel `fallback`); value is the fallback model's display name |
+| `created_at` | INTEGER → BIGINT | no | `now()` | event time |
+| `workspace_id` | TEXT | no | `''` | ※ ALTER-added: owning workspace (workspace usage pages; `''` = personal) |
+
+- **Indexes**: `idx_usage_user_time(user_id, created_at)`, `idx_usage_model_time(model_id, created_at)`, `idx_usage_user_model_time(user_id, model_id, created_at)` (authoritative fallback when the cache counter is cold).
+- **Notes**: this table is a **deletable diagnostic copy** — analytics never read it (they read `usage_stats`), so pruning logs can never change a report.
+
+## `usage_stats` — append-only analytics source of truth
+
+Immutable facts for successful calls; the only source behind the dashboards. 19 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `source_log_id` | INTEGER → BIGINT | no (PK) | — | matching `usage_logs.id`; an **idempotency key, not a foreign key** — with no FK by design, so logs are freely deletable |
+| `user_id` | TEXT | **yes** | `NULL` | FK→`users(id)`, `SET NULL` — the table's only FK: account deletion anonymizes attribution while preserving global/model history |
+| `conversation_id` | TEXT | **yes** | `NULL` | snapshot, no FK |
+| `message_id` | TEXT | **yes** | `NULL` | snapshot, no FK |
+| `model_id` | TEXT | no | — | snapshot, no FK |
+| `purpose` | TEXT | no | — | same taxonomy as `usage_logs.purpose` |
+| `input_tokens` | INTEGER → BIGINT | no | `0` | as `usage_logs` |
+| `output_tokens` | INTEGER → BIGINT | no | `0` | as `usage_logs` |
+| `cache_read_tokens` | INTEGER → BIGINT | no | `0` | as `usage_logs` |
+| `cache_write_tokens` | INTEGER → BIGINT | no | `0` | as `usage_logs` |
+| `images_count` | INTEGER | no | `0` | as `usage_logs` |
+| `cost` | REAL → DOUBLE PRECISION | no | `0` | as `usage_logs` |
+| `currency` | TEXT | no | `'USD'` | as `usage_logs` |
+| `credits` | REAL → DOUBLE PRECISION | no | `0` | as `usage_logs` |
+| `workspace_id` | TEXT | no | `''` | workspace attribution (present in CREATE here, unlike the ALTER-added column on `usage_logs`) |
+| `channel_id` | TEXT | no | `''` | serving channel snapshot |
+| `fallback` | INTEGER | no | `0` | channel-fallback flag |
+| `ttft_fallback_model` | TEXT | no | `''` | model-fallback flag |
+| `created_at` | INTEGER → BIGINT | no | **none** | copied from the mirrored log row — deliberately no `now()` default |
+
+- **Mirror mechanism**: both dialects install an `AFTER INSERT` database trigger that mirrors successful rows (rows with `status='error'` are skipped; `ON CONFLICT DO NOTHING` keeps it idempotent) — install/backfill in `store/usage_stats.go` (`EnableUsageStatsMirror` / `BackfillUsageStats`, `store.go:709-714`). The trigger is not preserved by logical dumps (`pg_dump`); the app reinstalls it at startup.
+- **Indexes**: `idx_usage_stats_time(created_at)`, `(user_id, created_at)`, `(model_id, created_at)`, `(message_id, purpose, source_log_id)`.
+
+## Related pages
+
+- [Channels, models and policies](../../admin/channels-models.mdx) — matching admin UI
+- [Usage and billing analytics](../../admin/platform-operations.mdx) — the reports reading `usage_stats`
+- [Subscriptions, credits and payments](./billing.mdx) — the billing-side pair tables (`billing_usage`, `model_group_quotas`)

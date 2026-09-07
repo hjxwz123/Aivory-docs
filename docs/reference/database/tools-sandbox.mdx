@@ -1,0 +1,152 @@
+---
+title: Capabilities and integrations tables
+sidebar_position: 8
+description: Column-by-column reference for skills, prompts, user_skills, user_prompts, mcp_servers, user_mcp_servers, and image_styles — admin catalogs and their private user copies.
+---
+
+# Capabilities and integrations tables
+
+Seven capability-catalog tables: admin catalogs (`skills`/`prompts`/`mcp_servers`/`image_styles`) plus private user copies (`user_skills`/`user_prompts`/`user_mcp_servers`). **Sandbox session state is not in the database** — it lives in the sidecar's memory, with `/workspace` archived to object storage keyed by conversation id (see [Sandbox overview](../../sandbox/overview.mdx)) (notation per the [overview](./overview.mdx)).
+
+## `skills` — admin skill catalog
+
+An Agent Skill = instructions + asset bundle. 10 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `sk_` + 12 hex chars |
+| `name` | TEXT | no | — | skill name; `lower(trim(name))` unique (duplicates merged during migration by `dedupeSkillNames`) |
+| `description` | TEXT | no | — | **model-visible** trigger metadata (decides when the skill activates) |
+| `display_description` | TEXT | no | `''` | catalog-only copy, separated from trigger meaning |
+| `icon` | TEXT | no | `''` | icon |
+| `instructions` | TEXT | no | — | skill body (injected into model context) |
+| `assets` | TEXT (JSON) | no | `'[]'` | bundled asset manifest (admin-only — **user copies have no such column**, see below) |
+| `enabled` | INTEGER | no | `1` | listed flag |
+| `sort_order` | INTEGER | no | `0` | ordering |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Incoming**: `model_skills.skill_id` (CASCADE), `user_skills.source_skill_id` (SET NULL).
+
+## `prompts` — admin prompt templates
+
+8 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `pt_` + 12 hex chars |
+| `name` | TEXT | no | — | name; `lower(trim(name))` unique |
+| `description` | TEXT | no | `''` | description |
+| `icon` | TEXT | no | `''` | icon |
+| `content` | TEXT | no | — | template body (copied into `user_prompts`; the public catalog exposes only name/description/icon) |
+| `enabled` | INTEGER | no | `1` | listed flag |
+| `sort_order` | INTEGER | no | `0` | ordering |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Incoming**: `user_prompts.source_prompt_id` (SET NULL).
+
+## `user_skills` — private user skills
+
+Private copies of admin skills or user-authored ones. 10 columns. **Deliberately no `assets`/storage columns** — private skills are instruction-only and can **never** stage files into the sandbox (a security boundary).
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `usk_` + 12 hex chars |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `workspace_id` | TEXT | no | `''` | soft reference; `''` = personal library, non-empty = shared inside that workspace |
+| `name` | TEXT | no | — | name (uniqueness split into two partial indexes by scope, see below) |
+| `description` | TEXT | no | — | trigger description |
+| `icon` | TEXT | no | `''` | icon |
+| `instructions` | TEXT | no | — | body |
+| `source_skill_id` | TEXT | **yes** | `NULL` | FK→`skills(id)`, `SET NULL` — provenance "copied from catalog" |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Indexes** (all created during migration, `store.go:598-607`): `idx_user_skills_user(user_id, updated_at DESC)`, `idx_user_skills_workspace(workspace_id, updated_at DESC)`; name uniqueness per scope — personal rows `(user_id, lower(trim(name))) WHERE workspace_id=''`, workspace rows `(workspace_id, lower(trim(name))) WHERE workspace_id<>''`; plus two per-scope source-uniqueness partial indexes preventing duplicate catalog copies.
+
+## `user_prompts` — private user prompts
+
+9 columns; same scoping model as `user_skills`.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `upm_` + 12 hex chars |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `workspace_id` | TEXT | no | `''` | `''` = personal, non-empty = workspace-shared |
+| `name` | TEXT | no | — | name (unique per scope) |
+| `description` | TEXT | no | `''` | description |
+| `content` | TEXT | no | — | body |
+| `source_prompt_id` | TEXT | **yes** | `NULL` | FK→`prompts(id)`, `SET NULL` |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Indexes**: same pattern as `user_skills` (`(user_id, updated_at DESC)`, `(workspace_id, updated_at DESC)` + per-scope name/source partial unique indexes, `store.go:600-611`).
+
+## `mcp_servers` — admin MCP servers
+
+Streamable-HTTP MCP endpoints. 13 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `mcp_` + 12 hex chars |
+| `name` | TEXT | no | — | service name; `lower(trim(name))` unique |
+| `icon` | TEXT | no | `''` | icon |
+| `description` | TEXT | no | `''` | description |
+| `url` | TEXT | no | — | Streamable-HTTP endpoint |
+| `headers` | TEXT (JSON) | no | `'{}'` | request headers — **may contain credentials: stored plaintext, masked by the API** |
+| `enabled` | INTEGER | no | `0` | off by default (new rows start disabled; enable explicitly) |
+| `discovered_tools` | TEXT (JSON) | no | `'[]'` | **last successful `tools/list` snapshot** — the runtime registry reads this, not a live fetch |
+| `protocol_version` | TEXT | no | `''` | negotiated MCP protocol version |
+| `last_error` | TEXT | no | `''` | last sync failure detail |
+| `last_synced_at` | INTEGER → BIGINT | no | `0` | last successful sync |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Indexes**: name UNIQUE, `idx_mcp_servers_enabled(enabled, name)`.
+- **Incoming**: `models.mcp_server_ids` (JSON id array, soft), `workspace_policies.allowed_mcp_server_ids` (soft).
+
+## `user_mcp_servers` — user-level MCP (resource library)
+
+Mirrors the `mcp_servers` snapshot/masking contract plus the `user_skills` scoping columns. 15 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `umcp_` + 12 hex chars |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `workspace_id` | TEXT | no | `''` | `''` = personal library, non-empty = workspace-shared |
+| `name` | TEXT | no | — | name (partial unique per scope, `store.go:614-615`) |
+| `icon` | TEXT | no | `''` | icon |
+| `description` | TEXT | no | `''` | description |
+| `url` | TEXT | no | — | endpoint |
+| `headers` | TEXT (JSON) | no | `'{}'` | **may carry credentials; plaintext in DB, masked by the API** |
+| `enabled` | INTEGER | no | `0` | off by default |
+| `discovered_tools` | TEXT (JSON) | no | `'[]'` | sync snapshot (same contract as `mcp_servers`) |
+| `protocol_version` | TEXT | no | `''` | protocol version |
+| `last_error` | TEXT | no | `''` | last failure |
+| `last_synced_at` | INTEGER → BIGINT | no | `0` | last successful sync |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Indexes**: `(user_id, updated_at DESC)`, `(workspace_id, updated_at DESC)` + the two scope-split name uniqueness partial indexes.
+
+## `image_styles` — image studio styles
+
+§4.20 Image Generation Studio presets. 8 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `imgsty_` + 12 hex chars |
+| `name` | TEXT | no | — | style name; `lower(trim(name))` unique |
+| `example_image_url` | TEXT | no | `''` | example thumbnail URL |
+| `hidden_prompt` | TEXT | no | `''` | **hidden prompt: composed server-side and NEVER returned to non-admin users** |
+| `enabled` | INTEGER | no | `1` | selectable flag |
+| `sort_order` | INTEGER | no | `0` | ordering |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Indexes**: `idx_image_styles_sort(sort_order)`, name UNIQUE.
+
+## Related pages
+
+- [Skills, tools and MCP admin](../../admin/tools-sandbox.mdx) — matching UI
+- [Sandbox API](../../sandbox/api.mdx) — why no sandbox session rows exist here
+- [Channels, models and usage tables](./channels-model-calls.mdx) — how `models.builtin_tools`/`official_tools` relate to this domain

@@ -1,0 +1,143 @@
+---
+title: 文件与知识库表
+sidebar_position: 5
+description: files、knowledge_bases、knowledge_base_shares、documents、chunks、vector_points、artifacts 七表的逐列参考，含 RAG 摄取状态机与向量存储。
+---
+
+# 文件与知识库表
+
+文件与 RAG 域 7 张表。字节本体永远在磁盘/对象存储，数据库只存元数据（记法约定见[总览](./overview.mdx)）。**没有独立的"图片表"**：生成的图片 = `messages` + `artifacts`（`store/images.go` 明确注释），画廊靠 `artifacts.source` 过滤。
+
+## `files` — 上传登记
+
+composer/项目/沙箱的上传文件元数据。共 11 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `f_`（普通）/ `d_`（文档流）+ 12 位十六进制，前缀区分两条上传流（`api/files_handlers.go:107-114`） |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `conversation_id` | TEXT | **是** | `NULL` | FK→`conversations(id)`，`SET NULL`（会话删除不删文件元数据） |
+| `filename` | TEXT | 否 | — | 消毒后的展示文件名 |
+| `mime_type` | TEXT | 否 | `'application/octet-stream'` | 上传时探测的 MIME |
+| `size_bytes` | INTEGER → BIGINT | 否 | `0` | 字节数 |
+| `storage_path` | TEXT | 否 | — | 相对 `UPLOAD_DIR`/对象存储的键 |
+| `kind` | TEXT | 否 | `'other'` | 分类（`kindOf`，`api/files_handlers.go:559-597`）：`image` / `pdf` / `sheet` / `doc` / `text` / `code`；默认与未知上传为 `other`。图片不受存储配额计（`store/misc.go:65`） |
+| `draft` | INTEGER | 否 | `0` | composer 里**未发送**的暂存上传；客户端刷新时只恢复这些 |
+| `branch_message_id` | TEXT | 否 | `''` | 分支内上传只沿创建它的消息分支继承；空 = 根上传/历史行 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 上传时间 |
+
+- **索引**：`idx_files_user(user_id)`、`idx_files_conversation_id(conversation_id)`，迁移另建 `(conversation_id, branch_message_id)`、`(storage_path, draft)`（`store.go:567-569`）。
+
+## `knowledge_bases` — 知识库
+
+RAG 的容器。共 10 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `kb_` + 12 位十六进制 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE（创建者） |
+| `name` | TEXT | 否 | — | 库名；按 `(user_id, workspace_id)` 作用域唯一 |
+| `description` | TEXT | 否 | `''` | 描述 |
+| `embedding_model_id` | TEXT | 否 | — | FK→`models(id)`，**无 ON DELETE 子句**——嵌入模型被任何库引用时删除会被拒绝（防全库向量报废） |
+| `embedding_dim` | INTEGER | 否 | — | 向量维度；决定 Qdrant 集合 `aivory_c<dim>` 或 `vector_points` 的维度分区 |
+| `project_id` | TEXT | **是** | `NULL` | 非空 = 项目专属库（软引用 `projects.id`，**无 FK**） |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `is_public` | INTEGER | 否 | `1` | 工作空间内共享开关（个人行忽略） |
+| `workspace_id` | TEXT | 否 | `''` | ※附加列：软引用 `workspaces.id`；`''` = 个人 |
+
+- **索引**：`idx_kbs_user(user_id)`；名字唯一在迁移中升级为三列版 `(user_id, COALESCE(workspace_id,''), lower(trim(name)))`（`store.go:592-594`）；`idx_kbs_workspace(workspace_id)`。
+- **入向**：`knowledge_base_shares`、`documents`、`chunks`、`workspace_kb_member_permissions`（均 CASCADE）、`projects.kb_id`（SET NULL）。
+
+## `knowledge_base_shares` — 跨用户共享
+
+个人之间共享库（与工作空间机制正交）。共 5 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `kb_id` | TEXT | 否（PK 之一） | — | FK→`knowledge_bases(id)`，CASCADE |
+| `user_id` | TEXT | 否（PK 之一） | — | FK→`users(id)`，CASCADE |
+| `role` | TEXT | 否 | — | `read` / `write`（CHECK） |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 共享时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`idx_kb_shares_user(user_id, updated_at DESC)`。
+
+## `documents` — RAG 文档与摄取状态机
+
+共 13 列。`kb_id`/`conversation_id` 二者之一（知识库文档 vs 会话临时文档）。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `d_` 前缀等 |
+| `kb_id` | TEXT | **是** | `NULL` | FK→`knowledge_bases(id)`，CASCADE |
+| `conversation_id` | TEXT | **是** | `NULL` | FK→`conversations(id)`，CASCADE |
+| `filename` | TEXT | 否 | — | 原始文件名 |
+| `mime_type` | TEXT | 否 | — | MIME |
+| `size_bytes` | INTEGER → BIGINT | 否 | — | 字节数 |
+| `status` | TEXT | 否 | `'pending'` | 状态机：`pending` → `parsing` → `embedding` → `ready`；任何失败 → `failed`（`rag/rag.go:573-984`、`store/kbs.go:1750`）。composer 在 `ready` 前阻塞发送 |
+| `error` | TEXT | 否 | `''` | 失败详情 |
+| `chunk_count` | INTEGER | 否 | `0` | 分块数 |
+| `storage_path` | TEXT | 否 | `''` | 原件字节位置（对象存储键/本地路径） |
+| `uploaded_by_user_id` | TEXT | 否 | `''` | 直传者（共享库"谁传的可谁删"）；旧行由 `files` 同路径/容器创建者溯源回填（`store.go:548-556`） |
+| `ingest_updated_at` | INTEGER → BIGINT | 否 | `0` | 摄取心跳。看门狗据此区分"还在跑的长任务"与"超时/崩溃/租约过期的僵尸" |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+
+- **索引**：`idx_docs_kb(kb_id)`、`idx_docs_conv(conversation_id)`，迁移另建 `(kb_id, uploaded_by_user_id, created_at DESC)`、`(status, ingest_updated_at)`（`store.go:566,570`）。
+
+## `chunks` — 分块正文
+
+结构感知分块的产物。共 11 列。**注意**：旧版遗留的 `embedding` 列已被 `Migrate` **删除**（向量搬家，SQLite 走事务内整表重建、PG `DROP COLUMN IF EXISTS`，`store.go:809-885`）——本表只有文本与检索元数据。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 分块 id |
+| `document_id` | TEXT | 否 | — | FK→`documents(id)`，CASCADE |
+| `kb_id` | TEXT | **是** | `NULL` | 软引用（**无 FK**，冗余加速按库检索） |
+| `conversation_id` | TEXT | **是** | `NULL` | 软引用（会话临时文档的分块） |
+| `seq` | INTEGER | 否 | — | 文档内序号 |
+| `parent_id` | TEXT | **是** | `NULL` | **层级分块**：`text` 子块指向 `parent` 块的 id（软引用，无 FK） |
+| `chunk_type` | TEXT | 否 | `'text'` | `text`（子块）/ `parent`（父块，给模型看的上下文）/ `table` / `image_caption` |
+| `content` | TEXT | 否 | — | 分块正文 |
+| `image_ref` | TEXT | **是** | `NULL` | `image_caption` 块对应的原始图片引用 |
+| `meta` | TEXT（JSON） | 否 | `'{}'` | 标题面包屑、页码等检索元数据 |
+| `embedding_model` | TEXT | 否 | `''` | 生成该块向量的嵌入模型（维度隔离用） |
+
+- **索引**：`idx_chunks_doc(document_id)`、`idx_chunks_kb(kb_id)`、`idx_chunks_conv(conversation_id)`。
+- **分块尺寸旋钮**（非本表列，也不是管理员 `settings`，而是启动时读取、带代码默认值的环境变量，`rag/rag.go:2436-2440`）：子块 2000 字符（`AIVORY_RAG_CHILD_TARGET_CHARS`）/ 父块 4800 字符（`AIVORY_RAG_PARENT_TARGET_CHARS`）/ 重叠 250 字符（`AIVORY_RAG_CHUNK_OVERLAP_CHARS`）。
+
+## `vector_points` — 内嵌向量库（个人版）
+
+个人版 SQLite 后端的向量存储：**每维一行**的展开布局。共 3 列。完整版部署保持**空**（真相在 Qdrant）——保留它正是为了引擎无关的逻辑备份。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `chunk_id` | TEXT | 否（PK 之一） | — | FK→`chunks(id)`，CASCADE |
+| `dimension` | INTEGER | 否（PK 之一） | — | 维度下标，`CHECK (dimension > 0)` |
+| `embedding` | BLOB → **BYTEA** | 否 | — | 单维分量（二进制编码的浮点数） |
+
+- **索引**：`idx_vector_points_dimension(dimension)`（维度隔离）。
+- **备注**：嵌入检索是**精确余弦**（暴力扫描），这也是个人版 `VECTOR_BACKEND=sqlite` 被钉死的原因。
+
+## `artifacts` — 生成产物
+
+每条消息的代码/图片输出文件。共 8 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 产物 id |
+| `message_id` | TEXT | 否 | — | FK→`messages(id)`，CASCADE |
+| `filename` | TEXT | 否 | — | 展示文件名 |
+| `storage_path` | TEXT | 否 | — | `ARTIFACT_DIR`/对象存储键 |
+| `mime_type` | TEXT | 否 | `'application/octet-stream'` | MIME |
+| `size_bytes` | INTEGER → BIGINT | 否 | `0` | 字节数 |
+| `source` | TEXT | 否 | `''` | 产生工具。已知值 `image_generate` / `image_generation`（托管图片生成，画廊收录）与 `python_execute`（排除出画廊），常量 `store/misc.go:2130-2132`；空 = 历史行 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+
+- **索引**：`idx_artifacts_message(message_id)`。
+- **备注**：图片画廊查询 = `artifacts JOIN messages` 且 `source IN ('','image_generate','image_generation')`（`store/images.go:152-156`）。
+
+## 相关页面
+
+- [知识库与 RAG](../../admin/knowledge-rag.mdx) — 对应管理界面
+- [沙箱概览](../../sandbox/overview.mdx) — 沙箱工作区归档与 `files`/`artifacts` 的关系
+- [部署与环境变量](../../deployment/environment.mdx) — `UPLOAD_DIR`/`ARTIFACT_DIR`/对象存储

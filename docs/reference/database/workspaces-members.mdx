@@ -1,0 +1,133 @@
+---
+title: Workspace and member tables
+sidebar_position: 7
+description: Column-by-column reference for workspaces, workspace_members, workspace_invites, workspace_policies, workspace_kb_member_permissions, and workspace_audit_logs.
+---
+
+# Workspace and member tables
+
+Six workspace-domain tables. Before reading, remember one rule: **business tables belong to a workspace via a soft-reference `workspace_id` column** (`''` = personal data) with no foreign key; the tables here own "the workspace itself, membership, policy, and audit" (notation per the [overview](./overview.mdx)).
+
+## `workspaces` — workspace roots
+
+6 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `ws_` + 12 hex chars |
+| `name` | TEXT | no | — | workspace name |
+| `owner_id` | TEXT | no | — | FK→`users(id)`, CASCADE. The **single source of owner-exclusive authority** — the member role `admin` is not ownership |
+| `invite_token` | TEXT | no (UNIQUE) | — | legacy 192-bit capability token: kept for schema compatibility but **no longer accepted by the application** (see `workspace_invites`) |
+| `deleting` | INTEGER | no | `0` | durable deletion fence preventing creations from racing a multi-step teardown; reset when a recoverable teardown fails |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+
+- **Index**: `idx_workspaces_owner(owner_id)`; `invite_token` UNIQUE.
+
+## `workspace_members` — membership and granular capabilities
+
+17 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `workspace_id` | TEXT | no (PK part) | — | FK→`workspaces(id)`, CASCADE |
+| `user_id` | TEXT | no (PK part) | — | FK→`users(id)`, CASCADE |
+| `role` | TEXT | no | `'member'` | `admin` / `member` / `guest`. Migration collapses legacy `owner` → `admin` and **any unknown value → `guest` (fail-closed)** (`store.go:511-523`) |
+| `can_create_projects` | INTEGER | no | `1` | create projects |
+| `can_private_conversations` | INTEGER | no | `1` | create private (self-only) conversations |
+| `can_create_skills_prompts` | INTEGER | no | `1` | legacy combined skill+prompt creation switch (kept; the granular columns supersede it) |
+| `can_create_prompts` | INTEGER | no | `1` | create shared prompts (backfilled from the combined switch on first split) |
+| `can_create_skills` | INTEGER | no | `1` | create shared skills (same backfill) |
+| `can_create_mcp` | INTEGER | no | `1` | create shared MCP servers (same backfill) |
+| `can_use_prompts` | INTEGER | no | `1` | use prompts |
+| `can_use_skills` | INTEGER | no | `1` | use skills |
+| `can_use_mcp` | INTEGER | no | `1` | use MCP |
+| `can_create_kb` | INTEGER | no | `1` | create knowledge bases |
+| `can_add_kb_files` | INTEGER | no | `1` | add files to libraries |
+| `can_delete_kb_content` | INTEGER | no | `1` | delete library content |
+| `can_delete_conversations` | INTEGER | no | `1` | delete conversations |
+| `joined_at` | INTEGER → BIGINT | no | `now()` | join time |
+
+- **PK**: composite `(workspace_id, user_id)`. **Index**: `idx_ws_members_user(user_id)`.
+- **Notes**: all 13 `can_*` columns are **0/1 INTEGER**, permissive by default (1); restrictions are written explicitly by admins.
+
+## `workspace_kb_member_permissions` — per-library overrides
+
+Member permissions scoped to **one knowledge base**. 5 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `kb_id` | TEXT | no (PK part) | — | FK→`knowledge_bases(id)`, CASCADE |
+| `user_id` | TEXT | no (PK part) | — | FK→`users(id)`, CASCADE |
+| `can_add_files` | INTEGER | no | `1` | add files to this library |
+| `can_delete_content` | INTEGER | no | `1` | delete this library's content |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Notes**: **a missing row means "allowed"** — existing workspaces and newly invited members retain the historical shared-editing behavior until a library manager explicitly restricts them. Index `idx_ws_kb_permissions_user(user_id)`.
+
+## `workspace_invites` — scoped invitations
+
+12 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `wsi_rec` + 12 hex chars |
+| `workspace_id` | TEXT | no | — | FK→`workspaces(id)`, CASCADE |
+| `token` | TEXT | no (UNIQUE) | — | invite token (192-bit `genToken`) |
+| `email` | TEXT | no | `''` | targeted email (empty = generic link) |
+| `role` | TEXT | no | `'guest'` | role granted on join: `admin` / `member` / `guest` |
+| `expires_at` | INTEGER → BIGINT | no | `0` | expiry (`0` = never) |
+| `max_uses` | INTEGER | no | `1` | redemption capacity |
+| `used_count` | INTEGER | no | `0` | uses so far |
+| `created_by` | TEXT | **yes** | `NULL` | FK→`users(id)`, `SET NULL` (account deletion does not destroy invites) |
+| `purpose` | TEXT | no | `'manual'` | lifecycle metadata — `manual` (admin-created) / `quick_link` (bounded single-use link from the legacy rotate endpoint) |
+| `revoked_at` | INTEGER → BIGINT | no | `0` | revocation time (`0` = live) |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+
+- **Index**: `idx_ws_invites_workspace(workspace_id, created_at DESC)`.
+- **Notes**: the NOT NULL release on `created_by` is done during migration (PG via table rebuild, `store/workspace_invites.go:487-562`); `max_uses`/`used_count` are BIGINT in PG but INTEGER in SQLite (rebuild in `workspace_invites.go:535`).
+
+## `workspace_policies` — per-workspace capability policy
+
+One row per workspace; **can only narrow platform capabilities, never widen them**. 16 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `workspace_id` | TEXT | no (PK) | — | FK→`workspaces(id)`, CASCADE |
+| `allowed_model_ids` | TEXT (JSON) | no | `'[]'` | allowed model ids; **empty array = everything the platform offers** |
+| `allowed_tool_ids` | TEXT (JSON) | no | `'[]'` | allowed built-in tool ids (empty = all) |
+| `allowed_mcp_server_ids` | TEXT (JSON) | no | `'[]'` | allowed admin MCP server ids (empty = all) |
+| `allow_sandbox` | INTEGER | no | `1` | sandbox execution |
+| `allow_image_generation` | INTEGER | no | `1` | image generation |
+| `allow_tool_calling` | INTEGER | no | `1` | tool calling (backfilled on first split as the conjunction of the two old switches — never broadened, `store.go:695-708`) |
+| `allow_drawing` | INTEGER | no | `1` | drawing (inherits the old `allow_image_generation`) |
+| `allow_mcp` | INTEGER | no | `1` | use MCP |
+| `allow_skills` | INTEGER | no | `1` | use skills |
+| `allow_prompts` | INTEGER | no | `1` | use prompts |
+| `allow_knowledge_bases` | INTEGER | no | `1` | knowledge bases |
+| `allow_file_upload` | INTEGER | no | `1` | file upload |
+| `member_monthly_credit_limit` | REAL | no | `0` | per-member monthly credit cap (`0` = unlimited; PG keeps REAL) |
+| `updated_by` | TEXT | no | `''` | last-editing admin id |
+| `updated_at` | INTEGER → BIGINT | no | `0` | last edit time (**defaults to 0, not `now()`** — the row may only be created on the first policy edit) |
+
+## `workspace_audit_logs` — workspace audit
+
+Lightweight audit trail. 8 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | audit row id |
+| `workspace_id` | TEXT | no | — | **deliberately no FK** — rows outlive workspace deletion |
+| `actor_user_id` | TEXT | no | — | actor (also without an FK, so account deletion preserves the audit trail) |
+| `action` | TEXT | no | — | action name. Currently emitted: `workspace.created` / `workspace.deleted` / `member.joined` / `member.left` / `member.removed` / `member.role_updated` / `member.permissions_updated` / `invite.created` / `invite.used` / `invite.revoked` / `invite.rotated` / `policy.updated` / `resource.visibility_changed` (`store/workspace_audit.go`; free text, grows with features) |
+| `target_type` | TEXT | no | `''` | target kind written by the store audit layer (`conversation` / `project` / `knowledge_base` / `workspace` / `workspace_member` / `workspace_invite`; no CHECK constraint) |
+| `target_id` | TEXT | no | `''` | target id |
+| `metadata` | TEXT (JSON) | no | `'{}'` | context. **Never contains** invite tokens, API keys, request bodies, or document content |
+| `created_at` | INTEGER → BIGINT | no | `now()` | time |
+
+- **Index**: `idx_ws_audit_workspace(workspace_id, created_at DESC)`.
+
+## Related pages
+
+- [Access and permissions admin](../../admin/access-auth.mdx) — matching UI
+- [Conversations and messages tables](./conversations-messages.mdx) — where the business-side `workspace_id` soft references live
+- [Capabilities and integrations tables](./tools-sandbox.mdx) — workspace scoping of `user_skills`/`user_prompts`/`user_mcp_servers`

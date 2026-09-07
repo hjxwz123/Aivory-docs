@@ -1,110 +1,199 @@
 ---
 title: Tools, MCP, and sandbox
 sidebar_position: 4
-description: Manage built-in tools, web search, MCP services, and the optional persistent Python sandbox while keeping clear security boundaries.
+description: Manage built-in tools and web search, register Streamable HTTP MCP services, enable the Python sandbox per edition, and hold the security line.
 ---
 
 # Tools, MCP, and sandbox
 
-Tools turn a model's reply into operations against external systems, the network, files, or a code execution environment. Administrators should treat them as a separate permission surface: the model being able to call tools does not mean every user, every model, and every workspace should have that capability.
+:::info Applies to
 
-Start with one low-risk, observable tool, and widen the scope only after you have confirmed call logs, cost, timeouts, and data boundaries. Tool enablement and a model's hosted-tool configuration are two layers of control: a tool existing doesn't mean every model will request it, and a model supporting native tools doesn't mean it is allowed to use every tool.
+Aivory v2.4.6 and later. Relevant screens: "Capabilities & integrations → Tools / MCP services / Skills / Prompts". The sandbox architecture and HTTP contract have their own pages: [Python sandbox guide](../sandbox/overview.mdx) and [Sandbox API](../sandbox/api.mdx). Screenshots show the Chinese admin UI; English labels are cited inline.
 
-## Built-in tools and global disabling
+:::
 
-The "Tools" page lists the available built-in tools and allows global disabling. Disabling is appropriate for security incidents, provider outages, cost anomalies, or maintenance windows; before restoring a tool, confirm its dependencies are available again.
+Tools turn model replies into actions against external systems, networks, files, or code-execution environments — a permission surface of its own. "The model can call tools" does not mean every user, model, or workspace should have that capability.
 
-Common built-in capabilities include web search, web scraping, Python execution, and image- or file-related operations. Whether a user can ultimately see or use one also depends on model capabilities, model tool policies, workspace permissions, and upstream service status.
+Tool enablement works in **two layers**:
 
-Recommendations:
+1. **Global availability** ("Capabilities & integrations → Tools"): disabling a tool removes it from **all** models, including models that explicitly allow it.
+2. **Per-model defaults** ("AI & models → Models → Built-in tools / MCP tools"): which tools are pre-ticked in that model's conversations; users can still adjust per conversation.
 
-- On public demo sites, keep Python and high-cost tools off by default; provide only the necessary chat and web search capabilities first.
-- In sensitive-data workspaces, avoid letting tools send unreviewed content to uncontrolled third-party services.
-- After tool configuration changes, validate with a test account and minimal input; don't trial and error on real customer data first.
+## Built-in tools and per-turn budgets
 
-## Web search and scraping
+| Tool | Purpose | Per-turn cap | When backend is unconfigured |
+| --- | --- | --- | --- |
+| `aivory_web_search` | Web search | 16 | Unavailable (search disabled) |
+| `web_fetch` | Fetch page content | 12 | Always available |
+| `fetch_image` | Fetch images | 16 | Always available |
+| `image_generate` | Image generation | 8 | Requires a configured image model |
+| `python_execute` | Run Python in the sandbox | 16 | **Hidden from all models when no sandbox is configured** |
+| `save_memory` | Save durable memories | — | follows the memory feature |
+| `use_skill` | Load a skill on demand | — | follows the skill catalog |
 
-Configure the search provider and API Key in "Tools", and—when needed—the self-hosted search address and search engine list. When web search is unconfigured or disabled, the tool should clearly return an unavailable state rather than fabricate search results.
+All tools share a per-turn total cap (default 48, `AIVORY_LLM_MAX_TOOL_CALLS_PER_TURN`); "Fast" mode tightens it to 12; deep research relaxes it to roughly 150. Related environment variables and provider-round limits: [Advanced environment variables](../deployment/environment-advanced.mdx).
 
-Recommended rollout order:
+:::note Wording for external claims
 
-1. Choose a search provider that meets your regional, privacy, quota, and latency requirements.
-2. After saving the service address and key, test search results with a definite question.
-3. Check that models are allowed to call web search, and set appropriate credits or quotas for user groups.
-4. Watch external search cost, failure rate, and the risk of inappropriate content before deciding whether to open deep research or web scraping.
+The README's "48 tool calls across 12 provider cycles" is imprecise: 48 is the normal-mode per-turn tool cap, while provider request rounds are a separate limit (default 20). Use the numbers on this page in public material.
 
-Treat search Keys as server-side secrets. Never put them in frontend variables or share them with regular users. On instances that can reach intranets, corporate networks, or restricted networks, also assess the SSRF and data-exfiltration risks of web scraping targets.
+:::
+
+![Tools page: global availability, code sandbox, and web search](/img/admin-tools.png)
+
+## Web search
+
+The "Web search" section on the Tools page configures the `aivory_web_search` backend:
+
+| Field | Description | Example | Default |
+| --- | --- | --- | --- |
+| Provider | SearXNG (self-hosted, keyless); Serper / Brave are paid | `SearXNG (self-hosted)` | Disabled |
+| Base URL | SearXNG instance root | `https://searx.example.com` | empty |
+| SearXNG engines | Comma- or space-separated engine names/shortcuts; empty uses instance defaults | `bing, wikipedia` | empty |
+| API key | Required for Serper / Brave | — | empty |
+
+Boot defaults come from `SEARCH_PROVIDER` / `SEARCH_API_KEY` / `SEARCH_BASE_URL`; once saved in the admin UI, the database wins.
+
+Recommended rollout: pick a provider meeting your region, privacy, quota, and latency needs → validate result quality with a question that has a known answer → confirm the target models may call search and set credits/quotas per user group → watch cost, failure rate, and objectionable-content exposure before enabling deep research or page fetching.
+
+:::tip SSRF and data exfiltration
+
+The search key is a server-side secret — never a frontend variable. On instances that can reach internal networks, also assess `web_fetch` / `fetch_image` targets: don't give the model a reason to fetch `http://169.254.169.254` or internal service URLs.
+
+:::
 
 ## MCP services
 
-MCP services connect models to controlled external capabilities. Administrators add Streamable HTTP MCP addresses, required request headers, or credentials in "MCP services", and can test, sync, and enable/disable services.
+Aivory accepts **Streamable HTTP** MCP transports only (no stdio subprocesses). Registration:
 
-Before adding an MCP service, answer four questions:
+1. Open "Capabilities & integrations → MCP services" → "New MCP service".
+2. Fill in:
 
-1. What external data can the service read or modify?
-2. Are request headers, Bearer Keys, or OAuth credentials granted only the minimum necessary permission?
-3. Which models, user groups, or workspaces should see these tools?
-4. How do you degrade when the service is unavailable, tool output is abnormal, or high-frequency calls appear?
-
-The recommended flow is to add one read-only, test MCP service first, run "Test" and "Sync", review the discovered method list and parameters, then enable it for a small number of administrators. Exposing production write-capable MCP services, personal access tokens, and admin keys to all chat models turns prompt injection or model mis-calls into external system risk.
-
-Re-sync and re-test after every MCP server update, method change, or credential rotation. Before disabling or deleting an MCP service, check whether skills, prompts, workspaces, or user flows depend on it.
-
-## Skills, prompts, and tool authorization
-
-"Skills" and "Prompt library" provide reusable instructions, reference files, and behavior rules to models. They can enhance tool usage but never replace permission controls.
-
-- Don't embed long-lived API Keys, database passwords, cookies, or one-time login links in skills.
-- Document which tools a skill needs, what data scope it may access, and its safe behavior on failure.
-- Before uploading skill assets, check copyright, privacy, and file types; administrator assets and user attachments differ in storage, backup, and access control.
-- For every new skill, set up a repeatable test conversation and confirm the model doesn't call write-capable tools it shouldn't due to ambiguous instructions.
-
-## Python sandbox availability
-
-Python execution depends on a reachable sandbox service. The administrator tools page shows status based on the current effective configuration: with neither a local sidecar nor an external sandbox address, the page shows "Configure a sandbox first" and the Python interpreter switch stays off.
-
-This notice applies to both the Personal edition and the Full edition: it reflects whether the current instance can safely reach a sandbox, not whether the user has administrator permission. Don't try to bypass it by force-enabling the interpreter.
-
-For the complete architecture, deployment choices, workspace lifecycle, capacity planning, and troubleshooting flow, read the standalone [Python Sandbox Guide](../sandbox/overview.mdx). Implementers and external-runner operators can use the [Sandbox API Reference](../sandbox/api.mdx).
-
-### Three ways to run
-
-| Option | Best for | Configuration points |
+| Field | Description | Example |
 | --- | --- | --- |
-| Full edition built-in sidecar | Standard Full edition | Compose already connects `http://sandbox:8000` on the internal network; no port needs to be exposed |
-| Personal edition local profile | Trusted single machine | Set `SANDBOX_BASE_URL=http://sandbox:8000` and a matching key, then start with `--profile sandbox` |
-| External sandbox | Isolation required or an existing execution platform | Fill in the HTTPS address and the same Bearer Key on the tools page or in the startup environment |
+| Name / Icon / Tool description | All required; the description is what tells the model when to use this service — write a clear "what it can do" | `Train timetable lookup` |
+| Streamable HTTP URL | Endpoint must accept MCP JSON-RPC over Streamable HTTP | `https://mcp.example.com/mcp` |
+| Headers | Optional headers sent with every MCP request; saved sensitive values display masked | `Authorization: Bearer …` |
+| Available to users | Enable only after testing and syncing tools | — |
 
-In all cases, the sandbox API must never be exposed to the public internet without authentication. The sandbox key is a Bearer credential; once leaked it could be used to create or access execution sessions.
+3. Click **Test** to verify the connection (status: not tested / connected / error), then **Sync tools** to snapshot the method list; the row shows "discovered N tools / last synced …".
+4. To pre-tick a service for specific models, select it in the model editor's "MCP tools" block. An unsynced service cannot run even when enabled; if a service is deleted or disabled, model defaults surface "deleted / disabled / not synced" markers that you should clean up or restore.
 
-## Security boundaries of the local sidecar
+![MCP services page (empty state)](/img/admin-mcp.png)
 
-The official sidecar uses the host Docker socket to create a restricted container per session. It limits session-container CPU, memory, process count, a read-only root file system, temporary writable directories, upload size, idle reclamation, and execution duration as best it can, but the Docker socket itself still approximates high host privileges.
+:::warning Answer four questions before adding one
 
-Therefore:
+1. What external data can this service read or modify?
+2. Are its headers / Bearer keys / OAuth credentials scoped to least privilege?
+3. Which models, user groups, or workspaces should see these tools?
+4. How do you degrade when the service is down, emits odd tool output, or gets hammered?
 
-- Enable the local sidecar only on a fully controlled server; never place it on an untrusted shared host.
-- Don't add `ports` to the `sandbox` service and don't expose it through a reverse proxy.
-- Keep `SANDBOX_READ_ONLY_ROOTFS=1` unless you fully understand the disk and write risks of turning it off.
-- Use `SANDBOX_MEMORY`, `SANDBOX_CPUS`, `SANDBOX_MAX_SESSIONS`, `SANDBOX_WORKSPACE_SIZE`, and execution-duration limits to leave headroom on the host.
-- In public products, limit which users and which models may call Python; don't treat the container as an infinitely trusted arbitrary-code platform.
+Handing a production-write MCP server plus a personal access token to every chat model converts prompt injection into external-system risk. Start with a read-only test service, inspect discovered methods and parameters, then enable narrowly. Re-sync and re-test after every server update, method change, or credential rotation.
 
-Both the Full edition and the Personal edition's optional profile start an image keep-alive service. It holds the sandbox runtime image so that, after an ops script prunes unreferenced images, the next Python call doesn't have to cold-pull a large image and fail on timeout. Don't casually delete this service as a redundant container.
+:::
 
-## Persistent workspaces and files
+## Skills and prompts
 
-Sandbox sessions usually maintain a workspace per conversation, reclaimable after idle. With local archiving or compatible object storage configured, a workspace can be restored after its session is reclaimed; local archiving suits a single node, while multiple application replicas should use shared object storage.
+**Skills** are reusable playbooks (name, icon, **when-to-use one-liner**, full Markdown instructions, assets); **Prompts** are public templates users copy into personal libraries. Skills shape tool use but never replace permission control:
 
-A persistent workspace does not mean every output is kept forever. Administrators should still define file retention, backup, deletion, and user data export policies, and make clear how conversation deletion, workspace deletion, and backup retention relate. Files containing confidential or personal data must not be synced automatically to uncontrolled object storage.
+- Never embed long-lived API keys, database passwords, cookies, or one-time login links in a skill.
+- Each skill should state which tools it needs, what data it may touch, and its safe behavior on failure.
+- The "when to use" line is injected into the system-prompt index and decides recall — write a trigger condition, not marketing copy.
+- Check copyright, privacy, and file type before uploading assets; admin assets and user attachments differ in storage, backup, and access control.
+- Give every new skill a repeatable test conversation proving it won't invoke write-capable tools on ambiguous instructions.
+- The user-group "Permissions" tab can scope visible prompts, skills, tools, and MCP servers per group.
 
-## Runtime and troubleshooting checks
+![Skills page (empty state)](/img/admin-skills.png)
+
+## Python sandbox: three ways to enable
+
+`python_execute` needs a reachable sandbox service. The "Code sandbox" section on the Tools page shows live status; with nothing configured it displays **"Configure a sandbox first"** and the Python switch stays off — identically on Personal and Full. That message reflects whether the instance can safely reach a sandbox, not whether you are an admin; don't force the interpreter past it.
+
+| Mode | For | Configuration |
+| --- | --- | --- |
+| Built-in sidecar (Full) | Standard Full edition | Compose already wires `http://sandbox:8000` on the internal network with app-side defaults set; no ports exposed |
+| Local profile (Personal) | Trusted single machine | Start with `--profile sandbox` and set `SANDBOX_BASE_URL=http://sandbox:8000` plus `SANDBOX_API_KEY=aivory-personal-sandbox` in `.env.personal` |
+| External sandbox | Existing execution platform / stronger isolation | Enter an HTTPS URL and matching Bearer key in the Tools page (or `SANDBOX_BASE_URL` / `SANDBOX_API_KEY`); a standalone sidecar publishes on `48217` — **never expose it publicly** |
+
+Admin fields ("Code sandbox" section):
+
+| Field | Description | Default |
+| --- | --- | --- |
+| Sandbox URL | Blank falls back to the deployment environment value | env value |
+| Sandbox API key | Bearer key for sandbox calls; blank falls back to env | env value |
+| Execution timeout (seconds) | Longest single run; range 10–600; blank = 120 | 120 |
+| Idle recycle (seconds) | Reap idle sessions (archiving the workspace first); range 60–86400 | 1800 |
+
+:::note The real deployed timeout cap
+
+Both official composes set `SANDBOX_EXEC_TIMEOUT_CAP_MS=600000` (10 minutes) on the sidecar; the admin "Execution timeout" is clamped to [10, 600] seconds with a 120-second client-side safety margin. The "2 minutes" figure in some README text is the sidecar's code default when unconfigured — not the deployed value.
+
+:::
+
+## Session lifecycle and persistent workspaces
+
+- Each session is one tightly locked Docker container: **always `--network none`** (not configurable) — no runtime pip install or network calls; bake dependencies into the runner image (`Dockerfile.runner` already ships numpy/pandas/matplotlib/python-docx and more).
+- Sessions keep `/workspace` per conversation; after the idle threshold the session is reaped and its workspace is tarred into storage (keyed by conversation ID) and restored on next use. Multi-replica installs must use shared object storage — local archives suit a single node only.
+- Archive lifetime follows the storage page's retention setting (default 30 days). Persistent workspace ≠ permanent output retention: file retention, deletion, and user-export policy remain an admin decision.
+- Both the Full edition and the Personal sandbox profile start an **image keepalive** service so host `docker image prune -a` can't evict the ~600 MB runtime image; losing it makes the next `python_execute` cold-pull and fail on timeout. Don't delete it as "unused".
+
+## Security boundaries
+
+The sidecar creates session containers through the host Docker socket, with non-root, `--cap-drop ALL`, `no-new-privileges`, read-only rootfs, and bounded tmpfs. But **the Docker socket itself is roughly host root**, therefore:
+
+- Enable the local sidecar only on fully controlled servers, never on untrusted shared hosts.
+- Add no `ports:` to the `sandbox` service and never proxy it publicly; a leaked sandbox Bearer key allows creating or accessing execution sessions.
+- Keep `SANDBOX_READ_ONLY_ROOTFS=1` unless you fully understand the disk and write risk of disabling it.
+- Leave the host headroom via `SANDBOX_MEMORY` (default 2g), `SANDBOX_CPUS` (1), `SANDBOX_PIDS_LIMIT` (256), `SANDBOX_MAX_SESSIONS`, `SANDBOX_WORKSPACE_SIZE` (512m), and `SANDBOX_MAX_UPLOAD_BYTES` (40 MiB).
+- This isolation is not gVisor/microVM grade. For stronger guarantees, swap the execution backend — keeping the [Sandbox API](../sandbox/api.mdx) HTTP contract is all Aivory requires.
+
+What tool use looks like in a real conversation (reasoning and tool-call trace visible):
+
+![Tool calls and reasoning in a conversation (English UI)](/img/chat-tool-calls-reasoning.jpg)
+
+## Operations and failure triage
 
 When Python is unavailable, check in order:
 
-1. Whether the tools page shows the sandbox as configured, and whether the address and key match.
-2. Whether the `sandbox` container of the Full edition or the local profile is running and healthy.
-3. Whether the host Docker daemon and Docker socket are available, and whether the runtime image has been pulled.
-4. Whether sandbox resource limits, concurrent session caps, upload size, or execution timeouts are too low.
-5. Whether the target model is restricted by globally disabled tools, model policies, or workspace permissions.
+1. Does the Tools page show the sandbox as configured, and do URL/key pairs match? (With both fields blank everything comes from environment values, and it is easy for each side to assume the other configured it.)
+2. Is the `sandbox` container running and healthy? (`GET /healthz` returns `{ok, docker, image}`.)
+3. Is the host Docker daemon and socket available, and did the runtime image survive pruning? (Look at the keepalive service.)
+4. Are execution timeout, concurrent-session cap, or upload size set too low?
+5. Is the target model blocked by a global tool disable, per-model tool defaults, or workspace policy?
 
-Don't fix errors by exposing the sandbox port, disabling authentication, or raising resource limits without bound. First read the redacted application and sandbox logs to determine whether the issue is network, authentication, image, resource, or model authorization.
+:::danger Do not "fix" it this way
+
+Never resolve errors by publishing the sandbox port, disabling auth (`SANDBOX_ALLOW_NO_AUTH` is for localhost development only), or raising resource caps to infinity. Read the sanitized app and sandbox logs first and identify whether the failure is network, auth, image, resource, or model authorization.
+
+:::
+
+### Manual health probes (external sandbox)
+
+The sandbox is a plain HTTP service, so you can verify the contract directly (substitute `$KEY` with the sandbox key):
+
+```bash
+curl -s http://<sandbox-host>:48217/healthz -H "Authorization: Bearer $KEY"
+# {"ok":true,"docker":true,"image":"..."}
+
+SID=$(curl -s -X POST http://<sandbox-host>:48217/sessions \
+  -H "Authorization: Bearer $KEY" -H "content-type: application/json" \
+  -d '{}' | jq -r .session_id)
+
+curl -s -X POST http://<sandbox-host>:48217/exec \
+  -H "Authorization: Bearer $KEY" -H "content-type: application/json" \
+  -d "{\"session_id\":\"$SID\",\"code\":\"print(6*7)\"}"
+```
+
+A `"docker":false` from `/healthz` means the socket is down or unreadable; a 401 means the keys on the two sides disagree.
+
+### Tool troubleshooting quick lookup
+
+| Symptom | Check first |
+| --- | --- |
+| Tools page shows "Configure a sandbox first" | `SANDBOX_BASE_URL` + `SANDBOX_API_KEY` configured as a pair (admin UI or env) |
+| Sporadic Python 500s mentioning image pulls | The runtime image was pruned — restore the keepalive service |
+| Execs always die at the same second | The minimum of admin "Execution timeout", sidecar `SANDBOX_EXEC_TIMEOUT_CAP_MS`, and proxy read timeout |
+| Workspace files vanish after switching replicas | Archives go to local storage while the app is multi-replica — move to shared object storage |
+| Search consistently "unavailable" | Provider/key pairing (SearXNG needs no key; Serper/Brave require one) |
+| Model claims a tool doesn't exist | Global disable > per-model built-in defaults > user-group permissions > workspace policy — any layer can hide it |
+| MCP enabled but unusable by models | Whether the service is ticked under "MCP tool availability" and has been synced |

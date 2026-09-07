@@ -1,6 +1,7 @@
 import {themes as prismThemes} from 'prism-react-renderer'
 import type {Config} from '@docusaurus/types'
 import type * as Preset from '@docusaurus/preset-classic'
+import type {PluginOptions} from '@easyops-cn/docusaurus-search-local'
 import seoAssetsPlugin from './src/plugins/seo-assets'
 
 const siteUrl = process.env.DOCS_SITE_URL ?? 'https://docs.aivory.example.com'
@@ -104,6 +105,33 @@ const config: Config = {
 
   plugins: [
     seoAssetsPlugin,
+  ],
+
+  // Fully offline, lunr-based local search. Registered as a `themes` entry (not
+  // `plugins`) because the package's README requires it: it overrides
+  // @theme/SearchBar and injects the navbar search box automatically. The
+  // preset-classic Algolia theme is not active on this site (themeConfig has no
+  // `algolia` field), so there is no SearchBar conflict.
+  themes: [
+    [
+      require.resolve('@easyops-cn/docusaurus-search-local'),
+      {
+        // lunr-languages names + 'zh' (NOT the Docusaurus locale code 'zh-Hans').
+        // zh is segmented at build time via @node-rs/jieba.
+        language: ['en', 'zh'],
+        indexDocs: true,
+        indexBlog: false, // blog is disabled in this preset
+        docsRouteBasePath: '/docs',
+        hashed: true,
+        // `hashed` computes the cache-busting hash from markdown under docsDir
+        // only. Point it at BOTH source trees so edits to the canonical zh-Hans
+        // content bump the index hash (otherwise zh builds could serve a stale
+        // cached index after content changes).
+        docsDir: ['docs', 'i18n/zh-Hans/docusaurus-plugin-content-docs/current'],
+        highlightSearchTermsOnTargetPage: true,
+        explicitSearchResultPath: true,
+      } satisfies PluginOptions,
+    ],
   ],
 
   onBrokenLinks: 'throw',

@@ -1,0 +1,168 @@
+---
+title: 渠道、模型与用量表
+sidebar_position: 3
+description: channels、models、model_tags、model_skills、usage_logs、usage_stats 六表的逐列参考，含工具能力、定价与用量镜像机制。
+---
+
+# 渠道、模型与用量表
+
+本页覆盖模型供给与调用记录 6 张表（记法约定见[总览](./overview.mdx)）。
+
+## `channels` — 上游供应商渠道
+
+一个渠道 = 一个供应商账号（base_url + key）。共 9 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `ch_` + 12 位十六进制 |
+| `name` | TEXT | 否 | — | 渠道名；`lower(trim(name))` 唯一 |
+| `type` | TEXT | 否 | — | `openai` / `claude` / `gemini` / `mock`（schema 注释）；管理 API 校验额外接受别名 `anthropic`、`google`（`api/admin_handlers.go:194-208`） |
+| `api_format` | TEXT | 否 | `''` | 仅 openai 类型有效：`chat` 或 `responses`（Chat Completions vs Responses API）；其他类型必须留空 |
+| `base_url` | TEXT | 否 | `''` | 上游基址（空 = 官方默认端点） |
+| `api_key` | TEXT | 否 | `''` | **明文**存储的供应商密钥，仅 API 层掩码 |
+| `enabled` | INTEGER | 否 | `1` | 是否启用 |
+| `sort_order` | INTEGER | 否 | `0` | 拖拽排序 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **外键**：无出向。**入向**：`models.channel_id`（CASCADE，唯一硬外键）；另有无约束软引用：`models.fallback_channel_id`、`usage_logs.channel_id`。
+- **索引**：`idx_channels_name_unique`（UNIQUE ON `lower(trim(name))`）。
+- **备注**：删除渠道 → CASCADE 删除其全部模型。`mock` 出现在 schema 注释与 provider 代码（无 key 时走 mock 实现，`llm/openai_provider.go:36`），但管理 API 的类型校验拒绝 `mock` 字面值。
+
+## `models` — 模型目录
+
+每行一个可调用模型，携带能力、工具、定价、审核全量元数据。共 34 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `m_` + 12 位十六进制 |
+| `channel_id` | TEXT | 否 | — | FK→`channels(id)`，CASCADE |
+| `kind` | TEXT | 否 | `'chat'` | `chat` / `image` / `embedding`（`api/admin_channel_model_import.go:241`） |
+| `request_id` | TEXT | 否 | — | 发给上游的模型名；渠道内 `lower(trim(request_id))` 唯一 |
+| `label` | TEXT | 否 | — | 展示名 |
+| `description` | TEXT | 否 | `''` | 描述 |
+| `icon` | TEXT | 否 | `''` | 图标（emoji/URL） |
+| `fallback_channel_id` | TEXT | 否 | `''` | 主请求失败时重试的备用渠道（`''` = 无） |
+| `enabled` | INTEGER | 否 | `1` | 是否上架 |
+| `sort_order` | INTEGER | 否 | `0` | 选择器排序 |
+| `tool_mode` | TEXT | 否 | `'native'` | 工具调用方式：`native`（供应商原生 function calling）/ `prompt`（提示词模拟）/ `none`（禁用工具） |
+| `vision` | INTEGER | 否 | `1` | 是否接受图片输入 |
+| `stream` | INTEGER | 否 | `1` | 是否支持 SSE 流式 |
+| `research_enabled` | INTEGER | 否 | `1` | 是否对该模型暴露 Deep Research |
+| `fast` | INTEGER | 否 | `0` | 快速模式的**全平台唯一**快速模型标记（不变式由应用层维护，无库级约束） |
+| `system_prompt` | TEXT | 否 | `''` | 该模型附加的系统提示 |
+| `param_controls` | TEXT（JSON） | 否 | `'[]'` | 用户可调参数白名单，每项声明 `key`（常见如 `temperature`、`top_p`、`max_tokens`、`thinking`、`effort`）、`type`（toggle/select）与取值→上游请求体 `map`（`llm/param_controls.go`） |
+| `extra_params` | TEXT（JSON） | 否 | `'{}'` | 管理员专属的上游请求默认值；供应商原生请求字段优先（深合并） |
+| `official_tools` | TEXT（JSON） | 否 | `'[]'` | 供应商托管工具 `[{name,icon,request}]`（旧式字符串数组在迁移中升级） |
+| `builtin_tools` | TEXT（JSON） | **是** | `NULL` | 本地默认工具；**NULL = 全部**（向后兼容），`'[]'` = 全禁 |
+| `mcp_server_ids` | TEXT（JSON） | **是** | `NULL` | 默认挂接的管理员 MCP 服务 id；NULL/`[]` = 无 |
+| `tags` | TEXT（JSON） | 否 | `'[]'` | `model_tags` id 数组（选择器过滤） |
+| `moderation_enabled` | INTEGER | 否 | `0` | 生成前审查 prompt |
+| `moderation_mode` | TEXT | 否 | `'keyword'` | `keyword`（词表）/ `model`（审核模型，走 `task.moderation` 任务） |
+| `price_input` | REAL → DOUBLE PRECISION | 否 | `0` | 每百万输入 token 价格 |
+| `price_output` | REAL → DOUBLE PRECISION | 否 | `0` | 每百万输出 token 价格 |
+| `price_cache_read` | REAL → DOUBLE PRECISION | 否 | `0` | 缓存读价格 |
+| `price_cache_write` | REAL → DOUBLE PRECISION | 否 | `0` | 缓存写价格 |
+| `price_per_image` | REAL → DOUBLE PRECISION | 否 | `0` | 每张图价格 |
+| `currency` | TEXT | 否 | `'USD'` | 定价币种 |
+| `dim` | INTEGER | 否 | `0` | 嵌入模型输出维度（决定 Qdrant 集合 `aivory_c<dim>` 分区） |
+| `compaction_token_threshold` | INTEGER | 否 | `0` | 模型专属压缩触发阈值（`0` = 用全局 `compaction_token_trigger`） |
+| `image_timeout_sec` | INTEGER | 否 | `0` | 图片生成超时秒数（`0` = 默认） |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`idx_models_channel(channel_id)`、`idx_models_kind(kind, enabled)`、`idx_models_channel_request_unique`（UNIQUE ON `(channel_id, lower(trim(request_id)))`）。
+- **入向引用**：`knowledge_bases.embedding_model_id`（无 CASCADE——嵌入模型被库引用时拒绝删除）、`model_group_quotas.model_id`、`model_skills.model_id`（均 CASCADE）、`conversations.model_id`/`messages.model_id` 是**无约束快照**。
+- **备注**：`python_execute` 与 web 搜索未配置后端时会从模型工具声明中扣留（`cmd/api/main.go:131-137`），与本表无关但常被误认为数据问题。
+
+## `model_tags` — 模型标签
+
+管理员维护的选择器过滤标签。共 4 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `mtag_` + 12 位十六进制 |
+| `name` | TEXT | 否 | — | 标签名；`lower(trim(name))` 唯一 |
+| `sort_order` | INTEGER | 否 | `0` | 排序 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+
+- **备注**：模型侧关系存在 `models.tags`（JSON id 数组），不是本表的行——删标签不会级联清理（应用层负责同步）。
+
+## `model_skills` — 模型默认技能关联
+
+纯关联表。共 2 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `model_id` | TEXT | 否（PK 之一） | — | FK→`models(id)`，CASCADE |
+| `skill_id` | TEXT | 否（PK 之一） | — | FK→`skills(id)`，CASCADE |
+
+- **主键**：复合 `(model_id, skill_id)`。
+
+## `usage_logs` — 可删除的诊断明细
+
+每次上游调用一行（**失败也记**），管理后台"用量"页可删。共 25 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | INTEGER → BIGSERIAL | 否（PK） | 自增 | 唯一自增整数；SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`（`schema.sql:827`），PG `BIGSERIAL` |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `conversation_id` | TEXT | **是** | `NULL` | 归属会话（软引用，无 FK） |
+| `message_id` | TEXT | **是** | `NULL` | 归属消息（软引用） |
+| `model_id` | TEXT | 否 | — | 实际服务的模型（软引用快照） |
+| `purpose` | TEXT | 否 | — | `chat` / `image` / `embedding` / `verify` / `task.` 前缀的内部任务（`task.title`、`task.router`、`task.rag_evidence_judge`、`task.rag_map_reduce`、`task.compact`、`task.memory_extract`、`task.memory_adjudicate`、`task.downgrade`、`task.research_plan`、`task.research_verify`、`task.research_validate`、`task.moderation`、`task.search_queries`、`task.tool_route`、`task.image_intent`，`llm/task_llm.go:52-99`） |
+| `input_tokens` | INTEGER → BIGINT | 否 | `0` | 输入 token |
+| `output_tokens` | INTEGER → BIGINT | 否 | `0` | 输出 token |
+| `cache_read_tokens` | INTEGER → BIGINT | 否 | `0` | 缓存读 token |
+| `cache_write_tokens` | INTEGER → BIGINT | 否 | `0` | 缓存写 token |
+| `images_count` | INTEGER | 否 | `0` | 生成图片数 |
+| `cost` | REAL → DOUBLE PRECISION | 否 | `0` | 该行成本（按模型 `currency`） |
+| `currency` | TEXT | 否 | `'USD'` | 成本币种 |
+| `credits` | REAL → DOUBLE PRECISION | 否 | `0` | 该行向用户收取的积分（`0` = 免费/未换算） |
+| `channel_id` | TEXT | 否 | `''` | 实际服务该请求的渠道 |
+| `fallback` | INTEGER | 否 | `0` | `1` = 经模型的备用渠道（`fallback_channel_id`）服务 |
+| `status` | TEXT | 否 | `'ok'` | `ok` / `error`（错误请求同样入库） |
+| `error` | TEXT | 否 | `''` | 上游失败详情（仅管理员可见） |
+| `request_method` | TEXT | 否 | `''` | `status='error'` 行的脱敏上游请求现场 |
+| `request_url` | TEXT | 否 | `''` | 同上 |
+| `request_headers` | TEXT | 否 | `''` | 同上（已脱敏） |
+| `request_body` | TEXT | 否 | `''` | 同上；受管理员日志开关 `log_request_bodies` 控制 |
+| `ttft_fallback_model` | TEXT | 否 | `''` | 非空 = TTFT 超时后**模型级**回退接管（与渠道 `fallback` 正交）；值为回退模型的展示名 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 发生时间 |
+| `workspace_id` | TEXT | 否 | `''` | ※附加列：归属工作空间（空间用量页过滤；`''` = 个人） |
+
+- **索引**：`idx_usage_user_time(user_id, created_at)`、`idx_usage_model_time(model_id, created_at)`、`idx_usage_user_model_time(user_id, model_id, created_at)`（缓存计数器冷启动时的权威回退聚合）。
+- **备注**：本表是**可删除的诊断副本**——分析统计不读它（读 `usage_stats`），删日志永远不改变报表。
+
+## `usage_stats` — 仅追加的分析真相
+
+成功调用的不可变事实，分析仪表盘的唯一数据源。共 19 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `source_log_id` | INTEGER → BIGINT | 否（PK） | — | 对应 `usage_logs.id`；**幂等键而非外键**——故意无 FK，日志随便删 |
+| `user_id` | TEXT | **是** | `NULL` | FK→`users(id)`，`SET NULL`（全表唯一的外键：删号匿名化归属但保住全局/模型历史） |
+| `conversation_id` | TEXT | **是** | `NULL` | 快照，无 FK |
+| `message_id` | TEXT | **是** | `NULL` | 快照，无 FK |
+| `model_id` | TEXT | 否 | — | 快照，无 FK |
+| `purpose` | TEXT | 否 | — | 与 `usage_logs.purpose` 同词表 |
+| `input_tokens` | INTEGER → BIGINT | 否 | `0` | 同 `usage_logs` |
+| `output_tokens` | INTEGER → BIGINT | 否 | `0` | 同 `usage_logs` |
+| `cache_read_tokens` | INTEGER → BIGINT | 否 | `0` | 同 `usage_logs` |
+| `cache_write_tokens` | INTEGER → BIGINT | 否 | `0` | 同 `usage_logs` |
+| `images_count` | INTEGER | 否 | `0` | 同 `usage_logs` |
+| `cost` | REAL → DOUBLE PRECISION | 否 | `0` | 同 `usage_logs` |
+| `currency` | TEXT | 否 | `'USD'` | 同 `usage_logs` |
+| `credits` | REAL → DOUBLE PRECISION | 否 | `0` | 同 `usage_logs` |
+| `workspace_id` | TEXT | 否 | `''` | 空间归属（在 CREATE 中就有，与 `usage_logs` 的附加列不同） |
+| `channel_id` | TEXT | 否 | `''` | 服务渠道快照 |
+| `fallback` | INTEGER | 否 | `0` | 渠道回退标记 |
+| `ttft_fallback_model` | TEXT | 否 | `''` | 模型回退标记 |
+| `created_at` | INTEGER → BIGINT | 否 | **无默认** | 由镜像写入（从对应日志行复制），刻意不给 `now()` 默认值 |
+
+- **镜像机制**：两方言各安装一个 `AFTER INSERT` 数据库触发器把成功行镜像进来（`status='error'` 不镜像；`ON CONFLICT DO NOTHING` 幂等），安装/回填见 `store/usage_stats.go`（`EnableUsageStatsMirror` / `BackfillUsageStats`，`store.go:709-714`）。逻辑备份（`pg_dump`）不保留该触发器——由应用启动时重新安装。
+- **索引**：`idx_usage_stats_time(created_at)`、`(user_id, created_at)`、`(model_id, created_at)`、`(message_id, purpose, source_log_id)`。
+
+## 相关页面
+
+- [渠道、模型与策略](../../admin/channels-models.mdx) — 对应管理界面
+- [用量与计费分析](../../admin/platform-operations.mdx) — 读取 `usage_stats` 的报表页
+- [订阅与积分账本](./billing.mdx) — `billing_usage`、`model_group_quotas` 等计费侧配对表

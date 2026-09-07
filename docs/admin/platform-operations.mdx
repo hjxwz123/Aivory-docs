@@ -1,74 +1,203 @@
 ---
 title: System, Backup, and Operations
 sidebar_position: 7
-description: Configure email, storage, privacy, announcements, and backups, and maintain Aivory instances with analytics, usage, and resource management.
+description: Configure email, storage and uploads, logging and privacy, announcements, moderation and voice, and run the instance with backups, migration, and analytics.
 ---
 
 # System, Backup, and Operations
 
-System settings determine how the instance sends email, stores objects, records logs, presents legal information, and performs backups; the operations pages help administrators observe users, models, files, resources, and feedback. Treat them as ongoing operational work, not something to fill in once at first install.
+:::info Applies to
 
-## SMTP and email
+Aivory v2.4.6 and later. This covers the "System" rail (Announcement, Email service, Storage & uploads, Legal & contact, Logging & privacy, Backup & Migration) and the "Data & operations" tabs, plus Moderation and Voice under "Capabilities & integrations". Screenshots show the Chinese admin UI; English labels are cited inline.
 
-Fill in the SMTP host, port, username, password, sender address, and TLS policy under "System → Email service". Email is usually used for account verification, password resets, and operational notifications, so configure it early in a full deployment that serves real users.
+:::
 
-When configuring:
+System settings decide how the instance sends mail, stores objects, logs requests, presents legal information, and runs backups; the operations pages help admins observe users, models, files, and feedback. Treat them as ongoing operations, not a one-time form during install.
 
-- Use the SMTP credentials provided by your service provider or an app-specific password; don't reuse the administrator password.
-- The sender address should belong to a domain you control, with the necessary SPF, DKIM, DMARC, or provider verification configured.
-- Distinguish the ports required for direct TLS vs. STARTTLS and fill them in per the provider's requirements.
-- After saving, verify sending, receiving, verification-code validity, and the password reset flow with a non-administrator test mailbox.
+## Admin map
 
-When SMTP is not configured, features that depend on email may not complete. Don't troubleshoot by printing verification codes or SMTP passwords into public logs.
+| Rail | Tab | Section here |
+| --- | --- | --- |
+| AI & models | Moderation | Moderation and voice |
+| Capabilities & integrations | Voice | Moderation and voice |
+| System | Announcement / Email service / Storage & uploads / Legal & contact / Logging & privacy / Backup & Migration | sections below |
+| Data & operations | Usage & billing / Usage / Content resources / Files / User feedback | Operations rhythm |
 
-## Storage, uploads, and retention
+## Email service
 
-"Storage and uploads" configures application objects, upload limits, and object storage integration. A single node can use local storage; when you need multiple replicas, cross-node access, or external parsing, use a controlled object storage service.
+"System → Email service" configures SMTP: host, port, username, password, sender address, and TLS mode, with adjustable verification/reset templates. Email powers registration verification (6-digit code, 10-minute validity), password reset, and operational notices — ship it early on any user-facing deployment.
 
-Before defining upload and retention policies, decide: the maximum single-file size, allowed types, total space per user, how long previews and artifacts are kept, whether there is a recovery window after deletion, and whether backups cover the objects. Raising limits must be paired with checking reverse-proxy request body limits, in-app limits, parser service capacity, disk, and backup costs.
+| Field | Description | Example / default |
+| --- | --- | --- |
+| Host / Port | SMTP server address and port | `smtp.example.com`; 465 or 587 per provider |
+| Username / Password | Login credentials; prefer an app-specific password | provider-issued |
+| From address | What recipients see; should belong to a controlled domain | `no-reply@aivory.example.com` |
+| TLS mode | Direct TLS (implicit SSL, usually 465) or STARTTLS (usually 587) | per provider docs |
+| Templates | Subject/body for verification and reset mail | defaults are fine to ship |
 
-Object storage credentials and bucket configuration are sensitive. Use a separate least-privilege account rather than granting administrator rights over the entire cloud account; after changing endpoints, buckets, regions, or keys, test upload, download, preview, parsing, sharing, and deletion.
+Requirements and validation:
 
-## Legal, contact information, logs, and privacy
+1. Use provider-issued SMTP credentials or an app-specific password; never reuse an admin login password.
+2. The sender address should belong to a controlled domain with SPF, DKIM, DMARC, or the provider's domain verification in place — otherwise verification mail lands in spam.
+3. Match the port to the mode: direct TLS (implicit SSL) versus STARTTLS, per the provider's docs.
+4. After saving, test end to end with a **non-admin** mailbox: delivery, code-based sign-in, and the full password-reset flow.
 
-Maintain the terms of service, privacy policy, contact entry points, and log/privacy policies in the system settings. A public service should provide real, actionable contact information and a privacy statement consistent with its actual data flows.
+:::note Without SMTP
 
-The goal of a log policy is to let administrators diagnose problems, not to store more sensitive information. Principles include:
+"Require email verification" and "forgot password" are effectively unavailable. When debugging, never print verification codes or SMTP passwords into public logs.
 
-- don't log model provider API keys, OAuth Client Secrets, payment signatures, JWTs, refresh tokens, complete user files, or complete private prompts.
-- when troubleshooting, prefer timestamps, request IDs, sanitized error codes, service names, and aggregated metrics.
-- set reasonable retention and access permissions; log exports may also contain user metadata.
-- establish owners and approval workflows for data exports, deletions, backup restores, and transfers to third-party services.
+:::
+
+### Email troubleshooting quick lookup
+
+| Symptom | Check first |
+| --- | --- |
+| Test connection fails: connection refused | Port/TLS-mode mismatch (465 direct TLS vs 587 STARTTLS) |
+| Auth failure (535) | Web login password used instead of an app-specific password; account has 2FA demanding an app password |
+| Verification mail lands in spam | Missing SPF/DKIM/DMARC on the sender domain; from-address differs from the authenticated identity |
+| "Sent" in logs but user got nothing | Recipient gateway rejected it; advise whitelisting or change sender domain |
+| Correct code reported invalid/expired | 10-minute TTL and 5-try cap; each "resend" burns the previous code — expected behavior |
+
+## Storage and uploads
+
+"System → Storage & uploads" centralizes object storage, archive retention, and upload policy (the RAG-side boundaries live in [Knowledge bases, RAG, and storage](./knowledge-rag.mdx)):
+
+| Block | Key fields | Notes |
+| --- | --- | --- |
+| Object storage | Provider (local / S3 / Aliyun OSS), endpoint, bucket, prefix, AccessKey | Default local: avatar-type objects in the local object dir; uploads and artifacts under `DATA_DIR`. Move to controlled object storage for multi-replica, cross-node access, or MinerU |
+| Upload policy | Max image size (default 5 MB), max non-image file size, allowed extensions | None may exceed the server hard cap `MAX_UPLOAD_BYTES` (default 50 MiB); blank extensions = safe default set |
+| Sandbox archives | Archive retention days | Default 30; how long persistent-workspace tars survive |
+| Vector maintenance | Check / rebuild entry point | Same facility as the Backup page's vector check |
+| Storage cleanup | Pending-deletion view | Observe async physical sweeps after user/file deletions |
+
+Use a **separate, least-privilege account** for object storage: only the needed bucket/prefix read/write/presign rights — never a whole-cloud admin key; configure lifecycle, versioning, encryption, and access logging. After any endpoint, bucket, region, or key change, re-test upload, download, preview, parsing, share snapshots, and deletion before migrating real files.
+
+## Logging and privacy, legal and contact
+
+"System → Logging & privacy" controls request-log verbosity (runtime setting keys `log_full_requests` / `log_errors_only` / `log_request_bodies`): whether full requests are logged, errors only, and whether request bodies are recorded. Principles:
+
+- Never log provider API keys, OAuth client secrets, payment signatures, JWTs, refresh tokens, complete user files, or full private prompts (the policy switches trade diagnostic depth against exactly this risk).
+- Prefer time, request ID, sanitized error codes, and aggregate metrics when triaging; the per-request diagnostic fields on the Usage page are already sanitized.
+- Set retention and access for logs; log exports can also carry user metadata.
+- Assign owners and approvals for data export, deletion, backup restore, and third-party transfers.
+
+"System → Legal & contact" maintains the terms of service, privacy policy, and operator contact. A public service needs a **real, actionable** contact and a privacy notice consistent with actual data flows (e.g. document the outbound path to MinerU/web-search providers if enabled).
 
 ## Announcements and content operations
 
-Announcements suit maintenance notices, feature tips, and service status updates. Before publishing, use a test account to check the display scope, dismissal behavior, mobile layout, and links; urgent announcements should be concise, avoiding embedded sensitive internal information or unverifiable external scripts.
+"System → Announcement" maintains one global notice shown when users open the app:
 
-Prompts, skills, image styles, and speech configurations directly affect user experience and cost. Validate any change intended for all users on a small set of accounts first, roll it out gradually, and keep a path to quickly disable or roll it back.
+| Field | Description | Limit |
+| --- | --- | --- |
+| Show announcement | Master switch; off clears everything | — |
+| Must read | Users wait 5 seconds before closing or opting out | — |
+| Allow "don't show again" | Off re-displays the notice on every visit | — |
+| Title | Plain text | ≤ 120 characters |
+| Image | Link or PNG/JPG upload | ≤ 256 KB |
+| Body | HTML supported; line breaks via `<br>` | Preview before publishing |
 
-## Backup, migration, and configuration export
+Test display scope, dismissal behavior, and mobile layout with a test account; urgent notices should stay terse and must not embed sensitive internal details or unverifiable external scripts. Prompts, skills, and image styles that touch all users deserve a small-canary rollout with a fast disable/rollback path.
 
-"Backup and migration" can generate data migration archives and export administrator configuration. The two differ in risk and purpose:
+## Moderation and voice
 
-| Type | Typically contains | Primary purpose | Sensitivity |
+**Moderation** ("AI & models → Moderation") screens each user prompt before generation (history excluded); the **switch itself is per model** on the model editor, choosing keyword or model mode:
+
+| Field | Description |
+| --- | --- |
+| Violation keywords | One per line; a hit blocks the prompt |
+| Moderation model | The model judging allow/block in "model" mode |
+| Violation categories | One per line (e.g. politics, sexual, violence) as model-mode guidance |
+| Block message | What the user sees when a prompt is blocked |
+
+![Moderation page](/img/admin-moderation.png)
+
+**Voice** ("Capabilities & integrations → Voice") configures composer speech-to-text with two provider choices:
+
+| Provider | Character | Credentials |
+| --- | --- | --- |
+| OpenAI-compatible (Whisper) | Record first, transcribe after | Base URL (default `https://api.openai.com`), model (e.g. whisper-1), API key |
+| Volcano Engine · Doubao (live streaming) | Words appear while speaking; WebSocket-based real-time ASR | App ID, Access Token, Resource ID (hourly billing version by default); optional punctuation / ITN / semantic smoothing |
+
+A blank API key / Access Token disables voice input; the user-group "Voice recognition" permission decides who may use it.
+
+![Voice page](/img/admin-audio-stt.png)
+
+## Backup and migration
+
+"System → Backup & Migration" offers four distinct facilities:
+
+| Type | Contents | Purpose | Sensitivity |
 | --- | --- | --- | --- |
-| Full data backup | Business data, vectors, and selected files/artifacts | Disaster recovery, migration, restore testing | Highly sensitive |
-| Administrator configuration export | Settings, channels, models, identity providers, user groups, payment/storage/email configuration | Replicating controlled environments, change archiving | Highly sensitive, often contains credentials |
+| Export backup | Whole-database ZIP plus optional uploads/artifacts and Qdrant vectors (async, with step progress) | Disaster recovery, cross-server and SQLite↔PostgreSQL migration, restore drills | High |
+| Import & restore | Upload an exported archive; **replaces all data in this deployment** | Landing a recovery/migration | Dangerous |
+| Vector check | Compares chunk rows against the vector store (expected / present / missing / empty / skipped) and rebuilds only the gaps | RAG integrity audit | Low |
+| Export / import config | ZIP of site settings, channels, models, skills, OAuth, image styles, groups, quotas, and assets | Cloning controlled environments, change archival | **Contains plaintext secrets** |
 
-A backup isn't finished once it's created successfully. At minimum, regularly verify a restore in an isolated environment and check administrator sign-in, normal conversations, attachments, knowledge bases, vectors, OAuth, email, and any needed tools. Before restoring, stop writes, keep a copy of the original data, and record the version and scope; don't use `docker compose down -v` as a routine restart command—it deletes named volumes.
+Know the full-backup ZIP's edges:
 
-The Personal edition should back up `DATA_DIR` as a whole. The Full edition must also protect the database, Redis, Qdrant, sandbox archive volumes, and `DATA_DIR`. For detailed commands and the restore order, see [Upgrades, Backups, and Recovery](../deployment/upgrade-backup.mdx).
+| Inside the archive | Outside the archive |
+| --- | --- |
+| All data tables (users, conversations, file records, credits, orders — the full 57 tables) | Environment variables (`JWT_SECRET`, `DATABASE_URL` — still required in the deployment after restore) |
+| Optionally uploads and artifacts | Redis cache (disposable by design) |
+| Full edition: Qdrant vectors | Running sandbox containers and un-archived live workspaces |
+| Step progress during export (prepare / read DB / write archive) | Host system and reverse-proxy configuration |
 
-## Usage, analytics, resources, and feedback
+:::danger Import replaces everything and logs you out
 
-"Analytics" helps you observe active users, requests, and cost trends; "Usage records" shows model calls and metering; "Content resources", "Files", and "Feedback" help you manage documents, images, workspace resources, uploaded objects, and user issues.
+Import demands typing a confirmation word verbatim. After restore all sessions are invalid — the current admin is signed out and must log in **with an account from the imported data**. Stop writes and keep a copy of current data beforehand; afterwards verify admin login, plain chat, attachments, knowledge-base state, vector retrieval, object storage, OAuth, and email. `docker compose down -v` deletes named volumes and is never a routine restart command.
 
-Recommended periodic operational rhythm:
+:::
 
-1. Check error rates, model failures, payment anomalies, and high-cost users/models daily or weekly.
-2. Review growth trends, storage usage, knowledge base task backlogs, and abnormally large files.
-3. Tie user feedback to actual conversations, models, channels, or feature configurations, but avoid copying private content into public tickets.
-4. Confirm backups and retention rules before cleaning up test files, abandoned templates, and expired redemption codes.
-5. For long tasks such as vector rebuilds, bulk deletions, and imports/exports, watch progress and results before starting the next round.
+:::note A config export is a password vault
 
-The operations pages provide observation and management capabilities, not host-level monitoring. Production instances should still monitor disk, memory, container restarts, outbound network, backup success, and certificate expiry; when a trend looks off, first restrict the risky capability or user scope, then investigate root causes.
+The config ZIP includes channel keys, OAuth secrets, SMTP, payment, and storage credentials in plaintext. Encrypt it, restrict access, and keep it out of version control and ticket attachments.
+
+:::
+
+Personal editions back up the whole `DATA_DIR`; Full editions must protect PostgreSQL, Redis, Qdrant, the sandbox archive volume, and `DATA_DIR` as one consistency unit. Commands and restore order: [Upgrades, backup, and restore](../deployment/upgrade-backup.mdx).
+
+## Operations rhythm and host monitoring
+
+"Data & operations" provides Content resources (all users' knowledge bases, projects, generated images), Files (deletion clears record, vectors, and disk object together), User feedback (optional screenshot plus conversation snapshot), and the Usage views. Build a cadence:
+
+1. Daily/weekly: error rate, model failures, payment anomalies, and high-cost users/models.
+2. Growth trends, storage occupancy, knowledge-base queue backlogs, and unusually large files.
+3. Tie feedback to the actual conversation, model, channel, or setting — without pasting private content into public tickets.
+4. Confirm backup and retention rules before cleaning test files, abandoned templates, or expired codes.
+5. For long jobs (vector rebuild, bulk delete, export/import), watch progress and results before starting the next round.
+
+The operations pages give observation and management — **they do not replace host monitoring**.
+
+### Monitoring metrics quick reference
+
+| Metric | Alert at | First response |
+| --- | --- | --- |
+| Disk headroom (`DATA_DIR`, pgdata, qdrantdata, redisdata) | < 15% free | Clean test files/expired archives; grow the volume |
+| Model error rate (Usage & billing, split by channel) | one channel > 5% consecutively | Disable that channel or switch the default model (policy edits are instant) |
+| Knowledge-base queue backlog / rising failed count | sustained growth | Check embedding/MinerU service and quota; pause new sign-ups if needed |
+| Sandbox 500 spikes | with image-pull logs | Restore the keepalive image; don't just raise timeouts |
+| Backup success rate | any failure | Until fixed, treat the instance as unbacked-up and freeze risky changes |
+| TLS certificate remaining | < 21 days | Renew — OAuth callbacks and webhooks fail together with it |
+| Container restart count | increasing | Check OOM kills and crash loops from config/`JWT_SECRET` errors |
+
+When a trend goes wrong, restrict the risky capability or user scope first (global tool disable, close sign-up, cut group quotas), then root-cause.
+
+### Boot-level parameters an operator keeps handy
+
+The environment variables day-to-day ops touches most (full list: [Advanced environment variables](../deployment/environment-advanced.mdx)):
+
+| Variable | Role | Default |
+| --- | --- | --- |
+| `JWT_SECRET` | Master key signing sessions; ≥ 32 characters, mandatory in deployed environments | none (random in dev) |
+| `ACCESS_TTL` / `REFRESH_TTL` | Access / refresh token lifetimes | 30m / 720h |
+| `MAX_UPLOAD_BYTES` | Hard request-body cap for uploads | 50 MiB |
+| `MAX_BACKUP_BYTES` | Cap on backup archive size | 20 GiB |
+| `AIVORY_HTTP_IDLE_TIMEOUT` | Idle-connection timeout; the 20-minute default deliberately exceeds Cloudflare's ~15-minute origin keep-alive reuse window so browsers never get "site can't be reached" on a closed connection | 20m |
+| `AIVORY_API_MAX_GEN_DURATION` | Wall-clock cap for one generation turn; browser disconnects do not abort server-side work | 90m |
+| `AIVORY_REQUEST_SIGNATURES_REQUIRED` | HMAC proof on authenticated writes; switch off for debugging only | true |
+
+:::note No official screenshots for this rail
+
+"System" pages and the "Data & operations" dashboards ship without bundled screenshots; they follow the standard form/list layout.
+
+:::

@@ -21,6 +21,10 @@ Aivory 是一个可以部署在自己基础设施中的 AI 工作空间。它把
 
 Aivory 的应用容器同时提供网页和 API。模型服务商的 API Key 保存在管理员后台的渠道配置中，不需要写入前端构建变量。
 
+整个工作空间由五类能力围着同一个核心运转：模型渠道接入、知识库检索、工具调用、沙盒执行与数据层。
+
+![Aivory 架构总览：Models、Knowledge、Tools、Sandbox 与 Data 环绕工作空间核心](/img/architecture-overview.png)
+
 向量后端可以按部署规模选择：
 
 | 部署 | 业务数据 | 向量 | 缓存与队列 |

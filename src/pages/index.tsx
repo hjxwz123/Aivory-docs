@@ -683,6 +683,10 @@ function WorkspaceControlPlane({isEnglish}: {isEnglish: boolean}): ReactNode {
 export default function Home(): ReactNode {
   const {i18n} = useDocusaurusContext()
   const isEnglish = i18n.currentLocale === 'en'
+  // Legacy fallback for engines without :has(). Modern browsers already apply
+  // the identical treatment pre-hydration via body:has(main.aivory-home-page)
+  // in custom.css, so this effect changes zero computed values there. Keep the
+  // mirrored rule sets in sync (see the contract comment in custom.css).
   useEffect(() => {
     const bodyClass = 'aivory-home-page'
     document.body.classList.add(bodyClass)

@@ -16,7 +16,7 @@ description: 使用反向代理或云负载均衡安全发布 Aivory，并正确
 | 本机反向代理 | 一台服务器上运行 Caddy、Nginx 或 Traefik | 应用只监听回环地址，代理占用 80/443 并终止 TLS |
 | 云负载均衡/CDN | 云平台已有 HTTPS 入口 | 负载均衡终止 TLS，后端仅向负载均衡或私网开放 |
 
-无论哪种方式，都不要通过代理暴露 PostgreSQL、Redis、Qdrant 或 `sandbox`。它们只应留在 Docker 内部网络或私有网络中。
+无论哪种方式，都不要通过代理暴露 PostgreSQL、Redis、Qdrant 或 `sandbox`。它们只应留在 Docker 内部网络或私有网络中。若使用 Cloudflare（橙色云代理或 Tunnel），SSE 流式响应、上传体积限制与回源 TLS 的额外注意事项见 [Cloudflare 代理](./cloudflare-proxy.mdx)。
 
 ## 同机反向代理
 

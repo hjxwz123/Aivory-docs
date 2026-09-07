@@ -21,6 +21,10 @@ These docs are organized by task: get an instance running first, then enable ric
 
 The Aivory application container serves both the web UI and the API. Model provider API keys are stored in channel configuration in the admin console; they never need to be baked into frontend build variables.
 
+Five capability surfaces revolve around one workspace core: model channels, knowledge retrieval, tool calling, sandbox execution, and the data layer.
+
+![Aivory architecture overview: Models, Knowledge, Tools, Sandbox, and Data orbiting the workspace core](/img/architecture-overview.png)
+
 The vector backend can be chosen to match your deployment scale:
 
 | Deployment | Business data | Vectors | Cache and queue |

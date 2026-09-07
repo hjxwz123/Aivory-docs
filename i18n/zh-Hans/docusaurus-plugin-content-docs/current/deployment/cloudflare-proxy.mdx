@@ -1,0 +1,226 @@
+---
+title: Cloudflare 代理
+sidebar_position: 4
+description: 通过 Cloudflare DNS 代理（橙色云）或 Cloudflare Tunnel 发布 Aivory，正确处理 SSE 流式响应、上传限制、真实客户端 IP 与登录接口加固。
+---
+
+# Cloudflare 代理
+
+官方应用容器在同一进程内同时提供网页和 `/api`（Go 服务监听 `:8787`，纯 HTTP，不自行终止 TLS）。因此接入 Cloudflare 时只需要考虑一件事：让浏览器到源站的整条链路既能流式传输，又能保住真实客户端 IP。本文覆盖两种接入方式，以及 Aivory 在 Cloudflare 边缘上的已知坑位。
+
+通用前置要求（`ALLOWED_ORIGINS` 精确 origin、不要把 PostgreSQL / Redis / Qdrant / 沙箱暴露到公网、OAuth 回调域名）见[域名、HTTPS 与 OAuth](./domain-tls-oauth.mdx)，此处不重复。
+
+## 两种方式怎么选
+
+| | A：DNS 代理（橙色云） | B：Cloudflare Tunnel（cloudflared） |
+| --- | --- | --- |
+| 架构 | 浏览器 → CF 边缘 → 源站公网 443 | 浏览器 → CF 边缘 → cloudflared 侧车 → Docker 内网 |
+| 源站公网端口 | 需要开放 80/443 给 Cloudflare IP 段 | 完全不需要，防火墙可全关 |
+| 源站 TLS | 需要本地 Caddy/Nginx + 回源证书 | 不需要，TLS 只存在于 CF↔cloudflared 的出向连接 |
+| 真实客户端 IP | 拿不到（见下文说明） | 能拿到，服务端按 IP 的限流可正常工作 |
+| 适用场景 | 有固定公网 IP 的 VPS、已有本机反代 | 无公网 IP、NAT/家庭服务器、不想开任何入站端口 |
+
+:::tip Aivory 推荐方式 B
+Aivory 只信任来自回环或 RFC-1918 私网直连对端的 `X-Forwarded-For`。方式 A 中源站直连对端是 Cloudflare 的公网出口 IP，应用会忽略转发头（防止伪造），登录、注册、验证码的按 IP 限流全部聚在少数 CF 出口上，容易误伤真实用户。方式 B 中 cloudflared 从 Docker 内网访问应用，属于可信私网对端，应用能还原真实客户端 IP。
+:::
+
+## 方式 A：DNS 代理（橙色云）
+
+### 1. 接入域名与 DNS 记录
+
+在 Cloudflare 添加站点后，创建 `A` 记录指向源站公网 IP（`chat` → VPS IP），开启代理（橙色云）。AAAA 记录同理可开 IPv6。
+
+### 2. SSL/TLS 模式必须为 Full (strict)
+
+在 SSL/TLS 设置中选择 **Full (strict)**，不要使用 Flexible：
+
+- Flexible 下 CF 边缘到源站走明文 HTTP。Aivory 要求部署在 `https://` origin 下工作（`ALLOWED_ORIGINS` 填的是 `https://chat.example.com`），一旦源站或上游任何环节再叠加"强制 HTTPS 跳转"，浏览器就会陷入重定向循环。
+- Flexible 还会让浏览器 Cookie 与源站看到的协议不一致，登录链路难以排障。
+
+**回源 TLS 要求**：Aivory 容器只提供明文 HTTP，Full (strict) 又要求源站呈现受信任证书，所以方式 A 必须在本机放一个持有证书的 TLS 终结器（与[域名、HTTPS 与 OAuth](./domain-tls-oauth.mdx) 中的同机反代做法一致）：
+
+- 证书二选一：**Cloudflare Origin Certificate**（在 CF 控制台 SSL/TLS → Origin Server 签发，最长 15 年有效，只有 Cloudflare 信任，仅适合回源链路）或 Let's Encrypt（任何客户端都可信）。
+- 把所用 Compose 文件中 `app.ports` 改为只监听本机：
+
+```yaml
+ports:
+  - "127.0.0.1:8787:8787"
+```
+
+- Caddy 示例（证书路径替换为实际值）：
+
+```caddyfile
+chat.example.com {
+    tls /etc/caddy/certs/chat.example.com.pem /etc/caddy/certs/chat.example.com.key
+    reverse_proxy 127.0.0.1:8787
+}
+```
+
+:::warning 在 Cloudflare 前面再加 Nginx 时的 keep-alive
+Cloudflare 边缘会复用回源连接约 15 分钟。Aivory 应用自身的 `IdleTimeout` 默认 20 分钟（`AIVORY_HTTP_IDLE_TIMEOUT`），就是为了大于这个复用窗口。但如果 TLS 终结器是 Nginx，其默认 `keepalive_timeout` 只有约 75 秒，Nginx 先关连接而 CF 还在复用，用户会看到间歇性的 502 / "无法访问此网站"，刷新即恢复。请在 Nginx 站点配置中显式加大：
+
+```nginx
+keepalive_timeout 600s 2000;
+```
+:::
+
+### 3. Always Use HTTPS 与防火墙
+
+- SSL/TLS → Edge Certificates 开启 **Always Use HTTPS**。
+- Speed → Optimization 中 **HTTP/3 (with QUIC)** 可开启；它只作用于浏览器与 CF 边缘之间，与源站实现无关，Aivory 无需额外配置。
+- 源站防火墙只对 Cloudflare 的 IP 段放行 80/443，其余入站全部关闭：
+
+```bash
+curl -s https://api.cloudflare.com/client/v4/ips | jq -r '.result[].cidr'
+```
+
+:::danger 先换 IP 再上代理
+如果源站 IP 曾经直接对外服务、出现在历史 DNS 或证书透明度日志中，攻击者绕过 Cloudflare 直连即可打穿源站。接入前先向 VPS 厂商申请更换公网 IP，再添加橙色云记录。
+:::
+
+## 方式 B：Cloudflare Tunnel
+
+Tunnel 由源站主动拨出到 CF 边缘的持久连接组成，源站不需要任何入站端口、证书，也不需要公网 IPv4（NAS/家庭宽带同样可用）。
+
+### Token 方式（推荐，与官方 Compose 结构一致）
+
+1. 在 Cloudflare Zero Trust 控制台 → Networks → Tunnels 创建隧道，连接器类型选 Docker，复制 token。
+2. 在 `deploy/.env` 中加入 `CLOUDFLARE_TUNNEL_TOKEN=<token>`。
+3. 把 `tunnel` 服务追加到 `docker-compose.prod.yml` 的 `services:`（个人版同理追加到 `docker-compose.personal.yml`）：
+
+```yaml
+  # Cloudflare Tunnel sidecar — dials out to the CF edge, so the host needs
+  # NO inbound ports. Reaches `app` over the private compose network.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
+    networks: [internal]
+```
+
+4. 在隧道配置里添加 Public Hostname：`chat.example.com` → `http://app:8787`（使用 Compose 服务名与容器端口，不是主机端口）。
+5. 既然入口只走隧道，删除或收窄 `app.ports` 的 `"80:8787"` 公网映射：
+
+```yaml
+  app:
+    ports: []
+```
+
+6. 重新启动：
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### 配置文件方式（credentials JSON + ingress yaml）
+
+若偏好本地管理 ingress（多域名、错误页重定向等）：
+
+```bash
+cloudflared tunnel login                                  # 浏览器授权，生成 cert.pem
+cloudflared tunnel create aivory                          # 生成 <TUNNEL_ID>.json 凭证
+cloudflared tunnel route dns aivory chat.example.com      # 自动创建指向隧道的 DNS 记录
+```
+
+`./cloudflared/config.yml`：
+
+```yaml
+tunnel: <TUNNEL_ID>
+credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: chat.example.com
+    service: http://app:8787
+  - service: http_status:404
+```
+
+对应 compose 片段（把 `TUNNEL_TOKEN` 版换成）：
+
+```yaml
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on:
+      - app
+    networks: [internal]
+```
+
+### 为什么方式 B 能保住真实客户端 IP
+
+cloudflared 从 Docker 内网（172.x 私网段）访问应用，并携带 `X-Forwarded-For: <真实客户端>`。Aivory 的 `clientIP()` 逻辑：仅当直连对端是回环/私网时才信任 `X-Forwarded-For`，且取**最右侧**的非私网条目（防止客户端伪造头绕过限流）。因此方式 B 下每 IP 限流按真实用户计数，后台"登录历史"和注册 IP 日上限同样准确。
+
+## 流式响应（SSE）配置要点
+
+Aivory 的对话链路大量使用长连接，这是 Cloudflare 部署最容易踩坑的部分：
+
+| 用途 | 路径 | 协议 |
+| --- | --- | --- |
+| 发送消息 / 重新生成 | `POST /api/conversations/:id/messages`、`POST /api/conversations/:id/regenerate` | SSE |
+| 断线续传 / 事件重放 | `GET /api/conversations/:id/messages/:msgId/stream` | SSE（`Last-Event-ID`） |
+| 停止生成 | `POST /api/conversations/:id/stop` | JSON |
+| 多标签页实时同步 | `GET /api/events` | SSE |
+| 实时语音转写 | `GET /api/audio/stream` | WebSocket |
+
+源站已经为流式做了三件事：聊天消息流（发送、重新生成、断线重放）的 SSE 响应头携带 `cache-control: no-cache, no-transform` 和 `x-accel-buffering: no`；每次写入立即 Flush；消息流每 15 秒发送 `: ping` 注释帧，而多标签页同步流 `GET /api/events` 的心跳为 25 秒（`AIVORY_API_EVENTS_HEARTBEAT`），其响应头只带 `no-cache` 与 `x-accel-buffering: no`（不含 `no-transform`）。据此在 Cloudflare 侧要做的是：
+
+1. **Cache Rules 绕过 API**：新建 Cache Rule，条件 `Path starts with /api` → 行为 **Bypass cache**。`POST` 默认不会被缓存，但 `GET /api/events`、`GET .../stream` 是 GET 型长连接，显式绕过最稳妥。`no-cache, no-transform` 也会指示边缘不压缩、不改写事件流。
+2. **100 秒回源超时**：CF 边缘等待源站响应/后续数据包的上限约 100 秒。对话 SSE 在首个事件即刻有数据、之后每 15 秒有 ping，不会触发；真正会触发 **524** 的是"超过 100 秒完全不发响应头"的非流式请求。不要把这类请求改成同步长任务——Aivory 的生成与连接解耦：浏览器刷新后通过 `GET .../messages/:msgId/stream` 重放缓冲事件并续接直播，生成在后台最多继续 90 分钟（`AIVORY_API_MAX_GEN_DURATION`）。
+3. **WebSocket 保持开启**：Network 设置里的 WebSocket 开关默认开启（所有套餐），实时语音 `/api/audio/stream` 依赖它。方式 B 的 Tunnel 原生支持 WebSocket，无需额外配置。
+4. **不要改写 `/api` 路径**：请求签名（`AIVORY_REQUEST_SIGNATURES_REQUIRED`，默认开启）绑定的是剥掉 `/api` 前缀后的最终路径与查询串。任何 Cloudflare Workers、Payload 改写规则或 Transform Rules 如果增删 `/api` 前缀，请求会在源站直接 403。本文两种标准接法都不需要路径改写，保持默认即可。
+
+## 上传限制与 413
+
+Cloudflare 边缘对请求体有套餐上限，**超限时边缘直接返回 413，请求根本不到源站**，且该上限无法在橙色云下配置：
+
+| 套餐 | 最大请求体 |
+| --- | --- |
+| Free / Pro | 100 MB |
+| Business | 200 MB |
+| Enterprise | 默认 500 MB，可在 zone 的 Network 页自助调至 5 GB |
+
+Aivory 侧的相关上限：
+
+- 文件上传绝对天花板 `MAX_UPLOAD_BYTES` 默认 **50 MiB**（知识库文档、聊天附件走 `POST /api/files`），低于 Free 套餐的 100 MB，默认配置下知识库上传不会撞 CF 限制。
+- 管理员可在"存储与上传"里调低图片上限（`max_image_upload_mb`，默认 5 MB），但任何单文件仍受上面的边缘套餐限制约束。
+- 真正会撞墙的是**备份导入**：管理后台"备份与迁移"上传整包 ZIP，服务端允许到 `MAX_BACKUP_BYTES`（默认 20 GiB）。
+
+:::note 大备份的绕行方案
+Tunnel 同样经过 CF 边缘，**不能**绕过 100 MB 限制。大文件导入的可靠做法：
+1. 把该主机名临时切为 **DNS only**（灰云），直连源站 443 完成导入，再切回橙色云；
+2. 或者在管理操作时于本机 `hosts` 指向源站 IP、经本地 TLS 终结器直接访问；
+3. 或升级到 Enterprise 后自助调大 Maximum Upload Size。
+:::
+
+## 安全加固
+
+- **WAF Managed Rules**：Security → WAF → Managed Rulesets 启用 Cloudflare 托管规则（Free 套餐即含基础版），拦截常见 Web 攻击，无需调优即可上线。
+- **Rate Limiting Rules 保护登录**：Security → WAF → Rate limiting rules 新建规则，例如 `Path equals /api/auth/login or Path starts with /api/auth` 且方法为 POST，每 IP 每 60 秒 ≤ 30 次。方式 A 下这尤其重要——源站看不到真实 IP，边缘限流是唯一按访客计数的防线；方式 B 下它作为源站限流（登录 10 次/60 秒）之外的额外一层。速率规则现在所有套餐均可创建（Free 含 1 条，配额随套餐增长）；注意 Free/Pro/Business 上若动作选 Challenge 类（含 Managed Challenge），计数窗口固定为 10 秒、不可自定义，示例的 60 秒窗口需要配 Block 动作。
+- **验证码**：应用内置拼图验证码，管理员在"用户与访问 → 注册策略"中开启 `login_captcha_required` / `register_captcha_required`。**Aivory 尚未原生集成 Cloudflare Turnstile**，不要在源站等待一个不存在的开关。想要 CF 侧挑战，用 WAF 自定义规则对登录页动作设为 **Managed Challenge**；注意只对浏览器导航目标（如 `GET /`）启用——对 `/api/auth/login` 这类 XHR 接口做质询会返回 HTML 拦截页，前端只会得到一个解析失败的请求。
+- **隐藏源站**：防火墙只放行 CF IP 段（方式 A）或干脆零入站端口（方式 B）。方式 B 可在 Cloudflare Access 中再对 `/admin` 前缀叠加组织级登录，形成第二道门。
+
+## 故障排查表
+
+| 症状 | 在 Aivory 上的根因 | 处置 |
+| --- | --- | --- |
+| 521 Origin Down | `app` 容器停了；方式 A 下本机 Caddy/Nginx 挂了；方式 B 下 cloudflared 未运行 | `docker compose ps` 查看容器状态（镜像自带 HEALTHCHECK，会显示 healthy/unhealthy）；再从容器内部探测 API：`docker compose exec app wget -qO- http://127.0.0.1:8787/api/health`（方式 B 删除了主机端口，不要从宿主机 curl 8787） |
+| 522 Origin Connect Timeout | 防火墙没有对 CF IP 段放行 443；或隧道 service 地址写错（应为 `http://app:8787`） | 放行 CF 段；确认 `tunnel` 与 `app` 在同一网络 |
+| 523 Origin Unreachable | 橙色云记录的 A 指向了错误/已废弃 IP；Tunnel 的 hostname 无对应 ingress 规则 | 修正 DNS 记录；检查 ingress 兜底 `http_status:404` 之上的条目 |
+| 524 Origin Response Timeout | 非流式请求 100 秒内无响应（同步重任务、源站阻塞） | 对话页刷新走 `GET .../messages/:msgId/stream` 续传即可；排查源站负载；长期任务改走异步路径 |
+| 525 / 526 SSL 握手失败 / 证书无效 | 方式 A 设了 Full (strict) 但源站无 TLS 或证书域名不匹配、已过期 | 安装 Origin Certificate / LE 证书；或改走方式 B 免证书 |
+| 间歇性"无法访问此网站"，刷新恢复 | Nginx `keepalive_timeout` 短于 CF 约 15 分钟的连接复用窗口 | 加大 Nginx keepalive；直连源站时应用 20 分钟 `IdleTimeout` 已覆盖 |
+| 413 Request Entity Too Large | 请求体超过套餐边缘上限，或超过 `MAX_UPLOAD_BYTES` | 见上文"上传限制与 413" |
+| 403 cross-site request blocked | `ALLOWED_ORIGINS` 与浏览器实际 origin 不一致 | 填精确 `https://域名`，无路径无尾斜杠；见[域名、HTTPS 与 OAuth](./domain-tls-oauth.mdx) |
+| 403 请求签名相关错误 | 代理改写/截断了 `/api` 路径；客户端时钟偏差超出 ±(300s/60s) 重放窗口 | 移除 Transform Rules / Workers 改写；校时 |
+
+## 相关文档
+
+- [域名、HTTPS 与 OAuth](./domain-tls-oauth.mdx) — 反向代理基线、`ALLOWED_ORIGINS` 与多域名 OAuth
+- [完整版部署](../getting-started/full.mdx) — 完整版 Compose 栈的启动步骤
+- [环境变量总览](./environment.mdx) — `AIVORY_HTTP_IDLE_TIMEOUT`、`MAX_UPLOAD_BYTES` 等调优项

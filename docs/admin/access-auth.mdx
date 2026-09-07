@@ -1,82 +1,195 @@
 ---
 title: Users, Sign-in, and Workspaces
 sidebar_position: 5
-description: Configure sign-up, passwords, OAuth, two-factor authentication, user lifecycle, and workspace collaboration permissions.
+description: Configure the registration policy, enterprise sign-in modes, OAuth/OIDC providers, two-factor and session security, user lifecycle, and workspace collaboration.
 ---
 
 # Users, Sign-in, and Workspaces
 
-Access control determines who can enter the instance, how they sign in, which workspaces and resources they can see, and how administrators handle accounts when things go wrong. Establish a recoverable administrator sign-in path first, then tighten sign-up and sign-in policies; never close your only available entry point before verifying OAuth or the administrator password.
+:::info Applies to
+
+Aivory v2.4.6 and later. Relevant screens: "Users & access → Users / Registration policy / Login methods / Workspaces". Proxy and HTTPS prerequisites: [Domain, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx). Screenshots show the Chinese admin UI; English labels are cited inline.
+
+:::
+
+Access control decides who can enter the instance, by which means, what workspaces and resources they can see, and how admins handle accounts during incidents. **Ordering principle**: keep at least one recoverable admin login path proven before tightening registration or sign-in; never close the only entrance before validating OAuth or the admin password.
 
 ## User lifecycle
 
-The "Users" page supports viewing, creating, and maintaining accounts, and lets you drill into a user's conversations, knowledge bases, memories, sign-in history, and usage. Follow the principle of least impact for administrative actions:
+"Users & access → Users" supports search, creation, and maintenance, with per-user drill-downs into conversations, library, memories, login history, and usage:
 
-- **Create/modify accounts**: Confirm email ownership, display name, role, and initial password. Never send plaintext passwords through chat, screenshots, or tickets.
-- **Promote to administrator**: Grant the role only to trusted personnel. Administrators can read operational data, modify channels, export configuration, and affect user access.
-- **Suspend or ban**: Appropriate for security incidents, abuse, or employee departures. First record the reason, time, and responsible person, and verify that the user's existing sessions are correctly terminated.
-- **Reset passwords or disable 2FA**: Verify identity first, then notify the account owner after the action and record audit information.
-- **Delete users**: A data-affecting action. First confirm legal retention requirements, workspace ownership, shared materials, and the backup strategy; do not treat deletion as "temporary disabling".
+| Action | Notes |
+| --- | --- |
+| Create/edit account | Confirm email ownership, display name, role, and initial password; never send plaintext passwords over chat, screenshots, or tickets |
+| Promote to admin | Trusted people only: admins can read operational data, edit channels, and export configs containing plaintext credentials |
+| Suspend or ban | For security incidents, abuse, or offboarding; record reason, time, and owner first — banning terminates the user's active sessions |
+| Reset password / disable 2FA | Verify identity first, then notify the account owner and keep an audit note |
+| Delete user | Data-destructive: confirm legal retention, workspace ownership, shared material, and backups; deletion ≠ temporary disable |
 
-Regularly review sign-in history, unusual regions/IPs, failed sign-ins, and high-frequency sign-ups. Don't rely on a single metric to judge an attack; evaluate email, behavior, usage, and user feedback together.
+:::note Async cleanup on account deletion
 
-## Sign-up and password sign-in
+Deleting a user first registers the object paths for cleanup, then runs the destructive SQL; physical file sweeping happens at startup. For "is the file really gone?" questions, trust the "Data & operations → Files" view.
 
-The "Sign-up policy" section controls whether sign-up is open, per-IP sign-up limits, sign-up/sign-in captcha, email verification, allowed email domains, password sign-in, and how the entry point is presented.
+:::
 
-Recommended baseline for public deployments:
+![Users list](/img/admin-users.png)
 
-1. Initially disable open sign-up or enforce a strict email domain allowlist.
-2. When open sign-up is required, enable captcha, email verification, and reasonable per-IP limits.
-3. Keep at least one verified password or identity-provider sign-in path for administrators.
-4. Before a real release, run through sign-up, verification, sign-in, sign-out, token refresh, password reset, and the behavior after being disabled with a non-administrator test account.
+## Registration policy
 
-Password sign-in can coexist with OAuth. If you disable password sign-in, switch to an identity-provider selector, or enable auto-redirect, the system requires at least one enabled sign-in identity provider; auto-redirect also requires selecting a default provider. Test in a different browser or an incognito window before closing the original entry point so you don't lock every administrator out.
+"Users & access → Registration policy" concentrates the entry switches (the page checks the current admin's own identity-source bindings before saving, to avoid locking you out):
 
-## OAuth, OIDC, and account linking
+| Field | Description | Default |
+| --- | --- | --- |
+| Allow email and password registration | When off, direct sign-up is refused; third-party logins have their own provisioning switch | on |
+| Require registration captcha | New sign-ups must solve a **slider-puzzle** captcha | off |
+| Require sign-in captcha | Every password sign-in starts with the slider puzzle — slows credential stuffing | off |
+| Daily registrations per IP | 0 = unlimited | 0 |
+| Require email verification | New users must enter a 6-digit code to sign in (code valid 10 minutes, burned after 5 wrong tries; needs SMTP) | off |
+| Allowed email domains | Comma-separated; only listed domains may register; blank allows all | empty |
 
-The "Sign-in identity providers" section supports GitHub, Google, Apple, standard OAuth2, and OIDC. Each identity provider should use its own controlled Client ID, Client Secret, and exact callback URL.
+### Enterprise sign-in policy (same page)
 
-Steps to securely roll out an identity provider:
+| Field | Description | Default |
+| --- | --- | --- |
+| Allow site password sign-in | When off, only third-party identity sources remain | on |
+| Unauthenticated entry | Show the normal login page / provider picker only / auto-redirect to a provider | login page |
+| Default provider | In auto-redirect mode, unauthenticated users land straight on this provider's consent screen | — |
+| Allow third-party login to create accounts | When off, only already-linked accounts may use third-party sign-in | on |
+| Initial password for third-party accounts | Required / optional / never | optional |
 
-1. Complete public HTTPS domain and reverse proxy configuration first.
-2. Create the identity provider in the admin console and copy the callback URL shown there into the provider's console.
-3. Start a sign-in with a test account and verify new-user creation, sign-in for existing accounts, and explicit account linking.
-4. Check that email matching, automatic account creation, the initial password policy, and user group assignment behave as expected.
-5. Only then expose the entry point to real users or enable auto-redirect.
+:::danger Before switching off password sign-in
 
-Before enabling automatic account creation, evaluate whether your organization allows any user who satisfies the identity provider's conditions to enter. If you use multiple public domains, configure a fixed OAuth callback domain and allowed return URLs; see [Domains, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx).
+"Provider picker only" and "auto-redirect" both require at least one **enabled and fully configured** identity source, and you cannot require third-party accounts to "always set a site password" while password sign-in is off (the page rejects that combination). Test the new flow in another browser or an incognito window with a test account before closing the old entrance.
 
-When third-party sign-in reports `token_exchange_failed`, a healthy account link does not mean the server's outbound network is healthy. Check the HTTPS path from the server to the provider's token endpoint, DNS, proxies, firewalls, callback URLs, and system time, rather than repeatedly unlinking user accounts.
+:::
+
+Recommended public-deployment baseline: initially keep open sign-up off or tighten with an email-domain allowlist → when opening, enable captcha + email verification + a sensible per-IP cap → reserve at least one verified login path for admins → before release, run a non-admin test account through sign-up, verification, sign-in, sign-out, refresh, password reset, and the banned-state behavior.
+
+![Registration policy page](/img/admin-registration-policy.png)
+
+### Switch combinations by deployment type
+
+| Scenario | Suggested combination |
+| --- | --- |
+| Personal instance | Open sign-up off; email verification and both captchas off; when someone else needs access, create the account manually under Users and hand over the initial password via a secure channel |
+| Invite-only beta | Keep open sign-up off; admins mint accounts by hand in batches; SMTP can wait until this phase ends |
+| Public community | Open sign-up + registration and sign-in captchas + email verification (once SMTP works) + a sane per-IP daily cap; tighten the default group's quotas and have a ban/appeal process ready |
+| Corporate intranet | Disable email/password registration and site password sign-in; keep only generic OIDC / OAuth2 sources; set the unauthenticated entry to auto-redirect with a default provider; decide explicitly whether third-party logins may provision accounts |
+
+After changing any combination, run a fresh account through sign-up → sign-in → sign-out in an incognito window before rolling it out to everyone.
+
+### Captcha and email mechanics
+
+- **Slider-puzzle captcha**: the client fetches a puzzle from `GET /api/public/captcha`; solving it exchanges for a single-use pass token (`POST /api/public/captcha/verify`). Challenges expire in ~2 minutes; pass tokens live ~10 minutes and are one-time. A "I solved it but it still fails" loop is usually a cached challenge (proxy/browser) — retry in incognito to confirm.
+- **Email verification/reset**: 6-digit codes, 10-minute validity, burned after 5 wrong tries; both flows require SMTP.
+- **Login audit**: login history is an immutable record of **successful** logins (device, IP, time), visible on the user detail page. Brute-force attempts won't appear there — check app logs and rate-limit behavior instead.
+
+## OAuth login methods
+
+"Users & access → Login methods" supports five kinds: **Google, GitHub, Apple, Generic OAuth 2.0, and Generic OIDC**. Safe steps to ship one:
+
+1. Finish the public HTTPS domain and reverse proxy first (the callback must be reachable on the real browser-facing host).
+2. Create the app on the provider side:
+   - Google: Cloud Console → Credentials → OAuth client (authorization code + PKCE).
+   - GitHub: Settings → Developer settings → OAuth Apps.
+   - Apple: create a Services ID and an AuthKey (`.p8`); the client secret is a JWT Aivory signs on the fly from the stored `.p8` key.
+   - Generic OAuth2 / OIDC: obtain authorize, token, and (optionally) userinfo endpoints from your IdP.
+3. In "Login methods" click "Add login method" and **copy the displayed "Redirect URI" verbatim** into the provider console — it never changes after saving. It looks like:
+
+```text
+https://aivory.example.com/api/auth/oauth/<provider-id>/callback
+```
+
+4. Enter the Client ID / Client Secret and enable it; with a test account verify new-user creation, existing-account sign-in, and explicit identity linking/unlinking in personal settings.
+5. Only after email matching, auto-provisioning, initial-password policy, and group assignment behave as intended, open the entry to real users or set the auto-redirect.
+
+Fields (the form shows only what the selected kind needs):
+
+| Field | Applies to | Description |
+| --- | --- | --- |
+| Kind / Button text / Icon | All | Button text and icon render on the login page |
+| Client ID / Client Secret | All | Apple uploads the `.p8` private key here; blank on edit keeps the saved secret |
+| Team ID / Key ID | Apple | Needed to sign the client-secret JWT |
+| Issuer URL / JWKS URL | OIDC | Validate the ID token's issuer and signing keys |
+| Authorize / Token / Userinfo URL | Generic OAuth2 | Per the provider's documentation |
+| Scopes | Generic | OAuth2 per docs; OIDC defaults to `openid email profile` when blank |
+| Enabled (show on login page) | All | — |
+
+:::note Multi-domain and `token_exchange_failed`
+
+With several public domains, pin the canonical callback host via `OAUTH_CALLBACK_BASE_URL` and allow returning origins via `OAUTH_RETURN_ORIGINS` (the cross-domain one-time handoff token lasts 60 seconds) — see [Domain, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx). When third-party login fails with `token_exchange_failed`, a healthy account binding does **not** mean the server's egress works: check the server→token-endpoint HTTPS path, DNS, proxy, firewall, and system clock (token exchange times out around 40 s; the OAuth state lives 10 min). Don't unbind user accounts repeatedly.
+
+:::
+
+![Login methods page (empty state)](/img/admin-login-methods.png)
 
 ## Two-factor authentication and session security
 
-Users can enable two-factor authentication, and administrators can help disable it after identity verification. Two-factor authentication is not a substitute for:
+Users enable TOTP 2FA in their personal settings (a setup is burned after 5 wrong codes); admins can disable it after identity verification. 2FA never substitutes for: a strong unique admin password, protecting `JWT_SECRET` / database passwords / OAuth secrets, correct HTTPS and cookie configuration, and prompt banning and session revocation for stolen devices or departed staff.
 
-- strong, unique administrator passwords;
-- protecting `JWT_SECRET`, database passwords, and OAuth Client Secrets;
-- HTTPS, correct cookie/reverse-proxy configuration, and timely updates;
-- prompt banning and session revocation for stolen devices or departed staff.
+Session mechanics an admin should know:
 
-Sessions use short-lived access tokens and long-lived refresh tokens. Shortening the access-token lifetime reduces the window in which a leaked token is useful; the refresh-token lifetime should balance user convenience against device risk. A complete multi-device policy should combine server-side session records, device binding, refresh-token rotation, anomalous refresh detection, session revocation after password changes, and administrator bans, rather than just shortening one TTL.
+| Mechanism | Facts |
+| --- | --- |
+| Token shapes | Short-lived **access token** (default 30 min, `ACCESS_TTL`) + long-lived **refresh token** (default 30 days, `REFRESH_TTL`, rotating, each stored and individually revocable), delivered via HttpOnly cookies or a Bearer header |
+| Versioned revocation | Every access token carries a token version and a session family ID; a password change, admin ban, or user session revoke takes effect on the **next request**, across replicas |
+| Session management | Users see active sessions (device / IP / location / last seen) in personal settings and can revoke any of them |
+| Request proof | Authenticated write APIs require one-time HMAC-signed requests by default (replay window: timestamps may lead ≤ 300 s or lag ≤ 60 s). A badly skewed client clock surfaces as "request signature expired"; `AIVORY_REQUEST_SIGNATURES_REQUIRED=false` disables it (weakens to bearer/cookie auth; debugging only) |
+| CSRF origins | Cookie-bearing cross-site requests must present an Origin matching `ALLOWED_ORIGINS` or they 403 with "cross-site request blocked" — the most common "login works but every write fails" cause on domain deployments |
 
-## User groups, plans, and workspaces
+![Login page: email/password plus third-party buttons](/img/auth-login-page.png)
 
-User groups map a set of accounts to model visibility, quotas, credits, plans, or operational rules. Define a small number of clear groups—administrators, internal staff, trial, paid, and restricted users—instead of exception combinations that are hard to track.
+### Login and access troubleshooting quick lookup
 
-Workspaces are for team collaboration. When creating workspaces and managing members, confirm:
+| Symptom | Check first |
+| --- | --- |
+| Signed in, but every write 403s with "cross-site request blocked" | `ALLOWED_ORIGINS` exactly equals the browser Origin (no path, no trailing slash, comma-separated) |
+| "request signature expired" | Client/server clock skew (window: ≤300 s lead, ≤60 s lag); a proxy rewriting the `/api` prefix or query string |
+| A just-banned / just-password-changed account still works | It should die on the next request; confirm requests hit the same database, not a stale replica |
+| OAuth bounces back but still signed out | Multi-domain: `OAUTH_CALLBACK_BASE_URL` / `OAUTH_RETURN_ORIGINS` missing, so the 60-second one-time handoff is refused |
+| Verification email never arrives but SMTP test sends fine | Missing SPF/DKIM on the sender domain (spam), or the email-domain allowlist refused it before signup |
+| Re-login needed after every restart (dev) | No `JWT_SECRET` set — the process generates an ephemeral one |
+| User "can't log in" though login history shows successes | They're hitting the email-verification requirement, or the account status is suspended |
 
-- who the workspace owner is and how ownership transfers after a member leaves or is deleted.
-- whether members can create, edit, and delete conversations, projects, knowledge bases, and files.
-- whether invite links have a reasonable validity period, allow external email addresses, and should be revoked after use.
-- keeping data for different customers, legal entities, or confidentiality levels in separate workspaces; don't rely on verbal agreements for isolation.
+TTLs live in the environment: `ACCESS_TTL` (default 30m) and `REFRESH_TTL` (default 720h). Shorter access tokens shrink the leak window; refresh-token length is the convenience-versus-device-risk trade.
 
-After changing roles, user groups, or workspace membership, verify with a low-privilege test account that access is actually tightened or opened. Don't judge permissions from the administrator view alone.
+## User groups and workspaces
+
+User groups carry a cohort's default visible models, allowances, credits, and permissions — see [Plans, credits, and payments](./billing.mdx). Define a few clear groups (admin, staff, trial, paid, restricted) rather than untrackable one-off combinations.
+
+Workspaces are team collaboration spaces (created user-side; admins inspect and delete under "Users & access → Workspaces"):
+
+- Name owners and the transfer rule: who takes over when the creator leaves.
+- Member capabilities are granted item by item (conversations, projects, knowledge bases, files, and more at fine granularity); workspace policies can further narrow allowed models, tools, MCP servers and set a member monthly credit cap — **narrowing only**.
+- Give invite links sane expiry and use limits and revoke after use; legacy invite tokens are not an auth bypass.
+- Put distinct customers, legal entities, or confidentiality tiers in separate workspaces; don't rely on verbal isolation.
+- Audit: workspace operations log entries that **outlive workspace deletion**, and metadata never contains tokens, keys, or request bodies.
+
+After changing roles, groups, or workspace membership, verify with a low-privilege test account that access actually tightened or opened — never judge permissions from the admin view alone.
+
+### Permission planes at a glance
+
+| Layer | Controls | Where |
+| --- | --- | --- |
+| Account role | user / admin | User detail page |
+| User-group permissions | Feature toggles (sharing, knowledge bases, upload, voice, memory, drawing…) and resource catalogs (prompts/skills/tools/MCP: all/selected/none) | User Groups → Permissions |
+| Model permissions | Which groups may use a model, with cost/call limits | Model Permissions block + group Quota tab |
+| Workspace policy | Allowed models/tools/MCP whitelists, feature flags, member monthly credit cap (narrowing only) | Workspace owner settings |
+| Member capability rows | Fine-grained per-member can\_\* switches | Workspace member management |
+| Global tool disable | One switch removes a tool from every model | Capabilities & integrations → Tools |
+
+### Incident response order
+
+1. **Scope the impact**: login history, anomalous usage (per-user view in "Usage & billing"), and the shared resources this user touches.
+2. **Stop the bleeding before forensics**: banning the account or downgrading its group instantly terminates sessions and closes entrances — no data deletion needed.
+3. **Revoke credentials**: on suspected compromise, rotate the involved admin password and revoke sessions (personal Settings → Sessions); an admin ban kills all of that account's refresh tokens too.
+4. **Preserve evidence**: record order IDs, event IDs, and timelines before exports; deleting a user anonymizes usage rows rather than erasing them.
+5. **Close the loop**: translate the attack path into concrete switches (registration policy, captcha, IP caps) and write them into the change log.
 
 ## Security operations checklist
 
-- Keep at least two independent, recoverable administrator sign-in paths, and store the recovery procedure safely.
-- Rotate OAuth, SMTP, model channel, and storage keys regularly; after rotation, run real sign-in and send tests.
-- Before enabling open sign-up or automatic account creation, define the allowed user scope, email domains, and abuse-handling mechanism.
-- Include users, workspaces, sign-in history, and sensitive administrator actions in periodic reviews.
-- Before deleting, banning, exporting, or restoring data, record the operator, reason, scope, and rollback plan.
+- Keep at least two independent, recoverable admin login paths and document the recovery procedure.
+- Rotate OAuth, SMTP, model-channel, and storage credentials regularly; run real login and send tests after each rotation.
+- Before enabling sign-up or auto-provisioning, define the allowed user scope, email domains, and abuse-handling process.
+- Review login history, anomalous geos/IPs, failed-login spikes, and registration bursts on a schedule; judge attacks on combined signals, not one metric.
+- Before any delete, ban, export, or restore, record operator, reason, scope, and rollback plan.

@@ -1,0 +1,128 @@
+---
+title: Users and authentication tables
+sidebar_position: 2
+description: Column-by-column reference for users, refresh_tokens, login_histories, oauth_providers, and oauth_identities, covering 2FA, session families, and social login.
+---
+
+# Users and authentication tables
+
+Five identity-domain tables (type notation defined in the [overview conventions](./overview.mdx); **※ ALTER-added** = exists only via `store.Migrate`'s ALTER loop, not in `schema.sql`'s CREATE TABLE).
+
+## `users` — master user table
+
+Single source of truth for login, role, membership tier, credit balance, and 2FA — and the FK hub of the whole schema. 22 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | primary key, `u_` + 12 hex chars |
+| `email` | TEXT | no | — | login email, unique database-wide |
+| `password_hash` | TEXT | no | — | bcrypt hash; OAuth-first-login accounts get a random password (paired with `password_set=0` to force a new one) |
+| `name` | TEXT | no | `''` | display name |
+| `role` | TEXT | no | `'user'` | `user` / `admin` (validated at `store/users.go:326`) |
+| `status` | TEXT | no | `'active'` | `active` normal / `pending` email unverified (`auth_handlers.go:364`) / `banned` by an admin (`admin_handlers.go:830`) / `deleting` async purge in flight (`users.go:1396`) |
+| `token_ver` | INTEGER | no | `0` | token version: bumped on password change / ban / logout-everywhere; middleware compares it to the `tv` claim of every access token → instant cross-replica revocation |
+| `settings` | TEXT (JSON) | no | `'{}'` | per-user preferences JSON object (default model, tool mode, welcome-wizard flag `onboarded` and other frontend-defined keys; one-time backfill at `store.go:796-805`) |
+| `group_id` | TEXT | no | `'ug_free'` | membership tier; **soft reference** to `user_groups.id` (no FK constraint) |
+| `group_expires_at` | INTEGER → BIGINT | no | `0` | ※ ALTER-added: end of a time-boxed membership granted by a redeem code / purchase (`0` = never expires) |
+| `previous_group_id` | TEXT | no | `''` | ※ ALTER-added: tier to restore when the window expires |
+| `totp_secret` | TEXT | no | `''` | base32 TOTP secret; empty = 2FA not configured |
+| `totp_enabled` | INTEGER | no | `0` | `1` = login requires a TOTP code |
+| `password_set` | INTEGER | no | `1` | `0` = OAuth-only account that never chose its own password; login forces the set-password flow |
+| `password_changed_at` | INTEGER → BIGINT | no | `0` | unix seconds of the last password change (`0` = never since signup) |
+| `last_seen_at` | INTEGER → BIGINT | no | `0` | last authenticated activity (admin online status) |
+| `credits_permanent` | REAL | no | `0` | **display mirror** of the permanent balance (not authoritative) |
+| `credits_permanent_micros` | INTEGER → BIGINT | no | `0` | **authoritative** permanent credit balance, fixed-point 1e-6 |
+| `credit_cycle_anchor` | INTEGER → BIGINT | no | `now()` | current group's timed-credit cycle origin |
+| `quota_cycle_anchor` | INTEGER → BIGINT | no | `now()` | current group's model-quota cycle origin |
+| `sort_order` | INTEGER | no | `0` | admin drag-and-drop ordering (legacy rows flattened by a one-time backfill, `store.go:788-795`) |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+
+- **PK**: `id`. **FKs**: none outgoing. Nearly every user-domain table references this one via `user_id` — usually `ON DELETE CASCADE`; `billing_usage` / `usage_stats` / `payment_orders` use `SET NULL` (account deletion anonymizes attribution while preserving records).
+- **Unique/indexes**: `email` UNIQUE (inline); `idx_users_sort_order(sort_order, created_at DESC)` created during migration (`store.go:573`).
+- **Notes**: deletion is an async multi-step flow — physical paths are first registered in [`pending_storage_cleanup`](./system-audit.mdx), rows are then deleted, and CASCADE clears most children.
+
+## `refresh_tokens` — sessions and devices
+
+Rotating refresh tokens and the "active sessions" view. 10 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `jti` | TEXT | no (PK) | — | refresh-token id; rotating: refreshing invalidates the old jti |
+| `session_id` | TEXT | no | `''` | session-family id; migration backfills legacy empties with the original jti (`store.go:538-543`) |
+| `user_id` | TEXT | no | — | FK→`users(id)`, `ON DELETE CASCADE` |
+| `expires_at` | INTEGER → BIGINT | no | — | expiry in unix seconds; issued with `REFRESH_TTL` = 720h (30 days) |
+| `revoked` | INTEGER | no | `0` | `1` = revoked (single-device logout / admin kick) |
+| `created_at` | INTEGER → BIGINT | no | `now()` | issue time |
+| `user_agent` | TEXT | no | `''` | device context ("active sessions" view) |
+| `ip` | TEXT | no | `''` | login IP (XFF honored only when the direct peer is private; see the Cloudflare page) |
+| `location` | TEXT | no | `''` | best-effort geo (derived from reverse-proxy geo headers, if any) |
+| `last_seen` | INTEGER → BIGINT | no | `0` | last refresh of this session |
+
+- **Indexes**: `idx_refresh_tokens_user_id(user_id)`, `idx_refresh_tokens_user_session(user_id, session_id)` (both created during migration, `store.go:564-565`).
+- **Notes**: unlike `login_histories`, rows are removed on logout/rotation — this is not the audit source of truth. Each access token also carries `sid` (session family); middleware checks it against the DB so per-device revocation works across replicas.
+
+## `login_histories` — successful-login audit
+
+Immutable successful-login trail. 7 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `lh_` + 12 hex chars |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `login_at` | INTEGER → BIGINT | no | `now()` | login time |
+| `ip` | TEXT | no | `''` | source IP |
+| `location` | TEXT | no | `''` | best-effort geo |
+| `user_agent` | TEXT | no | `''` | client UA |
+| `method` | TEXT | no | `'password'` | login method: `password` / `password_2fa` / `oauth` / `oauth_2fa` (constants in `store/login_histories.go:11-16`) |
+
+- **Index**: `idx_login_histories_user_time(user_id, login_at DESC, id DESC)`.
+- **Notes**: logout and session rotation never delete these rows; administrators drill in from the user detail page.
+
+## `oauth_providers` — social login configuration
+
+OAuth / social login providers configured by the admin. 18 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `oa_` + 12 hex chars |
+| `kind` | TEXT | no | — | `google` / `github` / `apple` / `oidc` / `oauth2` (`internal/oauth/oauth.go`) |
+| `name` | TEXT | no | — | label shown on the login button; `lower(trim(name))` unique |
+| `icon` | TEXT | no | `''` | emoji or uploaded icon URL (custom providers) |
+| `client_id` | TEXT | no | `''` | OAuth client id |
+| `client_secret` | TEXT | no | `''` | **plaintext**; for Apple it holds the AuthKey `.p8` private key (a client-secret JWT is minted at request time, TTL 30 min) |
+| `issuer_url` | TEXT | no | `''` | expected OIDC `iss` (generic kinds only) |
+| `jwks_url` | TEXT | no | `''` | trusted signing-key set URL (generic kinds only) |
+| `auth_url` | TEXT | no | `''` | authorization endpoint (`oidc`/`oauth2` only; built-in kinds ignore this and use code defaults) |
+| `token_url` | TEXT | no | `''` | token endpoint (same rule) |
+| `userinfo_url` | TEXT | no | `''` | UserInfo endpoint (used by `oauth2` kind) |
+| `scopes` | TEXT | no | `''` | space-separated scope override |
+| `team_id` | TEXT | no | `''` | Apple developer team id |
+| `key_id` | TEXT | no | `''` | Apple AuthKey id |
+| `subject_namespace` | TEXT | no | `''` | internal trust-domain marker (distinguishes new vs legacy oidc rows; backfill `MigrateLegacyOAuthProviderKinds`) |
+| `enabled` | INTEGER | no | `1` | show on the login page |
+| `sort_order` | INTEGER | no | `0` | button order |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Index**: `idx_oauth_providers_name_unique` (UNIQUE ON `lower(trim(name))`).
+- **Notes**: custom issuer/JWKS hosts are trusted only for `oidc`/`oauth2` — a stale row-level override can never move a built-in endpoint (`oauth.go:121-125`). PKCE applies to `google/oidc/oauth2`; the ID-token verification path to `google/apple/oidc`.
+
+## `oauth_identities` — identity links
+
+Maps "provider row + immutable subject" to a local account. 5 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `provider_id` | TEXT | no (PK part) | — | **soft reference** to `oauth_providers.id` (no FK) |
+| `subject` | TEXT | no (PK part) | — | provider-side stable user identifier |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `email` | TEXT | no | `''` | email snapshot at link time (**not** the match key) |
+| `created_at` | INTEGER → BIGINT | no | `now()` | first link time |
+
+- **PK**: composite `(provider_id, subject)`. **Index**: `idx_oauth_identities_user(user_id)`.
+- **Notes**: keyed on the provider's immutable subject, so links survive email changes; unlinking goes through `/api/me/identities`.
+
+## Related pages
+
+- [Login methods admin page](../../admin/access-auth.mdx) — matching UI
+- [Cloudflare proxy notes](../../deployment/cloudflare-proxy.mdx) — how login-history IPs are resolved
+- [First run and admin bootstrap](../../admin/first-run.mdx) — how the first `users` row is created

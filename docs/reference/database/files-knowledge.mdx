@@ -1,0 +1,143 @@
+---
+title: Files and knowledge base tables
+sidebar_position: 5
+description: Column-by-column reference for files, knowledge_bases, knowledge_base_shares, documents, chunks, vector_points, and artifacts, including the RAG ingest state machine and vector storage.
+---
+
+# Files and knowledge base tables
+
+Seven file/RAG tables. Bytes always live on disk or in object storage; the database stores metadata only (notation per the [overview](./overview.mdx)). **There is no dedicated images table**: generated pictures = `messages` + `artifacts` (commented in `store/images.go`); the gallery filters on `artifacts.source`.
+
+## `files` — upload registry
+
+Metadata for composer/project/sandbox uploads. 11 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `f_` (files) / `d_` (document flow) + 12 hex chars — the prefix separates the two upload flows (`api/files_handlers.go:107-114`) |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `conversation_id` | TEXT | **yes** | `NULL` | FK→`conversations(id)`, `SET NULL` (conversation deletion keeps file metadata) |
+| `filename` | TEXT | no | — | sanitized display filename |
+| `mime_type` | TEXT | no | `'application/octet-stream'` | MIME detected at upload |
+| `size_bytes` | INTEGER → BIGINT | no | `0` | byte size |
+| `storage_path` | TEXT | no | — | key relative to `UPLOAD_DIR` / object storage |
+| `kind` | TEXT | no | `'other'` | classification (`kindOf`, `api/files_handlers.go:559-597`): `image` / `pdf` / `sheet` / `doc` / `text` / `code`; default and unknown uploads become `other`. Images do not count against storage quota (`store/misc.go:65`) |
+| `draft` | INTEGER | no | `0` | composer upload **not yet sent**; the client restores only these on refresh |
+| `branch_message_id` | TEXT | no | `''` | a branch upload inherits only along the message branch it was created on; empty = root/legacy |
+| `created_at` | INTEGER → BIGINT | no | `now()` | upload time |
+
+- **Indexes**: `idx_files_user(user_id)`, `idx_files_conversation_id(conversation_id)`; migration adds `(conversation_id, branch_message_id)` and `(storage_path, draft)` (`store.go:567-569`).
+
+## `knowledge_bases` — knowledge bases
+
+Containers of RAG. 10 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `kb_` + 12 hex chars |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE (creator) |
+| `name` | TEXT | no | — | library name; unique per `(user_id, workspace_id)` scope |
+| `description` | TEXT | no | `''` | description |
+| `embedding_model_id` | TEXT | no | — | FK→`models(id)` with **no ON DELETE clause** — deleting an embedding model still referenced by a KB is rejected (protects all of that KB's vectors) |
+| `embedding_dim` | INTEGER | no | — | vector dimension; selects the Qdrant collection `aivory_c<dim>` or the `vector_points` dimension partition |
+| `project_id` | TEXT | **yes** | `NULL` | non-null = project-bound library (soft reference to `projects.id`, **no FK**) |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `is_public` | INTEGER | no | `1` | workspace sharing switch (ignored on personal rows) |
+| `workspace_id` | TEXT | no | `''` | ※ ALTER-added: soft reference to `workspaces.id`; `''` = personal |
+
+- **Indexes**: `idx_kbs_user(user_id)`; name uniqueness upgraded during migration to the three-column form `(user_id, COALESCE(workspace_id,''), lower(trim(name)))` (`store.go:592-594`); `idx_kbs_workspace(workspace_id)`.
+- **Incoming**: `knowledge_base_shares`, `documents`, `chunks`, `workspace_kb_member_permissions` (CASCADE), `projects.kb_id` (SET NULL).
+
+## `knowledge_base_shares` — cross-user sharing
+
+Libraries shared between individual users (orthogonal to workspaces). 5 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `kb_id` | TEXT | no (PK part) | — | FK→`knowledge_bases(id)`, CASCADE |
+| `user_id` | TEXT | no (PK part) | — | FK→`users(id)`, CASCADE |
+| `role` | TEXT | no | — | `read` / `write` (CHECK) |
+| `created_at` | INTEGER → BIGINT | no | `now()` | share time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Index**: `idx_kb_shares_user(user_id, updated_at DESC)`.
+
+## `documents` — RAG documents and ingest state machine
+
+13 columns. Exactly one of `kb_id` / `conversation_id` (library document vs conversation-scoped temporary document).
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | document id (`d_` prefix family) |
+| `kb_id` | TEXT | **yes** | `NULL` | FK→`knowledge_bases(id)`, CASCADE |
+| `conversation_id` | TEXT | **yes** | `NULL` | FK→`conversations(id)`, CASCADE |
+| `filename` | TEXT | no | — | original filename |
+| `mime_type` | TEXT | no | — | MIME |
+| `size_bytes` | INTEGER → BIGINT | no | — | byte size |
+| `status` | TEXT | no | `'pending'` | state machine: `pending` → `parsing` → `embedding` → `ready`; any failure → `failed` (`rag/rag.go:573-984`, `store/kbs.go:1750`). The composer blocks sending until `ready` |
+| `error` | TEXT | no | `''` | failure detail |
+| `chunk_count` | INTEGER | no | `0` | number of chunks produced |
+| `storage_path` | TEXT | no | `''` | original-bytes location (object-storage key / local path) |
+| `uploaded_by_user_id` | TEXT | no | `''` | direct uploader ("uploaders may delete their own files" in shared libraries); legacy rows attributed via same-path `files` / container creator (`store.go:548-556`) |
+| `ingest_updated_at` | INTEGER → BIGINT | no | `0` | ingest heartbeat. Lets the watchdog distinguish a live long-running parse from a zombie abandoned by timeout/crash/lease expiry |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+
+- **Indexes**: `idx_docs_kb(kb_id)`, `idx_docs_conv(conversation_id)`; migration adds `(kb_id, uploaded_by_user_id, created_at DESC)` and `(status, ingest_updated_at)` (`store.go:566,570`).
+
+## `chunks` — chunk bodies
+
+Output of structure-aware chunking. 11 columns. **Note**: the legacy `embedding` column was **dropped** by `Migrate` (vectors moved out — SQLite via an in-transaction table rebuild, PG via `DROP COLUMN IF EXISTS`, `store.go:809-885`); this table holds text and retrieval metadata only.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | chunk id |
+| `document_id` | TEXT | no | — | FK→`documents(id)`, CASCADE |
+| `kb_id` | TEXT | **yes** | `NULL` | soft reference (**no FK**; denormalized for per-library retrieval) |
+| `conversation_id` | TEXT | **yes** | `NULL` | soft reference (chunks of conversation-scoped documents) |
+| `seq` | INTEGER | no | — | order within the document |
+| `parent_id` | TEXT | **yes** | `NULL` | **hierarchical chunking**: text child chunks point at a parent chunk's id (soft reference, no FK) |
+| `chunk_type` | TEXT | no | `'text'` | `text` (child) / `parent` (parent context shown to the model) / `table` / `image_caption` |
+| `content` | TEXT | no | — | chunk body |
+| `image_ref` | TEXT | **yes** | `NULL` | original image reference for `image_caption` chunks |
+| `meta` | TEXT (JSON) | no | `'{}'` | heading breadcrumbs, page numbers, other retrieval metadata |
+| `embedding_model` | TEXT | no | `''` | embedding model that produced this chunk's vector (dimension isolation) |
+
+- **Indexes**: `idx_chunks_doc(document_id)`, `idx_chunks_kb(kb_id)`, `idx_chunks_conv(conversation_id)`.
+- **Size knobs** (not columns and not admin `settings`; startup env vars with code defaults, `rag/rag.go:2436-2440`): child 2000 chars (`AIVORY_RAG_CHILD_TARGET_CHARS`) / parent 4800 chars (`AIVORY_RAG_PARENT_TARGET_CHARS`) / overlap 250 chars (`AIVORY_RAG_CHUNK_OVERLAP_CHARS`).
+
+## `vector_points` — embedded vector store (personal)
+
+The personal SQLite backend's vector storage: one row **per dimension**. 3 columns. Full-edition deployments keep it **empty** (the truth is in Qdrant) — it exists in both dialects so logical backups stay engine-agnostic.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `chunk_id` | TEXT | no (PK part) | — | FK→`chunks(id)`, CASCADE |
+| `dimension` | INTEGER | no (PK part) | — | dimension index, `CHECK (dimension > 0)` |
+| `embedding` | BLOB → **BYTEA** | no | — | a single scalar component (binary-encoded float) |
+
+- **Index**: `idx_vector_points_dimension(dimension)` (dimension isolation).
+- **Notes**: retrieval is **exact cosine** (brute scan) — the reason the personal edition pins `VECTOR_BACKEND=sqlite`.
+
+## `artifacts` — generated files
+
+Code/image outputs attached to a message. 8 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | artifact id |
+| `message_id` | TEXT | no | — | FK→`messages(id)`, CASCADE |
+| `filename` | TEXT | no | — | display filename |
+| `storage_path` | TEXT | no | — | key under `ARTIFACT_DIR` / object storage |
+| `mime_type` | TEXT | no | `'application/octet-stream'` | MIME |
+| `size_bytes` | INTEGER → BIGINT | no | `0` | byte size |
+| `source` | TEXT | no | `''` | producing tool. Known values `image_generate` / `image_generation` (hosted image generation — included in the gallery) and `python_execute` (excluded from the gallery); constants `store/misc.go:2130-2132`; empty = historical rows |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+
+- **Index**: `idx_artifacts_message(message_id)`.
+- **Notes**: the gallery query = `artifacts JOIN messages` filtered by `source IN ('','image_generate','image_generation')` (`store/images.go:152-156`).
+
+## Related pages
+
+- [Knowledge bases and RAG](../../admin/knowledge-rag.mdx) — matching admin UI
+- [Sandbox overview](../../sandbox/overview.mdx) — how sandbox workspace archives relate to `files`/`artifacts`
+- [Deployment and environment](../../deployment/environment.mdx) — `UPLOAD_DIR`/`ARTIFACT_DIR`/object storage

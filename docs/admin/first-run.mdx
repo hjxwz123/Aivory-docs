@@ -1,82 +1,199 @@
 ---
 title: Administrator first-run setup
 sidebar_position: 1
-description: Complete Aivory's minimum working configuration with the guided tour or the admin menus, then enable enhancements as needed.
+description: "From a zero-user instance to the first working chat: how the initial admin is created, the three-step minimum configuration, and scenario-based enhancements."
 ---
 
 # Administrator first-run setup
 
-The first account created automatically becomes the administrator. When you open `/admin`, the system shows a guided tour that you can skip and revisit later; it splits configuration into "make it work" and "make it better". Even if you skip the tour, you can reopen it from the admin overview.
+:::info Applies to
 
-The Personal edition and the Full edition share the same administrator configuration model. The difference is that the Personal edition has no local Python sandbox by default, while the Full edition ships with an internal sandbox, PostgreSQL, Redis, and Qdrant by default; they are not two different sets of admin features.
+Aivory v2.4.6 and later. Screenshots show the Simplified Chinese admin UI; English labels are cited inline.
 
-## Make it work: just three steps
+:::
 
-Once you complete these three steps, normal chatting can begin. Don't mistake task models, web search, embeddings, email, or Python for hard prerequisites for the first chat.
+This page walks through everything from a freshly booted, empty instance to "regular users can chat". Personal and Full editions share the same admin surface and configuration model; they differ only in default dependencies (Personal: embedded SQLite vectors, no local sandbox; Full: PostgreSQL, Redis, Qdrant and an internal sandbox sidecar wired in by compose).
 
-| Order | Admin location | Completion criteria | Common mistakes |
+## Prerequisites
+
+- The instance is running, via [Personal edition](../getting-started/personal.mdx) or [Full edition](../getting-started/full.mdx), and the login page loads in a browser.
+- Deployment-level environment variables (`JWT_SECRET`, `DATABASE_URL`, etc.) follow [Environment variables](../deployment/environment.mdx).
+- You have at least one model provider account (OpenAI, Anthropic, Google, or any OpenAI-compatible gateway) and its API key.
+
+## How the initial administrator is created
+
+Understanding the bootstrap mechanism helps with troubleshooting and automation:
+
+1. A brand-new database contains no users at all, and **no environment variable can seed an admin** — there is no `ADMIN_PASSWORD`-style startup parameter.
+2. On startup the frontend probes `GET /api/public/needs-setup`, which returns `{needs_setup: true}` while the user count is 0; the app then routes to the `/setup` initialization screen.
+3. Submitting name, email and password on `/setup` calls `POST /api/setup` (a public, per-IP rate-limited endpoint). The account becomes an active admin immediately, is signed in, and skips email verification.
+4. Once at least one user exists, the `/setup` channel closes permanently (repeat attempts return 409). **It cannot mint extra admins.** Additional administrators are promoted from existing accounts under "Users & access → Users".
+5. Every admin page lives under `/admin` and requires the admin role.
+
+### Adding more administrators
+
+After initialization, additional admins can only be promoted by an existing one: open "Users & access → Users", find the account, and change its role to admin. Keep at least two independent admin accounts (different sign-in methods are even better) so a single unavailable person never locks the instance.
+
+### Local quick path (optional)
+
+A single-machine dev instance needs no Docker:
+
+```bash
+npm run build                                   # frontend into dist/
+cd server && go build -o aivory ./cmd/api
+STATIC_DIR=../dist ./aivory                     # open http://localhost:8787
+```
+
+The first account registered on `/setup` likewise becomes admin automatically. Note: in development mode without `JWT_SECRET`, the process mints a random ephemeral key, so **every restart invalidates all sessions** — that is expected, not a bug.
+
+:::tip After signing in, start at the Overview
+
+`/admin` lands on "Overview → Admin overview". The **configuration health** panel lists warnings that currently block users (no enabled channel, no default model, and so on), and a skippable guided tour — reopenable via "review setup tour" — walks the same checklist this page describes.
+
+:::
+
+![Admin overview: configuration health and today's stats](/img/admin-overview.png)
+
+_Admin overview. Clear the configuration-health warnings first; treat recommended settings as phase two. Model names in screenshots are placeholders from a test instance._
+
+:::note About screenshots
+
+Admin screenshots come from a local test instance with placeholder channels and dummy keys. They illustrate layout only — never copy names from them as real model IDs or endpoints.
+
+:::
+
+## The working baseline: three steps
+
+Completing these three steps gives regular users real chat. Do **not** treat task models, web search, embeddings, email, or the Python sandbox as hard prerequisites for the first conversation.
+
+:::tip Rehearse the three steps without real keys
+
+`ENABLE_MOCK_PROVIDER=true` (Personal compose) seeds a Mock channel that returns controlled fake responses without any real network calls — a zero-cost way to validate the full "channel → model → default model → streamed reply" path. Turn it off and restart before real users arrive.
+
+:::
+
+| # | Where | Done when | Common mistake |
 | --- | --- | --- | --- |
-| 1 | AI & models → Channels | At least one channel is enabled and its address, API format, and API Key are usable | Base URL doesn't match the provider's format, or a Key without permission is used |
-| 2 | AI & models → Models | At least one enabled chat model is linked to that channel and its model request ID is non-empty | Only embedding/image/audio models were added, or the channel is disabled |
-| 3 | AI & models → Model policies | A still-usable default chat model is selected | A model that has been deleted, disabled, or invalidated is selected |
+| 1 | AI & models → Channels | At least one enabled channel with a working Base URL, type and API key | Base URL doesn't match the provider's format, or the key lacks permission |
+| 2 | AI & models → Models | At least one enabled chat model on that channel with a non-empty `request_id` | Only embedding/image/voice models added, or the parent channel is disabled |
+| 3 | AI & models → Model policy | "Default chat model" points to a still-valid chat model | Selecting a deleted, disabled, or channel-disabled model |
 
-Right after completing them, start a new short conversation to verify the real upstream response. If you receive a channel error, a quota error, or a model-not-found error, fix the channel or model first, then continue configuring other capabilities.
+Step by step:
 
-## Step 1: Create a working channel
+### Step 1: create a working channel
 
-In "Channels", create one connection per model provider. The channel name is only for administrator identification; what actually affects requests is the API format, Base URL, API Key, and enabled state.
+1. Go to "AI & models → Channels" and click "New channel".
+2. Fill in:
+   - **Name** — admin-facing only; mark environment, region, or account (e.g. `OpenAI prod`).
+   - **Type** — must match the provider's protocol family (OpenAI / Claude / Gemini, etc.). Type decides signing and request shape; identical model names do not imply compatible protocols.
+   - **API format** — chat-models-only variant (e.g. OpenAI chat vs responses). Keep the default unless the provider documents otherwise.
+   - **Base URL** — blank uses the vendor default; for gateways, enter the upstream API root (OpenAI-type may include `/v1` and similar paths).
+   - **API key** — a server-side secret stored in the database and visible only to the admin UI.
+3. Save and enable. The same dialog lets you click "Fetch from upstream" and tick models to create their records right away.
 
-- Select the API format that matches the provider; don't guess the format from the model name alone.
-- OpenAI-compatible services usually require a Base URL that includes `/v1`, but the exact path still depends on the provider's documentation.
-- The API Key is a server-side secret, persisted only in the admin backend; never put it in browser environment variables, public frontend configuration, screenshots, or logs.
-- Ideally, one channel represents one upstream credential that can be rotated and disabled independently. When you need to distinguish regions, accounts, quotas, or gateways, creating multiple channels makes troubleshooting easier.
+Field-level detail, per-type differences and connectivity testing: [Channels, models, and policies](./channels-models.mdx).
 
-Only after the channel is saved and enabled should you go to the models page. A channel by itself does not automatically make all of its models appear in the user picker.
+### Step 2: add a chat model
 
-## Step 2: Add chat models
+A channel alone never surfaces models in the user picker — you still need model records:
 
-A model is a record of a specific callable capability under a channel. When adding a model, at minimum confirm: it is a chat type, it is linked to the correct channel, its request ID exactly matches the provider's actual model ID, and its status is enabled.
+1. Go to "AI & models → Models", click "Fetch models from a channel", pick the channel, and bulk-add the upstream models you want; providers that refuse listing need "New model" with a manual request ID.
+2. Verify each record: **Kind** = chat, **Channel** correct, `request_id` matching the provider docs exactly, **Enabled (visible to users)** on.
+3. Start with just a few validated models. Policy, quotas and tags can follow.
 
-Channels that support the model-list endpoint can use "Auto-add models supported by the channel" to import. An import failure doesn't necessarily mean the channel can't chat; common reasons are that the provider doesn't open model-list permission, the gateway doesn't implement the endpoint, or the Key only allows inference. In that case, you can add model IDs manually.
+### Step 3: set the default model and test for real
 
-Different channels can reuse the same model ID. For example, if channel A and channel B both have `gpt-5`, you can create two `gpt-5` model records; they are distinguished by their channel associations and can each have their own sort order, labels, quota, and enabled state.
+1. Open "AI & models → Model policy" and choose the model you just enabled as **Default chat model**.
+2. Start a short new conversation on the user side and confirm a real streamed upstream response.
+3. If you see channel errors, quota errors, or "model not found", fix steps 1–2 before enabling anything else.
 
-## Step 3: Configure model policies
+![The user-facing welcome screen: enabled models appear in the composer picker](/img/chat-home-welcome.png)
 
-In "Model policies", select the default chat model. It is the default choice for new conversations and the target checked when the system verifies the minimum working state.
+_Once the three steps are done, regular users see the enabled chat models on the welcome screen._
 
-Add the remaining policies according to actual needs:
+:::tip Policy-page guardrails
 
-- Task model: used for some background or auxiliary tasks. It is a health recommendation, not a requirement for ordinary chat.
-- Tool-routing model: in automatic tool mode, helps decide whether a tool call is needed; if not configured, the main model's regular policy applies.
-- Verification model: used for answer verification or auditing; turning it off never blocks chatting.
-- Fallback model and first-token wait threshold: the degradation strategy when upstream is slow, times out, or is unavailable. Use a verified, cost-controllable model.
+If the default model's channel gets disabled or the model deleted, the Model policy page warns that "some saved model policies are currently unavailable". Re-run a test message after every policy change — a still-selectable dropdown entry is not proof the request will succeed.
 
-Run one real conversation after every policy change. Don't rely solely on a model appearing in the dropdown, because channel credentials, provider balance, and model authorization may change afterward.
+:::
 
-## Make it better: enable capabilities by use case
+## Making it better: enable by scenario
 
-After the three steps, extend in the priority order below rather than flipping every switch on day one.
+After the three steps, extend in this order rather than flipping every switch on day one:
 
-| Capability | Configure first | When you need it | Personal vs. Full edition |
+| Capability | Configure first | When you need it | Personal vs Full |
 | --- | --- | --- | --- |
-| Knowledge bases and RAG | Embedding model, correct dimension, document parsing strategy | Answers must be grounded in private documents | Personal edition uses SQLite embedded vectors; Full edition uses Qdrant |
-| Web search | Search provider and API Key/address | Real-time internet information is needed | Configuration is the same |
-| Python and file execution | Reachable sandbox, resource limits, model tool authorization | Computation, charts, or file generation are needed | Personal edition has no local sandbox by default; Full edition has one built in |
-| MCP, skills, prompts | Start with a single low-risk service or skill | External business systems must be connected | Configuration is the same |
-| Email | SMTP, sender address, and TLS | Email verification, password resets, operational notifications | Recommended to prioritize for long-term multi-user Full deployments |
-| OAuth and registration policy | Verify the HTTPS domain and a single identity provider first | Third-party login or an organizational entry point is needed | Configuration is the same |
-| Workspaces, plans, and payments | Permissions, quotas, credits, and payment callbacks | Serving teams or commercial users | Configuration is the same; full deployments suit long-term operation |
-
-For the security boundaries of RAG, tools, and the sandbox, see [Knowledge bases, RAG, and storage](./knowledge-rag.mdx) and [Tools, MCP, and sandbox](./tools-sandbox.mdx).
+| Knowledge bases & RAG | Embedding model, matching dimension, parsing strategy | Answers grounded in private documents | Personal uses SQLite embedded vectors; Full uses Qdrant |
+| Web search | Search provider and key / self-hosted endpoint | Real-time internet answers | Same setup |
+| Python & file execution | Reachable sandbox, resource limits, per-model tool grants | Computation, charts, generated files | Personal has no sandbox by default (opt-in profile); Full ships one |
+| MCP, skills, prompts | Start with one low-risk service; test and sync | Connecting external business systems | Same setup |
+| Voice input | STT provider and credentials | Mic dictation | Same setup |
+| Email | SMTP, sender address, TLS | Email verification, password reset, notices | Full production deployments should prioritize this |
+| OAuth & registration | Finish the HTTPS domain first; validate one provider | Third-party sign-in, org entry points | Same; see [Users, sign-in, and workspaces](./access-auth.mdx) |
+| Workspaces, plans, payments | Permissions, quotas, credits, payment callbacks | Team or commercial users | See [Plans, credits, and payments](./billing.mdx) |
 
 ## Configuration precedence and change management
 
-Connections and system settings in the admin backend are persisted. Environment variables mainly carry startup defaults, deployment topology, and limits that ordinary administrators cannot change directly; the two are not one set of forms to be filled interchangeably.
+Admin settings and environment variables have different jobs; don't mix them:
 
-- Channel API Keys, payment credentials, SMTP, OAuth, object storage, web search, and most feature switches should be configured in the admin backend and restricted to administrators.
-- The official Docker Compose has explicit high-priority values for database, Redis, Qdrant, and built-in sandbox connections; adding a variable with the same name in `.env` won't necessarily override it.
-- After environment variable changes, the application or sandbox usually needs a restart; settings saved on admin pages take effect immediately or on the next request, as each page indicates.
-- Exporting admin configuration includes sensitive credentials for channels, OAuth, SMTP, storage, and web search. Store admin configuration export files as vault-level secrets.
+- **Admin UI settings** persist to the database `settings` table and take effect on the next request without restart: channel keys, models, registration policy, SMTP, object storage, search, sandbox URL/key, credit conversion — nearly everything day-to-day.
+- **Environment variables** carry boot defaults and topology: `DATABASE_URL`, `REDIS_URL`, `QDRANT_URL`, `VECTOR_BACKEND`, `JWT_SECRET`, `ALLOWED_ORIGINS`, `MAX_UPLOAD_BYTES`, and so on. Changing them restarts `aivory-api`.
+- The official compose files pin high-priority values for database, Redis, Qdrant and the built-in sandbox; adding a same-named variable in `.env` may not override them. Read the deploy files before editing the environment.
+- **The "Backup & Migration → Export config" ZIP contains plaintext channel, OAuth, SMTP, payment and storage credentials.** Treat it like a password vault.
 
-Before taking on real users, it is recommended to build a "post-change acceptance" checklist: administrator and regular-user login, a chat with the default model, a small file upload, knowledge base retrieval, one restricted tool call, a backup export, and—when needed—an OAuth callback and a payment test.
+Before onboarding real users, build a post-change acceptance checklist: admin and regular logins, a default-model conversation, a small upload, a knowledge-base retrieval, one restricted tool call, a backup export, and — where relevant — an OAuth callback and a payment-sandbox round trip. See [Upgrades, backup, and restore](../deployment/upgrade-backup.mdx).
+
+## First week after launch
+
+| When | Action |
+| --- | --- |
+| D0 | Finish the three steps + the acceptance checklist below; run one backup export drill |
+| D1 | Read real D0 cost and error rates in "Usage & billing"; fix model pricing or swap the default model if needed |
+| D2–D3 | Enable the first enhancement (search or knowledge bases), repeating "configure → validate at low traffic → widen" |
+| D4–D5 | Set up email and the registration policy; run the whole product through a regular test account |
+| D7 | Perform an actual restore drill (import the backup in isolation); log what it taught you |
+
+:::warning What not to do on day one
+
+Don't open sign-up, expose expensive models, connect production payments, enable every tool at once, or change network topology in the same window. Every step needs a revertible "previous snapshot" — the admin config export is itself a rollback asset.
+
+:::
+
+## Day-one acceptance checklist
+
+Tick every item before inviting real users; each row states the pass condition:
+
+| # | Check | Pass condition |
+| --- | --- | --- |
+| 1 | Admin login | Two admin accounts can sign in independently (ideally via different methods) |
+| 2 | User sign-up/login | A regular account follows the intended policy; banned-state behavior is correct |
+| 3 | Default-model chat | A short question streams to completion with no channel error |
+| 4 | Upload | A small image uploads and is readable by a vision model (if claimed) |
+| 5 | Knowledge-base retrieval | A text file reaches ready state; an exact sentence from it hits with a citation |
+| 6 | Tool call | At least one enabled tool (e.g. web search) fires correctly in conversation |
+| 7 | Stop generation | Hitting "stop" mid-answer terminates immediately with no dirty state |
+| 8 | Disconnect replay | Refreshing during generation still finishes server-side and replays |
+| 9 | Backup export | A full backup ZIP is produced and downloaded |
+| 10 | Config export custody | The (plaintext-credential) config ZIP is in controlled encrypted storage |
+| 11 | HTTPS and origins | No mixed-content warnings on the real domain; writes aren't CSRF-blocked |
+| 12 | Metering visible | The test calls above appear in "Usage" and "Usage & billing" |
+
+## First-run troubleshooting quick lookup
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `/setup` never appears; straight to login | The instance already has users; setup is one-time | Sign in with an existing account; use "forgot password" (needs SMTP) if locked out |
+| Setup submit returns 409 | At least one user already exists | Expected — that's the anti-hijack gate |
+| Logged in, but every save returns "cross-site request blocked" | `ALLOWED_ORIGINS` lacks the browser's actual origin | Set exact, path-less origins (comma-separated) and restart ([Domain, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx)) |
+| "request signature expired" | Client/proxy clock skew beyond the signature window | NTP-sync; make sure the proxy doesn't rewrite the `/api` path |
+| Nothing streams / output arrives in one blob | Reverse proxy buffering the SSE stream | Disable response buffering at the proxy (same page as above) |
+| Policy page warns "some saved model policies are currently unavailable" | A referenced model was disabled/deleted or its channel is off | Re-pick available models, then re-test |
+| Users see no models at all | The model isn't enabled, or its parent channel is disabled | Check both the channel "Enabled" and model "Enabled (visible to users)" switches |
+| Re-login required after every restart (dev) | No `JWT_SECRET` set, so an ephemeral key is generated | Set a fixed `JWT_SECRET` of at least 32 characters |
+
+## Next steps
+
+- Connect more providers, policies and fallbacks → [Channels, models, and policies](./channels-models.mdx)
+- Tighten access before opening sign-up → [Users, sign-in, and workspaces](./access-auth.mdx)
+- Ground answers in private documents → [Knowledge bases, RAG, and storage](./knowledge-rag.mdx)
+- Enable search, Python and MCP → [Tools, MCP, and sandbox](./tools-sandbox.mdx)

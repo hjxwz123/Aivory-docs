@@ -1,82 +1,247 @@
 ---
 title: Plans, Credits, and Payments
 sidebar_position: 6
-description: Configure user groups, model quotas, credit packages, redemption codes, payment channels, payment methods, and order operations.
+description: Connect model cost, user capability, and order flow with user groups, credit conversion, model quotas, redeem codes, and payment channels.
 ---
 
 # Plans, Credits, and Payments
 
-Plans, credits, and payments connect model costs, what users are able to do, and the order flow. Validate quotas and credits with an administrator and test accounts before enabling real payments; treat payment channels, callback secrets, and configuration exports as highly sensitive assets.
+:::info Applies to
 
-## Establish cost boundaries first
+Aivory v2.4.6 and later. Relevant screens: "Billing & entitlements → User Groups / Credits and quotas / Redeem codes / Payment channels / Payment methods / Payment orders", plus "Data & operations → Usage & billing / Usage".
 
-Before adding products, define what each class of user can consume:
+:::
 
-- which chat, image, speech, or embedding models they may use.
-- reasonable daily limits on messages, images, uploads, tool calls, and concurrent generations.
-- how credits convert to the costs of different models and providers, and whether the free allowance is enough for trials.
-- what happens after limits are exceeded: reject, prompt to top up, fall back to low-cost models, or handle manually by administrators.
+Plans, credits, and payments connect model cost, what users may spend, and the checkout flow. Validate quotas and credits with admin and test accounts before taking real money; payment credentials, webhook secrets, and configuration exports are managed as high-sensitivity assets.
 
-Test first with low-cost models and small allowances. Don't publicly expose expensive models, deep research, image generation, or Python execution without cost monitoring, abuse limits, and refund/manual-handling workflows.
+## Set cost boundaries first
 
-## User groups, plans, and model quotas
+Before adding any product, define what each user class may consume:
 
-User groups in "Plans" can assign default capabilities and business rules to a group of users; "Credits and Quotas" sets credit packages, model quotas, and related policies.
+- Which chat, image, voice, or embedding models are usable.
+- Sensible caps on daily messages, images, uploads, tool calls, and concurrent generations.
+- How credits convert to per-provider cost (the per-1M-token prices on each model record drive deduction) and whether free allowances cover a trial.
+- What happens at exhaustion: refuse, prompt to top up, switch to a cheaper model, or manual admin handling.
 
-Start with simple tiers, for example administrators, internal members, trial users, and paid users. For each tier, define the default model, visible models, daily quota, credit balance cap, and permissions for sensitive tools. Avoid building large numbers of untraceable exceptions for individual users; for special cases, prefer one-off credit adjustments or limited-time redemption codes, and record the reason.
+Test with cheap models and small allowances. Don't expose expensive models, deep research, image generation, or Python execution before cost monitoring, abuse limits, and refund/manual processes exist.
 
-Before adjusting model quotas, check the model's actual price, context length, output limit, and tool costs. Quota changes typically only affect subsequent requests; they do not retroactively erase existing usage records or already-created orders.
+## The billing model at a glance
 
-## Credit packages and redemption codes
+| Concept | Mechanism |
+| --- | --- |
+| Credit conversion | The global "model cost internal conversion (per USD)": credits burned per 1 USD of model cost, independent of the user-facing settlement currency; **0 disables credits entirely** |
+| Preflight hold | Before generating, credits are reserved against model prices (reserve → settle → release); insufficient balance refuses up front instead of black-holing overage |
+| Cyclic allowance | Groups can grant recurring credits on a rolling window (`credit_period_seconds`); unused balance expires at rollover |
+| Permanent credits | Redeem codes and credit packages issue non-expiring balance, kept on a separate ledger from cyclic credits |
+| Model quotas | Each model may define free allowances per user group (by cost or calls, rolling); **groups not enabled on a quota burn credits per use**; no quota row at all = open to every group |
+| Platform limits | Daily message cap (default 200), daily image cap (default 30), concurrent generations, per user; 0 = unlimited. Boot defaults: `DAILY_MESSAGE_LIMIT` / `IMAGE_DAILY_LIMIT` |
+| Settlement currency | Three-letter ISO 4217 code for group prices and permanent-credit packages; changing it never rewrites existing prices |
 
-Credit packages define the credit products users can purchase or receive. Before creating one, confirm the name, display copy, price, bonus credits, enabled state, ordering, and applicable payment methods. When launching, first create a hidden or test package, and only publish it after completing purchase, payment callback, credit crediting, cancellation, and duplicate-callback tests.
+:::note Which ledger is authoritative
 
-Redemption codes suit invitations, compensation, enterprise distribution, and marketing campaigns. When managing them, define:
+Credit debits land in an append-only credit ledger that usage-log cleanup never prunes, and every successful call's cost facts append to a separate statistics table. Deleting "Usage" records changes neither the global trends in "Usage & billing" analytics nor refunded credits — different data, different jobs; reconciliation trusts the ledgers and orders.
 
-- the credit value, validity period, usage count, and applicable user scope for a single code or batch.
-- whether the same user may redeem multiple times, and how mistyped input and high-frequency attempts are rate-limited.
-- whether a leaked code can be revoked, and whether deleting a batch affects credits that were already credited.
-- redemption records, batch owners, and the cleanup strategy after a campaign ends.
+:::
 
-Don't put redemption code lists directly on public pages, client-side constants, or support screenshots. After generating a large batch, export it to controlled encrypted storage first, then distribute it through channels that can revoke or track it.
+### Anatomy of one billing event
+
+With a conversion of "100 credits per USD" and a model priced at $2.5/1M input and $10/1M output, one request flows like this:
+
+1. **Preflight**: on arrival, credits are reserved against estimated cost from model prices (say 2,000 credits). Insufficient balance → refused immediately with "not enough credits" instead of burning first.
+2. **Reserved**: the hold attaches to this generation; users never see the intermediate state.
+3. **Settled**: after completion, real token usage is deducted and the remainder released. Multi-round tool calls and provider retries roll into the same settlement fact.
+4. **Released**: on failure, stop, or moderation block, the hold returns in full.
+
+Overage wording and behavior (refuse / burn credits / switch model) are configured per group; admins can also issue one-off per-user credit adjustments in "Credits and quotas", and the user sees a credit notice at next sign-in.
+
+### Model-quota configuration examples
+
+| Business scenario | Recommended setup |
+| --- | --- |
+| Trial group: economy model only, 50 calls/day | count=50 rolling quota on that model; simply hide pricier models via permissions instead of leaving quota rows open |
+| Paid group: everything, with a spend ceiling | cost-type quota per expensive model (cap per rolling period) |
+| Internal group: unrestricted | no quota rows + open permissions; remember "no quota = every use burns credits", so give the group a generous periodic grant |
+| Demo instance | credits off or globally tiny + default model on a mock/cheap channel — belt and suspenders |
+
+## User Groups (plans)
+
+"Billing & entitlements → User Groups" edits membership tiers; name, price, and features render on the user's subscription page. A free default group always exists and cannot be deleted; deleting another group moves its members into the free group. The editor has four tabs:
+
+### Plan info
+
+Name, monthly/yearly price (in minor units of the settlement currency), description and feature list, default-group flag, sort order. Price only decides "what is sold" — allowances live in the other three tabs.
+
+### Quota
+
+| Block | Fields | Notes |
+| --- | --- | --- |
+| Resource allowance | Max projects / knowledge bases / storage (MB) | 0 = unlimited |
+| Credits | Periodic credit grant and period length | Rolls over on expiry |
+| Model quotas | Per-model free allowance and overage behavior | Over-limit message is editable ("You've reached your plan's limit for this model…") |
+
+### Permissions
+
+Catalog-scoped selection per group, with modes All / Selected / None:
+
+- Prompt access, skill access, tools & MCP access (restricted tools still appear in the selector but cannot be picked; globally disabled tools never appear).
+- Feature permissions: share conversations, use knowledge bases, share knowledge bases, file upload, export conversations, delete conversations, voice recognition, memory, drawing.
+
+### Users
+
+Search and page through members of the group to verify migrations.
+
+:::tip Start with simple tiers
+
+Admin, staff, trial, paid. Per tier define default model, visible models, daily quotas, credit balance caps, and sensitive-tool rights. Avoid untrackable per-user exceptions — use one-off credit adjustments or time-limited redeem codes instead, and record the reason.
+:::
+
+## Credits and quotas page
+
+"Credits and quotas" ("Billing & entitlements → Credits and quotas") holds the global switches and platform limits. The billing-policy block — model cost internal conversion, credit preflight, settlement currency — applies to every member and every credit-charged model, exactly as the page lead states. The platform-limits block below it is per user: daily message and image caps, a daily input+output token cap (in UTC days), and a cap on concurrently streaming generations; 0 = unlimited on each.
+
+```
+模型成本内部换算（per USD / Credits per USD）
+结算货币（settlement_currency，三位 ISO 4217 代码）
+积分预检 / Credit preflight:
+  [✓] 预估并拦截余额不足的请求
+每天消息上限 / Daily message limit:    [ 200 ]
+每天图片上限 / Daily image limit:       [ 30  ]
+每天令牌上限 / Daily token limit:       [ 0   ]
+每用户并发生成数 / Concurrent generations: [ 3 ]
+超出配额提示 / Quota-exceeded message:
+[ You've reached the limit for this model. ]
+```
+
+A check of the persisted store defaults confirms what boots on a fresh deployment: `credit_preflight_enabled=true`, `daily_message_limit=200`, `daily_image_limit=30`, `daily_token_limit=0`, `max_concurrent_generations=3`; the global `credits_per_usd` conversion is seeded at `0` (credits off) and `settlement_currency` at `"USD"`. Environment variables only seed the two daily caps (`DAILY_MESSAGE_LIMIT`, `IMAGE_DAILY_LIMIT`); everything else on this page is admin-persisted in the `settings` table and hot-loaded per request.
+
+The lower half of the same page manages the purchasable **permanent-credit packages** (sortable list, per row: name, credit count, settlement-currency price, description, enabled switch, edit / delete). Packages are public pricing data — the user-facing subscription page and the anonymous `GET /api/credit-packages` read-only endpoint both serve only enabled, positive-price offers. Administrators adjust a single user's permanent balance directly from "Users & access → Users", which records a credit-adjustment notice that the user sees at next sign-in.
+
+Core fields and defaults:
+
+| Field | Mechanism | Default |
+| --- | --- | --- |
+| Model cost internal conversion (per USD) | Credits burned per 1 USD of model cost; 0 disables the whole credit system (`credits_per_usd`) | 0 (off) |
+| Credit preflight | Reserve before generation, settle on real usage (`credit_preflight_enabled`) | on |
+| Settlement currency | ISO 4217 three-letter code for group prices and credit packages (`settlement_currency`) | USD |
+| Daily message limit | Messages per user per day; 0 = unlimited (`DAILY_MESSAGE_LIMIT`) | 200 |
+| Daily image limit | Image generations per user per day; 0 = unlimited (`IMAGE_DAILY_LIMIT`) | 30 |
+| Daily token limit | Input + output tokens per user per UTC day; 0 = unlimited (`daily_token_limit`) | 0 |
+| Concurrent generations | Simultaneous generations per user (`max_concurrent_generations`) | 3 |
+
+Check a model's real price, context length, output cap, and tool cost before adjusting its quota; quota changes affect subsequent requests only — past usage rows and orders are never rewritten.
+
+## Redeem codes
+
+"Billing & entitlements → Redeem codes" mints batches granting one of two benefits:
+
+| Kind | Behavior |
+| --- | --- |
+| Group code | On redemption the user joins the target group with a duration |
+| Permanent-credit code | Issues non-expiring credits |
+
+Batch fields: value/target group, expiry, max uses per code, batch name, enabled flag. The same user can redeem the same code once (enforced by a database constraint `UNIQUE(code_id, user_id)` on `redeem_redemptions`), and used counts can never exceed the cap (`used_count <= max_uses`; `max_uses` defaults to 1, keeping codes single-use — raise it only for deliberate shared promo codes). A `kind='credits'` batch issues non-expiring credits instead of a group; its target group field is an FK-satisfying placeholder and is never applied to the redeemer.
+
+Administrators can enable, revoke, or delete codes and batches individually, copy a single code, copy *all unused* codes, or export the whole batch as CSV. Revoking (`enabled=0`) disables unredeemed codes without deleting the row, preserving audit history; already-credited balances survive even a physical delete of the code row.
+
+Operational discipline: after bulk generation, export to controlled encrypted storage and distribute over revocable, trackable channels. Never paste code lists into public pages, client constants, or support screenshots. On a leak, disable the batch immediately — already-credited balances survive deletion. Archive redemption records and batch owners after campaigns end.
 
 ## Payment channels and payment methods
 
-A payment channel stores the connection and webhook configuration for one payment provider; payment methods determine which specific options users can choose at checkout. Keeping channels and methods separate lets one channel offer multiple methods and allows disabling a single method independently during an outage.
+Two layers, so one channel can back several methods and an outage disables only one:
 
-Secure rollout process:
+- **Payment channels** ("Billing & entitlements → Payment channels") store gateway credentials per protocol: **Stripe, EPay-compatible, and Waffo**; multiple channels per protocol (e.g. different merchant accounts) are allowed. Credentials stay server-side. A channel has a name, protocol, environment (`live` / `test`), and a per-protocol credential form. Test channels are visible and usable only by administrators, so the safe-launch flow can run completely before production keys go in. Webhook callbacks arrive at `GET`/`POST /api/payments/webhooks/:channelId`; the callback URL shown per channel is stable for the life of that channel and must be registered in the provider console. Config values are masked with a `••••••` sentinel once saved — leaving an already-masked field unchanged keeps the secret. Channels with bound payment methods or active orders cannot be deleted; clear those first, or use the orders page to resolve pending orders.
+- **Payment methods** ("Billing & entitlements → Payment methods") are what buyers see at checkout: display name and icon are public; protocol parameters bind to a specific channel (EPay adds a gateway `type`, e.g. `alipay`, `wxpay`, or `qqpay`). Only enabled methods bound to an enabled channel appear to buyers. The page also stores the optional **card-code purchase link** (`card_purchase_url`): when set, the buyer's payment dialog adds a "purchase a prepaid code" option that opens that address (HTTP(S) or a root-relative `/` path).
 
-1. Create restricted API/webhook credentials with the payment provider, separating test and production environments.
-2. Create the payment channel in the admin console and register callbacks using the webhook URL shown there.
-3. Verify webhook signatures or secrets, and confirm callbacks reach the public instance over HTTPS.
-4. Create a test payment method and test credit package visible only to administrators.
-5. Complete order placement, success, failure, cancellation, duplicate callbacks, and delayed callbacks using the provider's real test environment.
-6. Review order status, credit crediting, usage, refunds, or manual reconciliation, then switch to the production environment and publish.
+### Safe launch flow
 
-Test and production environments must use different keys and different product configurations. Never leave a test channel open to regular users, and never commit production webhook keys to version control or configuration screenshots.
+1. Create **restricted** API/webhook credentials at the provider, strictly separating test and production (different keys, different product configs).
+2. Create the payment channel and register its callback with the webhook URL shown in the admin UI.
+3. Confirm callbacks arrive over HTTPS at the public instance with signature verification on; webhooks depend on both egress and inbound health.
+4. Create an admin-only test payment method plus a cheap credit package.
+5. In the provider's sandbox run: checkout, success, failure, cancellation, **duplicate callbacks**, and delayed callbacks.
+6. Verify order states, credit arrival, usage records, and the refund/manual-reconciliation path before switching to production keys and going public.
 
-## Orders and reconciliation
+:::warning Idempotency and stalled orders
 
-The "Payment orders" page is for viewing order status, filtering anomalies, and, when necessary, reconciling manually or cleaning up test orders. Manual actions should only fix verified external payment facts; they must not become a routine way to hand out credits that bypasses payment verification.
+Payment events are deduplicated by (provider, channel, event ID): a duplicate webhook never double-credits, so don't "help" it along manually. Long-stalled orders get closed via the orders page "safe close" action — not by editing the database.
 
-When disputes, callback failures, or amount mismatches occur:
+:::
 
-1. Preserve the payment provider's order number, event ID, timestamp, amount, currency, and signature verification result.
-2. Check the Aivory order status, whether credits were already credited, and whether duplicate webhooks were received.
-3. Confirm the final status in the payment provider's console first, then perform manual reconciliation.
-4. Record the operator, reason, and linked evidence to prevent multiple administrators from crediting the same order twice.
+## Payment orders and reconciliation
 
-The network entry point for payment webhooks requires HTTPS, a stable public callback address, and reasonable rate limiting. Don't rely on opening an admin page in a browser to "trigger" crediting.
+"Billing & entitlements → Payment orders" shows checkout, verification, and fulfillment status, and supports reconciliation or safely closing stalled orders. The ledger is arranged so an admin can trace every step: the order row itself (created → processing → fulfilled / failed / expired / cancelled), one or more provider **attempts** (`payment_order_attempts`, resuming EPay reuses the outstanding merchant order ID), and the raw **events** the webhooks delivered (`payment_events`, idempotent on `UNIQUE(provider, channel_id, event_id)`). Manual actions may only fix **verified external payment facts**; they are never a route to issue credits around payment validation. On disputes or amount mismatches:
 
-## Operations and audit
+1. Preserve the provider's order ID, event ID, time, amount, currency, and signature-verification result.
+2. Check the Aivory order state, whether credits landed, and whether webhooks duplicated.
+3. Confirm the final status in the provider console before any manual reconciliation.
+4. Record operator, reason, and linked evidence so multiple admins never double-grant.
 
-Usage, analytics, orders, redemption records, and user feedback should be reviewed together: growing credit balances don't necessarily mean real model costs are under control, and model peaks plus abnormal tool calls can also create cost risk.
+Reconciliation and safe close are separate actions with different safety windows:
 
-Check regularly after launch:
+- **Reconcile** re-fetches the provider's order and advances Aivory's order to match verified facts; a pending order that the provider reports as paid becomes fulfilled.
+- **Safe close** only acts on *stalled* orders (pending / processing) and refuses to act on already-paid states — the UI shows an acknowledgement before running. The EPay-compatible protocol has no reliable generic close API, so closing there only flips the *local* order state and keeps the gateway channel enabled; a later, signature-verified success event still fulfills the order and grants value. Permanent delete is gated separately on `can_delete` (terminal status) and, for EPay, on the admin acknowledging that the gateway order is confirmed unpaid/closed.
 
-- average cost, failure rate, refunds, and suspicious high-frequency usage per user group.
-- whether orders match the payment provider's bills, and whether there are long-pending or duplicate orders.
-- whether model prices, credit conversion, and free allowances still cover costs.
-- whether administrators can still access and rotate payment channel keys and whether webhooks still verify.
+Payment orders are an immutable commercial snapshot: provider, channel/method, product name, amount/currency, and entitlement fields are copied at creation, so later edits to channels or prices can never rewrite a past order.
 
-Payment, channel, OAuth, SMTP, and storage configurations contain secrets. Administrator configuration exports and full backups should all be encrypted at rest, access-restricted, and protected to the same standard as production keys.
+### Pricing and currency conventions
+
+- Group prices and credit packages are stored in **minor units** of the settlement currency (ISO 4217 three-letter code); switching currency never rewrites historical prices.
+- Model unit prices are recorded per 1M tokens in USD (enter them directly for USD-billed providers); the credit conversion is also USD-anchored — the product of the two is what users burn. When operating cross-currency, accept "display price ≠ cost price" and absorb FX drift in the conversion rate.
+- Price edits affect future settlements only; validate in the sandbox before they go live, and tell users via the announcement page.
+
+### Common commercial recipes
+
+| Scenario | Recommended practice |
+| --- | --- |
+| Goodwill compensation | A one-off credit adjustment on that user (with reason, notice logged) — never a public "compensation package" anyone can buy |
+| Enterprise bulk purchase | A batch of group-redeem codes: named batch, expiry, use caps; hand out after offline sign-off |
+| Referral rewards | Codes per campaign batch; disable the batch the moment it ends — already-credited balances are unaffected |
+| Limited-time promo | New cheap credit package + enabled/sort controls for shelving; old package orders stay queryable |
+| Staff accounts | Dedicated group + generous periodic credits + loose permissions; on departure, move groups rather than delete accounts |
+
+### Payment troubleshooting quick lookup
+
+| Symptom | Check first |
+| --- | --- |
+| Provider says paid; Aivory order still pending | Did the webhook arrive? (public HTTPS entry, callback URL, provider egress logs/IP allowlist) |
+| Callback signature verification fails | Wrong key pair (test vs production); provider rotated its signing key |
+| User paid but no credit landed | Does the event table already carry this event_id (received but unfulfilled → reconcile); was the order safe-closed? |
+| Fear of double crediting | Don't — (provider, channel, event ID) deduplication makes webhook replays safe; never "help" them |
+| A payment method missing at checkout | Method disabled, its channel stopped, or group/currency mismatch |
+| Credits granted ≠ expectation | Did the conversion rate or model unit price just change? Edits don't retro-apply |
+
+## Usage and billing analytics
+
+"Data & operations → Usage & billing" is the durable dashboard: a 30-day default window (`AIVORY_API_ANALYTICS_WINDOW`, default 30), equal-length period comparison, trend metrics (metered operations, delivered turns, input + output tokens, model cost, credits consumed, active users), an economics block (credit-charged turn share, cost coverage, cost per turn / per active user, credits per charged turn, metered operations per turn, charged-user count), and breakdowns by user / model / workspace / purpose / channel — with a model-feedback view toggle. The "Usage & billing" trend reflects the immutable usage facts; the "Usage" page lists per-call metering (input/output tokens, cost, linked conversation, timestamp) and lets you delete diagnostic log rows.
+
+Review at least weekly after launch:
+
+- Per-group average cost, failure rate, refunds, and suspicious high-frequency use.
+- Orders versus the provider bill; long-pending or duplicated orders.
+- Whether model prices, credit conversion, and free allowances still cover cost (sync model pricing after any provider repricing).
+- Whether admins can still access and rotate payment credentials and whether webhooks still verify.
+
+### The user-facing side (buyer surfaces)
+
+Buyers and end users never touch the admin rail. Their entry points mirror the same underlying tables:
+
+- **Subscription page** (`/subscription`): current plan and balance, a catalog of purchasable user groups (monthly / yearly) and permanent-credit packages, a "redeem a code" box (group + duration, or permanent credits), cycle-fee display, and the payment history list with per-order details (product, amount, tax, currency, method, provider, timestamps, failure reason).
+- **Checkout and return**: choosing a plan or package opens the payment-method chooser, then the provider's hosted page (Stripe Checkout redirect / form_post, or a Waffo/EPay gateway); the return route verifies the order status and confirms or explains the outcome (duplicate-checkout protection, expired-session handling, and "previous checkout must be confirmed before retry" guards).
+- **Credit adjustment notice**: any admin one-off credit change surfaces as a notice banner on the user's next sign-in (`credit_adjustment_notifications`, claimed once via `POST /api/me/credit-adjustments/claim`).
+
+#### The immutable facts an auditor can rely on
+
+- `payment_orders` is a creation-time snapshot; editing a channel or price afterwards never mutates past orders.
+- `payment_order_attempts` records every checkout attempt; `payment_events` keeps every signature-verified webhook.
+- `credit_ledger` (kind `timed_debit` / `permanent_debit`) and `quota_ledger` (limit `count` / `cost` per numbered window) are the authoritative billing ledgers; usage-log cleanup never prunes them.
+- `billing_usage` appends one cost fact (in USD micros) per successful charged turn and feeds the durable "Usage & billing" trend.
+
+Payments, channels, OAuth, SMTP, and storage configs all contain secrets: encrypt admin config exports and full backups, restrict access, and protect them to production-key standards.
+
+:::note No official screenshots for this rail
+
+The "Billing & entitlements" pages ship without bundled screenshots; they follow the same list-and-editor layout language as User Groups and Channels.
+
+:::
+
+Payments, channels, OAuth, SMTP, and storage configs all contain secrets: encrypt admin config exports and full backups, restrict access, and protect them to production-key standards.

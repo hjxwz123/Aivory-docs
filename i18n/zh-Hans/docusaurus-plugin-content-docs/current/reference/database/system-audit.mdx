@@ -1,0 +1,91 @@
+---
+title: 系统与审计表
+sidebar_position: 9
+description: settings 全局键值表与 pending_storage_cleanup 删除清理队列的逐列参考，含全部启动种子的 settings 键。
+---
+
+# 系统与审计表
+
+系统域 2 张表。Aivory **没有 `schema_migrations` 之类的迁移记账表**——迁移靠内嵌 schema + 幂等 ALTER + `settings` 里的回填标记位实现（见[总览的迁移机制](./overview.mdx)）。
+
+## `settings` — 全局键值配置
+
+绝大多数**运行时配置**不在环境变量里，而在这张表——管理后台保存后**下一请求即生效**，无需重启；多副本经 Redis 频道 `cfg:invalidate` 广播失效（`cmd/api/main.go:82-90`）。共 3 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `key` | TEXT | 否（PK） | — | 配置键 |
+| `value` | TEXT | 否 | — | **JSON 编码**：`"true"` 带引号、数组对象同理。裸文本与 JSON 值不是一回事 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 最后写入时间 |
+
+### 启动时播种的键（`store.Seed`，`store.go:1118-1232`）
+
+所有键以 `INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO NOTHING`（`store.go:1220`）写入——**不覆盖**管理员已有修改。值以 JSON 字面量呈现：
+
+| 键 | 种子值 | 含义 |
+| --- | --- | --- |
+| `default_model_id`、`task_model_id`、`title_model_id`、`file_route_model_id`、`context_compaction_model_id`、`tool_route_model_id`、`image_prompt_model_id`、`verify_model_id` | `""` | 模型策略位（管理后台「模型策略」页）；全空 = 聊天不可用 |
+| `rag_full_text_threshold` | `8000` | 估算 token ≤ 此值的文档全文注入，否则向量化检索 |
+| `rag_top_k` | `8` | 检索块数 |
+| `rag_dynamic_topk` | `false` | 按相似度阈值动态取块 |
+| `rag_similarity_threshold` | `0.5` | 动态模式的余弦相似度过线值 |
+| `rag_rerank_enabled` / `rag_rerank_api_url` / `rag_rerank_api_key` / `rag_rerank_model` | `false` / `""` / `""` / `""` | 可选 OpenAI 格式重排（独立于聊天渠道，只参与知识库检索） |
+| `credit_preflight_enabled` | `true` | 生成前预估 prompt token，余额不足直接拒绝 |
+| `keep_recent_rounds` | `6` | 压缩保留的最近轮数 |
+| `summary_max_tokens` | `8192` | 摘要块 token 上限 |
+| `compaction_request_max_tokens` | `32768` | 压缩请求的 token 上限 |
+| `context_compaction_prompt` | `""` | 自定义压缩提示词 |
+| `compaction_token_trigger` | `32000` | 自动压缩触发阈值 |
+| `compaction_token_cap` | `80000` | 压缩上限 |
+| `compaction_token_target_percentage` | `60` | 压完目标占比 |
+| `compaction_retention_percentage` | `40` | 保留占比 |
+| `compaction_enabled` | `true` | 自动压缩开关 |
+| `memory_enabled` | `true` | 长期记忆开关 |
+| `daily_message_limit` / `daily_image_limit` | 来自 `DAILY_MESSAGE_LIMIT`(200) / `IMAGE_DAILY_LIMIT`(30) | 每日配额种子 |
+| `daily_token_limit` | `0` | 每日 token 上限（`0` = 不限；对应 `quota_ledger` 的 `daily_token` 窗口） |
+| `max_concurrent_generations` | `3` | 单用户并发生成上限 |
+| `password_login_enabled` | `true` | 是否允许口令登录 |
+| `auth_entry_mode` | `"login_page"` | 登录入口形态 |
+| `auth_default_provider_id` | `""` | 默认第三方登录 |
+| `oauth_initial_password_policy` | `"required"` | OAuth 新账号是否强制设置口令 |
+| `oauth_auto_provision_enabled` | `true` | OAuth 首登自动建号 |
+| `signup_open` | `true` | 开放注册 |
+| `email_verification_required` | `false` | 注册是否需邮箱验证（开启则新号 `users.status='pending'`） |
+| `email_domain_whitelist` | `""` | 注册邮箱域名白名单 |
+| `register_ip_daily_limit` | `0` | 单 IP 每日注册数上限（`0` = 不限） |
+| `register_captcha_required` / `login_captcha_required` | `false` | 注册/登录滑块验证开关 |
+| `credits_per_usd` | `0` | 1 USD 模型成本 = N 积分；**`0` = 全局积分体系关闭** |
+| `settlement_currency` | `"USD"` | 用户侧价格的统一结算币种 |
+| `card_purchase_url` | `""` | 外部购买卡密入口 |
+| `disabled_tools` | `[]` | 平台级禁用的内置工具 id |
+| `sandbox_base_url` / `sandbox_api_key` | `""` / `""` | 沙箱侧车接入（管理员页可覆盖 env 值） |
+| `storage_provider` | `"local"` | 对象存储后端：`local` / s3 / aliyun_oss（`""` = 关） |
+| `storage_archive_ttl_days` | `30` | 沙箱工作区归档保留天数（`0` = 永久） |
+| `max_image_upload_mb` | `5` | 图片上传软上限（`MAX_UPLOAD_BYTES` 仍是绝对天花板） |
+| `moderation_keywords` / `moderation_model_id` / `moderation_categories` / `moderation_message` | `[]` / `""` / 7 类默认 / 默认文案 | 内容审核词表、审核模型与拦截文案 |
+| `log_full_requests` / `log_errors_only` / `log_request_bodies` | `false` / `true` / `true` | 日志隐私开关（影响 `usage_logs.request_*` 的留存） |
+| `announcement` | `{"enabled":false,"title":"","body":"","image_url":"","remember_dismiss":true,"require_read":false,"updated_at":0}`（种子默认值，`store.go:1218`） | 单条全局公告（`image_url` 非空 = 图文公告；`updated_at` 兼作关闭版本戳） |
+
+此外，**一次性回填/清理的幂等标记位**也写在本表（全量清单：`oauth_pwset_backfill_v1`、`msg_search_text_backfill_v1`、`user_sort_order_backfill_v1`、`user_onboarded_backfill_v1`、`user_group_billing_prices_backfill_v2`、`message_feedback_backfill_v1`、`daily_token_quota_ledger_backfill_v1`、`user_tool_mode_settings_cleanup_v1`）——它们就是 Aivory 的"迁移记账"。退役键会被迁移删除（`summary_target_percent`、`summary_merge_max_tokens`，`store.go:32-35,469`）。
+
+:::note 已知代码注释滞后
+`store.go:1176-1177` 把 `register_captcha_required` 描述为"算术题验证码"，实际实现是**滑块拼图**验证码（`/api/public/captcha`，`internal/api/captcha.go`）。以行为为准。
+:::
+
+## `pending_storage_cleanup` — 删除清理队列
+
+异步删号（§8.1-A）的"删除前清单"。共 3 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `path` | TEXT | 否（PK） | — | 待物理删除的对象存储键/本地路径（主键即幂等去重） |
+| `user_id` | TEXT | 否 | — | 归属用户。**故意无 FK**——用户行已删、清单还要继续存在 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 登记时间 |
+
+- **协议**：先登记路径 → 再做破坏性 SQL → 逐条物理 unlink 并删行；**启动时清扫残留**。因此任何时候该表非空都只意味着"上次物理清理被打断"，重启应用即可收敛（运维 SQL 见[总览](./overview.mdx)示例 8）。
+
+## 相关页面
+
+- [平台运营与设置](../../admin/platform-operations.mdx) — 公告、日志、法律条款等管理界面
+- [备份与迁移](../../admin/platform-operations.mdx) — 配置导出/导入与全量 ZIP 备份
+- [数据库总览与运维](./overview.mdx) — 迁移机制与运维 SQL

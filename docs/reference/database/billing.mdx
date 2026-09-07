@@ -1,0 +1,332 @@
+---
+title: Subscriptions, credits and payments tables
+sidebar_position: 6
+description: 'Column-by-column reference for the 15 billing-domain tables: user_groups, credit/quota ledgers, packages, redeem codes, and payment channels/methods/orders/events.'
+---
+
+# Subscriptions, credits and payments tables
+
+Fifteen billing-domain tables (175 columns). Global rules: **all authoritative amounts are fixed-point micros integers** (`*_micros`, 1e-6) or `*_amount_minor` in the **settlement currency's smallest unit**; REAL columns are display mirrors. Switches like `settlement_currency` and `credits_per_usd` (`0` = the credit system is off platform-wide) live in [`settings`](./system-audit.mdx) (notation per the [overview](./overview.mdx)).
+
+## `user_groups` — membership tiers
+
+20 columns. The row `ug_free` (`is_default=1`) always exists, created by `Seed`.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `ug_` + 12 hex chars; the default tier is always `ug_free` |
+| `name` | TEXT | no | — | tier name; `lower(trim(name))` unique |
+| `description` | TEXT | no | `''` | description |
+| `features` | TEXT (JSON) | no | `'[]'` | JSON array of selling points shown on the subscription page |
+| `monthly_price_amount_minor` | INTEGER → BIGINT | no | `0` | monthly price in minor units of the settlement currency. Legacy columns `price_amount_minor`/`price_usd`/`price_cny` were backfilled once by migration (`store.go:720-740`) |
+| `yearly_price_amount_minor` | INTEGER → BIGINT | no | `0` | yearly price |
+| `is_default` | INTEGER | no | `0` | `1` = default tier for new users (exactly one row is 1) |
+| `sort_order` | INTEGER | no | `0` | subscription-page ordering |
+| `max_projects` | INTEGER | no | `0` | project cap per member (`0` = unlimited) |
+| `max_kbs` | INTEGER | no | `0` | knowledge-base cap |
+| `max_workspaces` | INTEGER | no | `0` | ※ ALTER-added: cap on **owned** workspaces |
+| `max_storage_mb` | INTEGER | no | `0` | non-image upload storage quota in MB (`0` = unlimited; images excluded) |
+| `credit_allowance` | REAL | no | `0` | display mirror of the timed allowance |
+| `credit_allowance_micros` | INTEGER → BIGINT | no | `0` | **authoritative** timed credit allowance (fixed-point) |
+| `credit_period_seconds` | INTEGER | no | `0` | timed-credit refresh window (`0` = no timed credits, permanent only) |
+| `is_public` | INTEGER | no | `1` | ※ ALTER-added: listed on the public subscription page |
+| `is_purchasable` | INTEGER | no | `1` | whether checkout is open for this tier (can pause temporarily) |
+| `permissions` | TEXT (JSON) | no | `'{}'` | normalized group capability/resource policy (RBAC caps; empty object normalizes to the permissive policy, `user_group_permissions.go`) |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Index**: `idx_user_groups_name_unique` (UNIQUE ON `lower(trim(name))`).
+
+## `credit_ledger` — authoritative debit ledger
+
+Billing records; **never deleted** by usage-log cleanup. 11 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | entry id |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `group_id` | TEXT | no | — | tier at time of debit (soft reference, no FK — deleting a tier never erases its ledger) |
+| `cycle_anchor` | INTEGER → BIGINT | no | `0` | cycle anchor (= `users.credit_cycle_anchor`) |
+| `cycle_start` | INTEGER → BIGINT | no | `0` | start of this cycle |
+| `kind` | TEXT | no | — | `timed_debit` (allowance) / `permanent_debit` (balance) — constants `store/credits.go:15-16` |
+| `amount` | REAL → DOUBLE PRECISION | no | — | display mirror |
+| `amount_micros` | INTEGER → BIGINT | no | `0` | **authoritative** debit (fixed-point) |
+| `source_type` | TEXT | no | `''` | source kind (e.g. message turn) |
+| `source_id` | TEXT | no | `''` | source id (idempotent traceability) |
+| `created_at` | INTEGER → BIGINT | no | `now()` | debit time |
+
+- **Indexes**: `idx_credit_ledger_timed(user_id, group_id, cycle_anchor, cycle_start, kind)` (window aggregation), `idx_credit_ledger_user_time(user_id, created_at)` (both created during migration, `store.go:574-575`).
+
+## `credit_reservations` — pre-flight holds
+
+Funds reserved before generation to prevent overspend. 10 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | reservation id |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `amount_micros` | INTEGER → BIGINT | no | — | held amount, `CHECK (> 0)` |
+| `actual_micros` | INTEGER → BIGINT | no | `0` | settled amount, `CHECK (>= 0)` |
+| `source_type` | TEXT | no | `''` | source kind |
+| `source_id` | TEXT | no | `''` | source id |
+| `status` | TEXT | no | `'reserved'` | state machine `reserved` → `settling` → `settled` → `released` (CHECK) |
+| `expires_at` | INTEGER → BIGINT | no | — | dangling-hold reclaim time, `CHECK (> 0)` |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Unique**: `UNIQUE(source_type, source_id)` — double-holds on one source are blocked at DB level. **Index**: `(user_id, status, expires_at)`.
+
+## `credit_adjustment_notifications` — adjustment notices
+
+One-time notices created by admin permanent-credit adjustments. 7 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | notice id |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `direction` | TEXT | no | — | `add` / `remove` (CHECK) |
+| `amount_micros` | INTEGER → BIGINT | no | — | positive adjustment, `CHECK (> 0)` |
+| `reason` | TEXT | no | `''` | admin-supplied reason |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `claimed_at` | INTEGER → BIGINT | no | `0` | set **atomically** (CAS) when the signed-in user fetches the notice — refreshes and other devices cannot show it twice |
+
+- **Index**: `idx_credit_adjustment_notifications_user_pending(user_id, claimed_at, created_at, id)`.
+
+## `quota_ledger` — quota windows
+
+Windowed model/global quota holds and finals. 14 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `qr_` + 12 hex chars |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `scope_type` | TEXT | no | — | `CHECK (non-blank)`. Values: `model_chat` / `model_image` / `daily_image` / `daily_token` (`store/quotas.go:107-110`) |
+| `model_id` | TEXT | no | `''` | set for model-level quotas (soft reference) |
+| `group_id` | TEXT | no | `''` | tier window attribution (soft reference) |
+| `cycle_anchor` | INTEGER → BIGINT | no | `0` | cycle anchor |
+| `window_start` | INTEGER → BIGINT | no | — | window origin, `CHECK (> 0)` |
+| `limit_type` | TEXT | no | — | `count` / `cost` (CHECK) |
+| `reserved_micros` | INTEGER → BIGINT | no | `0` | hold |
+| `actual_micros` | INTEGER → BIGINT | no | `0` | final |
+| `status` | TEXT | no | `'reserved'` | `reserved` / `finalized` / `released` (CHECK) |
+| `expires_at` | INTEGER → BIGINT | no | — | `CHECK (> window_start)` |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Index**: `idx_quota_ledger_scope(user_id, scope_type, model_id, group_id, cycle_anchor, window_start, status)`.
+
+## `billing_usage` — per-message billing rows
+
+Immutable billing facts per message/purpose. 12 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | row id |
+| `user_id` | TEXT | **yes** | `NULL` | FK→`users(id)`, `SET NULL` (anonymized on account deletion) |
+| `conversation_id` | TEXT | no | `''` | snapshot |
+| `message_id` | TEXT | no | `''` | snapshot |
+| `model_id` | TEXT | no | `''` | snapshot |
+| `purpose` | TEXT | no | `''` | same taxonomy as `usage_logs.purpose` (`chat`/`task.*`/`image`/`embedding`/`verify`) |
+| `cost_micros` | INTEGER → BIGINT | no | `0` | cost (fixed-point), `CHECK (>= 0)` |
+| `images_count` | INTEGER | no | `0` | image count |
+| `input_tokens` | INTEGER | no | `0` | input tokens |
+| `output_tokens` | INTEGER | no | `0` | output tokens |
+| `currency` | TEXT | no | `'USD'` | `CHECK (non-blank)` |
+| `created_at` | INTEGER → BIGINT | no | `now()` | time |
+
+- **Indexes**: `(message_id, purpose, created_at)`, `(user_id, created_at)`.
+
+## `credit_packages` — permanent-credit top-up SKUs
+
+9 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | package id |
+| `name` | TEXT | no | — | product name |
+| `description` | TEXT | no | `''` | description |
+| `credits` | REAL | no | — | face credit amount (PG keeps REAL/float4; money math converts via micros) |
+| `price_amount_minor` | INTEGER → BIGINT | no | `0` | price in minor units of the settlement currency |
+| `enabled` | INTEGER | no | `1` | purchasable flag |
+| `sort_order` | INTEGER | no | `0` | ordering |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Index**: `idx_credit_packages_order(sort_order, name)`. A special legacy permanent-credit row is migrated by `MigrateLegacyCreditPackage`.
+
+## `model_group_quotas` — model × tier quotas
+
+5 columns. **Semantics**: a model with **no rows here is open to all tiers**; once any row exists, **only the listed tiers may use it**; `limit_value=0` = open but metered.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `model_id` | TEXT | no (PK part) | — | FK→`models(id)`, CASCADE |
+| `group_id` | TEXT | no (PK part) | — | FK→`user_groups(id)`, CASCADE |
+| `period_seconds` | INTEGER | no | `604800` | window length (default 7 days), `CHECK (> 0)` |
+| `limit_type` | TEXT | no | `'count'` | `cost` (in the model's currency) / `count` (calls), CHECK |
+| `limit_value` | REAL | no | `0` | window cap (`0` = open); PG keeps REAL |
+
+- **PK**: composite `(model_id, group_id)`. **Index**: `idx_mgq_group(group_id)`.
+
+## `redeem_codes` — redeem codes
+
+14 columns. Code format `XXXX-XXXX-XXXX` in Crockford base32 minus ambiguous characters (`ids.go:32-38`).
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `rc_` + 12 hex chars |
+| `code` | TEXT | no | — | code text, UNIQUE database-wide |
+| `kind` | TEXT | no | `'group'` | `group` (grants a tier) / `credits` (grants permanent credits). For credit codes `group_id` is only an FK-satisfying placeholder and **never applies** |
+| `group_id` | TEXT | no | — | FK→`user_groups(id)`, CASCADE |
+| `duration_days` | INTEGER | no | `30` | membership duration (`0` = permanent), `CHECK (>= 0)` |
+| `credits` | REAL | no | `0` | granted credits when `kind=credits`, `CHECK (>= 0)` |
+| `max_uses` | INTEGER | no | `1` | redemption capacity, `CHECK (> 0)` |
+| `used_count` | INTEGER | no | `0` | uses so far, `CHECK (>= 0 AND <= max_uses)` |
+| `expires_at` | INTEGER → BIGINT | no | `0` | deadline for redeeming the **code itself** (`0` = no deadline) |
+| `enabled` | INTEGER | no | `1` | `0` = revoked without deleting the row (keeps audit history) |
+| `note` | TEXT | no | `''` | admin note |
+| `batch_name` | TEXT | no | `''` | batch label |
+| `created_by` | TEXT | no | `''` | creating admin id (soft reference) |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+
+- **Indexes**: `idx_redeem_codes_code(code)`, `idx_redeem_codes_batch(batch_name)`.
+
+## `redeem_redemptions` — redemption audit
+
+8 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | redemption id |
+| `code_id` | TEXT | no | — | FK→`redeem_codes(id)`, CASCADE |
+| `user_id` | TEXT | no | — | FK→`users(id)`, CASCADE |
+| `group_id` | TEXT | no | — | FK→`user_groups(id)`, CASCADE (granted tier) |
+| `previous_group_id` | TEXT | no | `''` | tier before redemption (for expiry restore) |
+| `credits` | REAL | no | `0` | granted credits (audit) |
+| `granted_at` | INTEGER → BIGINT | no | — | effective time (**no default**, written explicitly) |
+| `expires_at` | INTEGER → BIGINT | no | — | membership expiry |
+
+- **Unique**: `UNIQUE(code_id, user_id)` — one user cannot double-redeem the same code (per-user cap on multi-use codes). **Indexes**: `user_id`, `code_id`.
+
+## `payment_channels` — payment channels
+
+9 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `paych_` + 12 hex chars |
+| `name` | TEXT | no | — | channel name; `lower(trim(name))` unique |
+| `provider` | TEXT | no | — | `stripe` / `epay` / `waffo` (constants `payment/payment.go:58-60`) |
+| `environment` | TEXT | no | `'live'` | `live` / `test` (`store/payments.go:25-26`; legacy rows backfilled once) |
+| `config` | TEXT (JSON) | no | `'{}'` | provider-specific JSON **containing credentials in plaintext** — masked only by the API |
+| `enabled` | INTEGER | no | `1` | enabled flag |
+| `sort_order` | INTEGER | no | `0` | ordering |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Indexes**: name UNIQUE + `idx_payment_channels_order(sort_order, name)`. Before deletion, its `payment_methods` must be removed (RESTRICT, below) and no orders may be pending (app-level checks).
+
+## `payment_methods` — user-selectable payment methods
+
+Options a channel exposes to users. 10 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | `paym_` + 12 hex chars |
+| `channel_id` | TEXT | no | — | FK→`payment_channels(id)`, **`ON DELETE RESTRICT`** — methods must be deleted before the channel |
+| `name` | TEXT | no | — | display name; `(channel_id, lower(trim(name)))` unique |
+| `type` | TEXT | no | — | method type (free string, e.g. `alipay`, `card` — EPay maps it via `params["type"]`) |
+| `icon` | TEXT | no | `''` | icon |
+| `config` | TEXT (JSON) | no | `'{}'` | method-level config |
+| `enabled` | INTEGER | no | `1` | selectable flag |
+| `sort_order` | INTEGER | no | `0` | ordering |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+## `payment_orders` — payment orders
+
+**Immutable commercial snapshot + mutable processing state**: provider, channel/method, product, and amounts are copied at creation so later admin catalog edits never rewrite history. 38 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | order id |
+| `user_id` | TEXT | **yes** | `NULL` | FK→`users(id)`, `SET NULL` (order survives account deletion) |
+| `user_email` | TEXT | no | — | buyer email snapshot |
+| `provider` | TEXT | no | — | gateway kind snapshot |
+| `environment` | TEXT | no | `'live'` | `live` / `test` (test orders are admin-only) |
+| `channel_id` | TEXT | no | — | snapshot (**no FK** — channels can be deleted while orders stand) |
+| `channel_name` | TEXT | no | — | snapshot |
+| `method_id` | TEXT | no | — | snapshot |
+| `method_name` | TEXT | no | — | snapshot |
+| `method_type` | TEXT | no | — | snapshot |
+| `method_config` | TEXT (JSON) | no | `'{}'` | method config as of order creation |
+| `product_type` | TEXT | no | — | `credit_package` / `user_group` (`store/payments.go:19-20`) |
+| `product_id` | TEXT | no | — | product id snapshot |
+| `product_name` | TEXT | no | — | product name snapshot |
+| `amount_minor` | INTEGER → BIGINT | no | — | catalog amount (tax-exclusive) |
+| `paid_amount_minor` | INTEGER → BIGINT | no | `0` | provider-settled total actually paid |
+| `tax_amount_minor` | INTEGER → BIGINT | no | `0` | tax added at checkout (VAT/GST processors like Waffo Pancake) |
+| `currency` | TEXT | no | — | catalog currency |
+| `provider_amount_minor` | INTEGER → BIGINT | no | `0` | provider-side settlement amount (legacy rows backfilled to `amount_minor`, `store.go:544-547`) |
+| `provider_currency` | TEXT | no | `''` | settlement currency (backfilled to `currency`) |
+| `conversion_rate` | TEXT | no | `''` | conversion rate kept as a string for precision |
+| `credits` | REAL → DOUBLE PRECISION | no | `0` | entitlement: credits granted (when product = credit_package) |
+| `user_group_id` | TEXT | no | `''` | entitlement: target tier |
+| `billing_cycle` | TEXT | no | `''` | `monthly` / `yearly` (`store/payments.go:22-23`) |
+| `provider_order_id` | TEXT | no | `''` | gateway order reference |
+| `provider_payment_id` | TEXT | no | `''` | gateway payment reference (e.g. Stripe PaymentIntent) |
+| `checkout_session_id` | TEXT | no | `''` | Stripe Checkout session id |
+| `checkout_url` | TEXT | no | `''` | hosted checkout URL |
+| `checkout_expires_at` | INTEGER → BIGINT | no | `0` | checkout link expiry |
+| `last_reconciled_at` | INTEGER → BIGINT | no | `0` | last reconciliation attempt |
+| `reconcile_error` | TEXT | no | `''` | last reconciliation failure |
+| `status` | TEXT | no | `'pending'` | state machine: `pending` / `processing` / `fulfilled` / `failed` / `cancelled` (**British spelling**) / `expired` (`store/payments.go:28-33`) |
+| `failure_code` | TEXT | no | `''` | failure code (includes `admin_manual_close` for manual closure) |
+| `failure_message` | TEXT | no | `''` | failure detail |
+| `paid_at` | INTEGER → BIGINT | no | `0` | payment confirmation time |
+| `fulfilled_at` | INTEGER → BIGINT | no | `0` | entitlement delivery completion |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Indexes**: `(user_id, created_at DESC, id)`, `(channel_id, status, created_at)`, `(status, created_at)`; two **partial unique indexes** (created during migration): `(provider, channel_id, provider_order_id) WHERE provider_order_id<>''` and `(provider, channel_id, provider_payment_id) WHERE provider_payment_id<>''` (`store.go:576`).
+
+## `payment_order_attempts` — checkout attempts
+
+One commercial order may have several checkout attempts. 9 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `merchant_order_id` | TEXT | no (PK) | — | merchant order number sent to the gateway |
+| `order_id` | TEXT | no | — | FK→`payment_orders(id)`, CASCADE |
+| `provider` | TEXT | no | — | gateway kind |
+| `channel_id` | TEXT | no | — | channel snapshot |
+| `provider_order_id` | TEXT | no | `''` | gateway-returned reference |
+| `status` | TEXT | no | `'issued'` | `issued` / `paid` (`store/payments.go:35-36`) |
+| `paid_at` | INTEGER → BIGINT | no | `0` | payment time of this attempt |
+| `created_at` | INTEGER → BIGINT | no | `now()` | creation time |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | update time |
+
+- **Indexes**: `(order_id, created_at, merchant_order_id)`; partial unique `(provider, channel_id, provider_order_id) WHERE provider_order_id<>''`.
+- **Notes**: EPay resume-checkout **reuses** the outstanding `merchant_order_id` — the integration never issues a replacement without trusted proof the gateway reference ended; ambiguous legacy orders with multiple references fail closed.
+
+## `payment_events` — verified provider notifications
+
+8 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | local event id |
+| `provider` | TEXT | no | — | gateway kind |
+| `channel_id` | TEXT | no | — | channel |
+| `event_id` | TEXT | no | — | provider event id |
+| `order_id` | TEXT | no | — | FK→`payment_orders(id)`, CASCADE |
+| `event_type` | TEXT | no | `''` | raw provider event type (e.g. Stripe `checkout.session.completed`; free text) |
+| `created_at` | INTEGER → BIGINT | no | `now()` | receipt time |
+| `processed_at` | INTEGER → BIGINT | no | `0` | fulfillment completion (`0` = unprocessed) |
+
+- **Unique**: `UNIQUE(provider, channel_id, event_id)` — the first idempotency barrier; fulfillment additionally locks and re-checks the order, so two different success event ids can never grant value twice. **Index**: `(order_id, created_at, id)`.
+
+## Related pages
+
+- [Billing and entitlements admin](../../admin/billing.mdx) — matching UI
+- [Advanced environment variables](../../deployment/environment-advanced.mdx) — payment-related advanced knobs

@@ -171,6 +171,43 @@
   line-height: 1.35;
 }
 
+/* Hero entrance is pure CSS (same keyframe pattern the home page uses) so it
+   starts on the first server-rendered paint. The previous GSAP timeline set
+   autoAlpha: 0 on already-painted hero copy during hydration, which flashed
+   the whole section blank before fading it back in. Values mirror the old
+   timeline: power3.out ≈ cubic-bezier(0.33, 1, 0.68, 1), 560 ms copy, then
+   the aside at 240 ms (the '-=0.32' overlap) for 500 ms. */
+.pageHero [data-aivory-motion='hero-copy'] {
+  animation: heroCopyEnter 560ms both cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.heroAside[data-aivory-motion='hero-aside'] {
+  animation: heroAsideEnter 500ms 240ms both cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+@keyframes heroCopyEnter {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes heroAsideEnter {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes heroAsideEnterWide {
+  from { opacity: 0; transform: translate(22px, 8px); }
+  to { opacity: 1; transform: translate(0, 0); }
+}
+
+/* Above the component's old 'wide' breakpoint (min-width: 841px) the aside
+   slid in from the right; keep that distinction in CSS. */
+@media (min-width: 841px) {
+  .heroAside[data-aivory-motion='hero-aside'] {
+    animation-name: heroAsideEnterWide;
+  }
+}
+
 .section {
   padding: clamp(4.5rem, 9vw, 8rem) 0;
 }
@@ -495,4 +532,8 @@
   .textLink,
   .architectureLines line,
   .archNode { transition: none; animation: none; }
+
+  /* animation: none drops the 'both' fill, so hero content renders instantly. */
+  .pageHero [data-aivory-motion='hero-copy'],
+  .heroAside[data-aivory-motion='hero-aside'] { animation: none; }
 }

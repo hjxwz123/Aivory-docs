@@ -291,8 +291,12 @@ body.aivory-experience-page .aivory-navbar-cta:hover {
 }
 
 /* The main wrapper is rendered after Navbar, so :has() lets modern browsers
-   apply the hero treatment during the first server-rendered paint. The body
-   class rules above remain the fallback for older browsers and hydration. */
+   apply the hero treatment during the first server-rendered paint. Keep this
+   block a complete mirror of every body.aivory-home-page / body.aivory-experience-page
+   rule above: the hydration effect that adds the body class must change zero
+   computed values on browsers that support :has(), otherwise the navbar
+   reflows the moment React finishes hydrating. The body-class rules above
+   remain the fallback for engines without :has() (and for no-JS loads). */
 @supports selector(body:has(*)) {
   body:has(main.aivory-home-page) {
     background: oklch(15% 0.025 290);
@@ -369,24 +373,95 @@ body.aivory-experience-page .aivory-navbar-cta:hover {
     font-family: 'Geist Variable', 'Geist', 'Inter', ui-sans-serif, system-ui, sans-serif;
   }
 
+  body:has(main.aivory-home-page) .navbar__title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
   body:has(main.aivory-home-page) .navbar__link {
     min-height: 44px;
+    padding: 0.7rem 0.65rem;
     font-size: 0.86rem;
+    font-weight: 550;
     white-space: nowrap;
+    transition: color 180ms ease, background-color 180ms ease;
+  }
+
+  body:has(main.aivory-home-page) .navbar__link:hover,
+  body:has(main.aivory-home-page) .navbar__link--active {
+    color: hsl(40 6% 100%);
+    background: hsl(40 6% 95% / 0.08);
+  }
+
+  body:has(main.aivory-home-page) .dropdown__menu {
+    min-width: 12rem;
+    margin-top: 0.55rem;
+    padding: 0.45rem;
+    border: 0;
+    border-radius: 0.75rem;
+    background: hsl(260 38% 8% / 0.96);
+    box-shadow: 0 18px 45px hsl(260 70% 2% / 0.42), inset 0 1px 0 hsl(40 6% 95% / 0.1);
+    backdrop-filter: blur(12px);
+  }
+
+  @media (min-width: 997px) {
+    body:has(main.aivory-home-page) .dropdown::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      height: 0.65rem;
+    }
+  }
+
+  body:has(main.aivory-home-page) .dropdown__link {
+    min-height: 42px;
+    border-radius: 0.5rem;
+    color: hsl(40 6% 88% / 0.9);
+    font-size: 0.84rem;
+  }
+
+  body:has(main.aivory-home-page) .dropdown__link:hover {
+    background: hsl(258 92% 76% / 0.15);
+    color: hsl(40 6% 100%);
   }
 
   body:has(main.aivory-home-page) .aivory-navbar-cta {
     min-height: 42px;
+    margin-left: 0.7rem;
+    padding: 0.55rem 1rem;
     border-radius: 999px;
     background: hsl(40 6% 95%);
     color: hsl(260 35% 8%) !important;
     font-weight: 700;
   }
 
+  body:has(main.aivory-home-page) .aivory-navbar-cta:hover {
+    background: hsl(40 6% 100%);
+    color: hsl(260 35% 8%) !important;
+  }
+
   body:has(main.aivory-home-page) .navbar__toggle {
     min-width: 44px;
     min-height: 44px;
     color: hsl(40 6% 95%);
+  }
+
+  body:has(main.aivory-home-page) .navbar-sidebar {
+    background: hsl(260 38% 7%);
+    color: hsl(40 6% 95%);
+  }
+
+  body:has(main.aivory-home-page) .navbar-sidebar .menu__link,
+  body:has(main.aivory-home-page) .navbar-sidebar__back {
+    color: hsl(40 6% 90%);
+  }
+
+  body:has(main.aivory-home-page) .navbar-sidebar .menu__link:hover {
+    background: hsl(258 92% 76% / 0.14);
+    color: hsl(40 6% 100%);
   }
 
   body:has(main.aivory-experience-page) {
@@ -423,8 +498,18 @@ body.aivory-experience-page .aivory-navbar-cta:hover {
     color: oklch(88% 0.015 290);
   }
 
+  body:has(main.aivory-experience-page) .dropdown__link:hover {
+    background: oklch(72% 0.215 290 / 0.14);
+    color: oklch(98% 0.01 290);
+  }
+
   body:has(main.aivory-experience-page) .aivory-navbar-cta {
     background: oklch(72% 0.215 290);
+    color: oklch(18% 0.04 290) !important;
+  }
+
+  body:has(main.aivory-experience-page) .aivory-navbar-cta:hover {
+    background: oklch(78% 0.185 290);
     color: oklch(18% 0.04 290) !important;
   }
 }
@@ -488,9 +573,10 @@ body.aivory-experience-page .aivory-navbar-cta:hover {
     scroll-behavior: auto;
   }
 
-body.aivory-home-page .navbar__link {
-  transition: none;
-}
+  body.aivory-home-page .navbar__link,
+  body:has(main.aivory-home-page) .navbar__link {
+    transition: none;
+  }
 }
 
 @media (min-width: 997px) and (max-width: 1200px) {

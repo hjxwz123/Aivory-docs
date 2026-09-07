@@ -1,0 +1,152 @@
+---
+title: 能力与集成表
+sidebar_position: 8
+description: skills、prompts、user_skills、user_prompts、mcp_servers、user_mcp_servers、image_styles 七表的逐列参考——技能/提示词/MCP 目录与用户私有副本。
+---
+
+# 能力与集成表
+
+能力目录域 7 张表：管理员目录（`skills`/`prompts`/`mcp_servers`/`image_styles`）+ 用户私有副本（`user_skills`/`user_prompts`/`user_mcp_servers`）。**沙箱会话状态不在数据库里**——sidecar 内存 + `/workspace` 按 conversation id 归档到对象存储（见[沙箱概览](../../sandbox/overview.mdx)）（记法约定见[总览](./overview.mdx)）。
+
+## `skills` — 管理员技能目录
+
+Agent Skill = 指令 + 资源包。共 10 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `sk_` + 12 位十六进制 |
+| `name` | TEXT | 否 | — | 技能名；`lower(trim(name))` 唯一（重名在迁移中合并 `dedupeSkillNames`） |
+| `description` | TEXT | 否 | — | **模型可见**的触发元数据（决定何时启用该技能） |
+| `display_description` | TEXT | 否 | `''` | 仅目录展示的文案，与触发元数据分离 |
+| `icon` | TEXT | 否 | `''` | 图标 |
+| `instructions` | TEXT | 否 | — | 技能正文（注入模型上下文） |
+| `assets` | TEXT（JSON） | 否 | `'[]'` | 可打包资源清单（管理员专属——**用户副本没有这列**，见下） |
+| `enabled` | INTEGER | 否 | `1` | 是否上架 |
+| `sort_order` | INTEGER | 否 | `0` | 排序 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **入向**：`model_skills.skill_id`（CASCADE）、`user_skills.source_skill_id`（SET NULL）。
+
+## `prompts` — 管理员提示词模板
+
+共 8 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `pt_` + 12 位十六进制 |
+| `name` | TEXT | 否 | — | 名字；`lower(trim(name))` 唯一 |
+| `description` | TEXT | 否 | `''` | 描述 |
+| `icon` | TEXT | 否 | `''` | 图标 |
+| `content` | TEXT | 否 | — | 模板正文（内容会被复制进 `user_prompts`；公开目录只暴露 name/description/icon） |
+| `enabled` | INTEGER | 否 | `1` | 是否上架 |
+| `sort_order` | INTEGER | 否 | `0` | 排序 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **入向**：`user_prompts.source_prompt_id`（SET NULL）。
+
+## `user_skills` — 用户私有技能
+
+管理员技能的私有副本或用户自建。共 10 列。**故意没有 `assets`/存储列**——私人技能只有指令，**永远不能**向沙箱投放文件（安全边界）。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `usk_` + 12 位十六进制 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `workspace_id` | TEXT | 否 | `''` | 软引用；`''` = 个人库，非空 = 该空间共享 |
+| `name` | TEXT | 否 | — | 名字（唯一性按作用域拆成两组部分唯一索引，见下） |
+| `description` | TEXT | 否 | — | 触发描述 |
+| `icon` | TEXT | 否 | `''` | 图标 |
+| `instructions` | TEXT | 否 | — | 正文 |
+| `source_skill_id` | TEXT | **是** | `NULL` | FK→`skills(id)`，`SET NULL`——溯源"从目录复制" |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**（均在迁移中创建，`store.go:598-607`）：`idx_user_skills_user(user_id, updated_at DESC)`、`idx_user_skills_workspace(workspace_id, updated_at DESC)`；名字唯一按作用域：个人行 `(user_id, lower(trim(name))) WHERE workspace_id=''`，空间行 `(workspace_id, lower(trim(name))) WHERE workspace_id<>''`；另有两个防目录重复复制的 source 唯一索引（同样按作用域拆）。
+
+## `user_prompts` — 用户私有提示词
+
+共 9 列。与 `user_skills` 同样的空间作用域模型。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `upm_` + 12 位十六进制 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `workspace_id` | TEXT | 否 | `''` | `''` = 个人，非空 = 空间共享 |
+| `name` | TEXT | 否 | — | 名字（作用域内唯一） |
+| `description` | TEXT | 否 | `''` | 描述 |
+| `content` | TEXT | 否 | — | 正文 |
+| `source_prompt_id` | TEXT | **是** | `NULL` | FK→`prompts(id)`，`SET NULL` |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：同 `user_skills` 的模式（`(user_id, updated_at DESC)`、`(workspace_id, updated_at DESC)` + 按作用域拆分的名字/source 部分唯一索引，`store.go:600-611`）。
+
+## `mcp_servers` — 管理员 MCP 服务
+
+Streamable-HTTP MCP 服务端点。共 13 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `mcp_` + 12 位十六进制 |
+| `name` | TEXT | 否 | — | 服务名；`lower(trim(name))` 唯一 |
+| `icon` | TEXT | 否 | `''` | 图标 |
+| `description` | TEXT | 否 | `''` | 描述 |
+| `url` | TEXT | 否 | — | Streamable-HTTP 端点 |
+| `headers` | TEXT（JSON） | 否 | `'{}'` | 请求头——**可含凭据：明文存储，API 层掩码** |
+| `enabled` | INTEGER | 否 | `0` | 默认关闭（新建即停用，显式启用） |
+| `discovered_tools` | TEXT（JSON） | 否 | `'[]'` | **上次成功 `tools/list` 的快照**——运行时注册表读它，而不是实时拉取 |
+| `protocol_version` | TEXT | 否 | `''` | 握手协商到的 MCP 协议版本 |
+| `last_error` | TEXT | 否 | `''` | 最近一次同步失败原因 |
+| `last_synced_at` | INTEGER → BIGINT | 否 | `0` | 最近一次成功同步时间 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：名字 UNIQUE、`idx_mcp_servers_enabled(enabled, name)`。
+- **入向**：`models.mcp_server_ids`（JSON id 数组，软引用）、`workspace_policies.allowed_mcp_server_ids`（软引用）。
+
+## `user_mcp_servers` — 用户级 MCP（资源库）
+
+镜像 `mcp_servers` 的快照/掩码契约 + `user_skills` 的空间作用域列。共 15 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `umcp_` + 12 位十六进制 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `workspace_id` | TEXT | 否 | `''` | `''` = 个人库，非空 = 空间共享 |
+| `name` | TEXT | 否 | — | 名字（按作用域部分唯一，`store.go:614-615`） |
+| `icon` | TEXT | 否 | `''` | 图标 |
+| `description` | TEXT | 否 | `''` | 描述 |
+| `url` | TEXT | 否 | — | 端点 |
+| `headers` | TEXT（JSON） | 否 | `'{}'` | **可含凭据，明文存储、API 掩码** |
+| `enabled` | INTEGER | 否 | `0` | 默认关闭 |
+| `discovered_tools` | TEXT（JSON） | 否 | `'[]'` | 同步快照（同 `mcp_servers` 契约） |
+| `protocol_version` | TEXT | 否 | `''` | 协议版本 |
+| `last_error` | TEXT | 否 | `''` | 最近失败 |
+| `last_synced_at` | INTEGER → BIGINT | 否 | `0` | 最近成功同步 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`(user_id, updated_at DESC)`、`(workspace_id, updated_at DESC)` + 两组名字部分唯一索引。
+
+## `image_styles` — 图片工作室风格
+
+§4.20 图片生成工作室的风格预设。共 8 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `imgsty_` + 12 位十六进制 |
+| `name` | TEXT | 否 | — | 风格名；`lower(trim(name))` 唯一 |
+| `example_image_url` | TEXT | 否 | `''` | 示例缩略图 URL |
+| `hidden_prompt` | TEXT | 否 | `''` | **隐藏提示词：服务端拼接，绝不出现在非管理员响应** |
+| `enabled` | INTEGER | 否 | `1` | 是否可选 |
+| `sort_order` | INTEGER | 否 | `0` | 排序 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`idx_image_styles_sort(sort_order)`、名字 UNIQUE。
+
+## 相关页面
+
+- [技能、工具与 MCP 管理](../../admin/tools-sandbox.mdx) — 对应管理界面
+- [沙箱 API](../../sandbox/api.mdx) — 为什么这些表里没有沙箱会话
+- [渠道、模型与用量表](./channels-model-calls.mdx) — `models.builtin_tools`/`official_tools` 与本域的关系

@@ -1,0 +1,226 @@
+---
+title: Cloudflare Proxy
+sidebar_position: 4
+description: Expose Aivory through Cloudflare DNS proxying (orange cloud) or Cloudflare Tunnel, with correct handling of SSE streaming, upload limits, real client IPs, and login-endpoint hardening.
+---
+
+# Cloudflare Proxy
+
+The official application container serves both the web UI and `/api` from a single process (the Go server listens on `:8787`, plain HTTP, and never terminates TLS itself). Connecting it to Cloudflare therefore comes down to one thing: keeping the browser-to-origin path streaming-capable while preserving real client IPs. This page covers both integration methods and the Cloudflare-specific pitfalls known to affect Aivory.
+
+The shared prerequisites (exact `ALLOWED_ORIGINS`, never exposing PostgreSQL / Redis / Qdrant / the sandbox, and OAuth callback domains) are covered in [Domains, HTTPS, and OAuth](./domain-tls-oauth.mdx) and are not repeated here.
+
+## Choosing Between the Two Methods
+
+| | A: DNS proxy (orange cloud) | B: Cloudflare Tunnel (cloudflared) |
+| --- | --- | --- |
+| Architecture | Browser → CF edge → origin public 443 | Browser → CF edge → cloudflared sidecar → Docker internal network |
+| Origin public ports | Must open 80/443 to Cloudflare IP ranges | None required; the firewall can stay fully closed |
+| Origin TLS | Requires local Caddy/Nginx with an origin certificate | Not needed; TLS exists only on cloudflared's outbound connection |
+| Real client IP | Not recoverable (see below) | Recoverable; per-IP server-side rate limits work correctly |
+| Best for | A VPS with a fixed public IP and an existing local proxy | No public IP, NAT/home servers, or zero inbound ports |
+
+:::tip Aivory recommends method B
+Aivory only trusts `X-Forwarded-For` when the direct peer is a loopback or RFC-1918 private address. With method A the direct peer is a Cloudflare public egress IP, so the app ignores forwarding headers (to prevent spoofing) and the login, registration, and captcha per-IP rate limits collapse onto a handful of shared CF egress addresses, which can lock out real users. With method B, cloudflared reaches the app from the Docker private network — a trusted peer — so the app recovers the real client IP.
+:::
+
+## Method A: DNS Proxy (Orange Cloud)
+
+### 1. Add the Domain and DNS Record
+
+After adding the site in Cloudflare, create an `A` record pointing at the origin's public IP (`chat` → VPS IP) with proxying enabled (orange cloud). AAAA records work the same way for IPv6.
+
+### 2. SSL/TLS Mode Must Be Full (strict)
+
+Choose **Full (strict)** in the SSL/TLS settings; do not use Flexible:
+
+- With Flexible, the CF edge talks plain HTTP to the origin. Aivory is designed to run under its `https://` origin (`ALLOWED_ORIGINS=https://chat.example.com`), and any "force HTTPS" layer at the origin then bounces the browser in a redirect loop.
+- Flexible also makes the browser cookie's protocol disagree with what the origin sees, which makes login issues nearly impossible to debug.
+
+**Origin TLS requirement**: the Aivory container only speaks plain HTTP, and Full (strict) requires a trusted certificate at the origin — so method A needs a local TLS terminator holding the certificate (same pattern as the same-host proxy section in [Domains, HTTPS, and OAuth](./domain-tls-oauth.mdx)):
+
+- Certificate, either **Cloudflare Origin Certificate** (issued from SSL/TLS → Origin Server, valid up to 15 years, trusted only by Cloudflare — fine for the origin leg) or Let's Encrypt (trusted by all clients).
+- Change `app.ports` in the Compose file you use so the app listens only on localhost:
+
+```yaml
+ports:
+  - "127.0.0.1:8787:8787"
+```
+
+- Caddy example (replace the certificate paths):
+
+```caddyfile
+chat.example.com {
+    tls /etc/caddy/certs/chat.example.com.pem /etc/caddy/certs/chat.example.com.key
+    reverse_proxy 127.0.0.1:8787
+}
+```
+
+:::warning Keep-alive when Nginx sits in front of the app
+The Cloudflare edge reuses origin connections for about 15 minutes. Aivory's own `IdleTimeout` defaults to 20 minutes (`AIVORY_HTTP_IDLE_TIMEOUT`) precisely to exceed that reuse window. But if the TLS terminator is Nginx, its default `keepalive_timeout` of roughly 75 seconds closes connections before Cloudflare finishes reusing them, producing intermittent 502 / "can't reach this site" pages that recover on refresh. Raise it explicitly in the Nginx server block:
+
+```nginx
+keepalive_timeout 600s 2000;
+```
+:::
+
+### 3. Always Use HTTPS and the Firewall
+
+- Enable **Always Use HTTPS** under SSL/TLS → Edge Certificates.
+- **HTTP/3 (with QUIC)** under Speed → Optimization can be enabled; it only affects the browser↔CF leg and requires no origin changes for Aivory.
+- Restrict the origin firewall to ports 80/443 from Cloudflare's IP ranges only, and close every other inbound port:
+
+```bash
+curl -s https://api.cloudflare.com/client/v4/ips | jq -r '.result[].cidr'
+```
+
+:::danger Rotate the IP before proxying
+If the origin IP ever served traffic directly, appeared in historical DNS, or leaked through certificate-transparency logs, an attacker can bypass Cloudflare and hit the origin. Request a new public IP from your VPS provider **before** adding the proxied record.
+:::
+
+## Method B: Cloudflare Tunnel
+
+A Tunnel consists of persistent connections dialed **out** from the origin to the CF edge: no inbound ports, no origin certificates, and not even a public IPv4 is required (NAS and home broadband work fine).
+
+### Token mode (recommended, matches the official Compose layout)
+
+1. In the Cloudflare Zero Trust dashboard → Networks → Tunnels, create a tunnel, choose Docker as the connector, and copy the token.
+2. Add `CLOUDFLARE_TUNNEL_TOKEN=<token>` to `deploy/.env`.
+3. Append the `tunnel` service to `services:` in `docker-compose.prod.yml` (the same applies to `docker-compose.personal.yml`):
+
+```yaml
+  # Cloudflare Tunnel sidecar — dials out to the CF edge, so the host needs
+  # NO inbound ports. Reaches `app` over the private compose network.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
+    networks: [internal]
+```
+
+4. Add a Public Hostname in the tunnel configuration: `chat.example.com` → `http://app:8787` (use the Compose service name and the container port, not the host port).
+5. With the tunnel as the only entry point, remove or narrow the public `"80:8787"` mapping on `app.ports`:
+
+```yaml
+  app:
+    ports: []
+```
+
+6. Restart the stack:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Config-file mode (credentials JSON + ingress YAML)
+
+If you prefer managing ingress locally (multiple hostnames, error-page redirects):
+
+```bash
+cloudflared tunnel login                                  # browser auth, writes cert.pem
+cloudflared tunnel create aivory                          # generates <TUNNEL_ID>.json credentials
+cloudflared tunnel route dns aivory chat.example.com      # auto-creates a DNS record routed to the tunnel
+```
+
+`./cloudflared/config.yml`:
+
+```yaml
+tunnel: <TUNNEL_ID>
+credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: chat.example.com
+    service: http://app:8787
+  - service: http_status:404
+```
+
+Compose variant (replace the `TUNNEL_TOKEN` version):
+
+```yaml
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on:
+      - app
+    networks: [internal]
+```
+
+### Why method B preserves real client IPs
+
+cloudflared reaches the app from the Docker private network (172.x) and carries `X-Forwarded-For: <real client>`. Aivory's `clientIP()` trusts `X-Forwarded-For` only when the direct peer is loopback/private, and takes the **right-most** non-private entry (so a client cannot forge headers to evade limits). Under method B, per-IP rate limiting counts real users, and the admin login history and per-IP registration caps stay accurate as well.
+
+## SSE Streaming Configuration Notes
+
+Aivory's chat path relies heavily on long-lived connections, which is where Cloudflare deployments most often go wrong:
+
+| Purpose | Path | Protocol |
+| --- | --- | --- |
+| Send message / regenerate | `POST /api/conversations/:id/messages`, `POST /api/conversations/:id/regenerate` | SSE |
+| Reconnect / event replay | `GET /api/conversations/:id/messages/:msgId/stream` | SSE (`Last-Event-ID`) |
+| Stop generation | `POST /api/conversations/:id/stop` | JSON |
+| Multi-tab live sync | `GET /api/events` | SSE |
+| Live voice transcription | `GET /api/audio/stream` | WebSocket |
+
+The origin already does three things for streaming: the chat message streams (send, regenerate, reconnect replay) carry `cache-control: no-cache, no-transform` and `x-accel-buffering: no` on their SSE responses; every write is flushed immediately; message streams emit a `: ping` comment frame every 15 seconds, while the multi-tab sync stream `GET /api/events` heartbeats every 25 seconds (`AIVORY_API_EVENTS_HEARTBEAT`) with only `no-cache` + `x-accel-buffering: no` (no `no-transform`). On the Cloudflare side, that means:
+
+1. **Bypass cache for the API**: create a Cache Rule matching `Path starts with /api` with the **Bypass cache** behavior. `POST` is never cached by default, but `GET /api/events` and `GET .../stream` are long-lived GETs — an explicit bypass is the safe choice. `no-cache, no-transform` also tells the edge not to compress or transform the event stream.
+2. **The 100-second origin timeout**: the CF edge allows roughly 100 seconds waiting for a response or the next data packet. Chat SSE sends its first event immediately and pings every 15 seconds afterwards, so it never trips; **524** is really triggered by non-streaming requests that stay silent for more than 100 seconds. Do not convert those into synchronous long calls — Aivory detaches generation from the connection: after a refresh, `GET .../messages/:msgId/stream` replays buffered events and follows the live stream, while the answer continues server-side for up to 90 minutes (`AIVORY_API_MAX_GEN_DURATION`).
+3. **Keep WebSocket enabled**: the WebSocket toggle under Network settings is on by default (all plans) and the live-voice `/api/audio/stream` relay depends on it. Method B's Tunnel supports WebSockets natively with no extra configuration.
+4. **Never rewrite the `/api` path**: the request signature (`AIVORY_REQUEST_SIGNATURES_REQUIRED`, on by default) binds the final path with the `/api` prefix stripped, plus the query string. Any Cloudflare Worker, payload transform, or Transform Rule that adds or removes an `/api` prefix will get a 403 at the origin. Neither standard method above needs path rewriting — keep the defaults.
+
+## Upload Limits and 413
+
+The Cloudflare edge enforces request-body caps by plan; **when exceeded, the edge returns 413 and the request never reaches the origin**, and the cap is not configurable below Enterprise:
+
+| Plan | Max request body |
+| --- | --- |
+| Free / Pro | 100 MB |
+| Business | 200 MB |
+| Enterprise | 500 MB by default, self-serve up to 5 GB on the zone's Network page |
+
+The corresponding Aivory-side limits:
+
+- The absolute file-upload ceiling `MAX_UPLOAD_BYTES` defaults to **50 MiB** (knowledge-base documents and chat attachments go through `POST /api/files`), which sits below the Free plan's 100 MB — default knowledge-base uploads will not hit the CF cap.
+- Admins can lower the image cap (`max_image_upload_mb`, default 5 MB) under Storage & uploads, but every single file is still bound by the plan-level edge cap above.
+- The case that actually hits the wall is **backup import**: the Backup & Migration admin screen uploads the whole ZIP, which the server allows up to `MAX_BACKUP_BYTES` (default 20 GiB).
+
+:::note Workarounds for large backup imports
+A Tunnel goes through the same CF edge and **cannot** bypass the 100 MB limit. Reliable options for large imports:
+1. Temporarily switch the hostname record to **DNS only** (grey cloud), upload directly to the origin on 443, then switch back to proxied;
+2. Or point your workstation's `hosts` entry at the origin IP during the admin operation and go through the local TLS terminator;
+3. Or upgrade to Enterprise and self-serve a larger Maximum Upload Size.
+:::
+
+## Security Hardening
+
+- **WAF Managed Rules**: enable the Cloudflare Managed Ruleset under Security → WAF → Managed Rulesets (the Free plan includes the base set) to block common web attacks with zero tuning.
+- **Rate Limiting Rules on login**: create a rule matching e.g. `Path equals /api/auth/login or Path starts with /api/auth` with method POST, limited to ≤ 30 requests per IP per 60 seconds. This matters most under method A — the origin cannot see real IPs there, so the edge rule is the only per-visitor defense; under method B it is a second layer on top of the server-side limit (10 per 60s on login). Rate limiting rules can now be created on every plan (Free includes one rule, with quotas growing by tier); note that on Free/Pro/Business, challenge-type actions (including Managed Challenge) are locked to a fixed 10-second window — the 60-second window in the example requires the Block action.
+- **Captcha**: the app ships a built-in puzzle captcha, enabled per `login_captcha_required` / `register_captcha_required` under Users & access → Registration policy. **Aivory does not integrate Cloudflare Turnstile in-app** — do not wait for a switch that does not exist. For a Cloudflare-side challenge, use a WAF custom rule with the **Managed Challenge** action on the login page; scope it to browser navigations (e.g. `GET /`), because challenging an XHR endpoint like `/api/auth/login` returns an HTML interstitial the frontend can only fail to parse.
+- **Hide the origin**: allow only CF ranges on the firewall (method A), or run zero inbound ports (method B). With method B you can additionally gate the `/admin` prefix behind Cloudflare Access for an organization-level second door.
+
+## Troubleshooting Table
+
+| Symptom | Root cause with Aivory | Fix |
+| --- | --- | --- |
+| 521 Origin Down | the `app` container is stopped; under method A the local Caddy/Nginx is down; under method B cloudflared is not running | Walk the layers with `docker compose ps` (the image ships a HEALTHCHECK, so healthy/unhealthy is shown there); then probe the API from inside the container: `docker compose exec app wget -qO- http://127.0.0.1:8787/api/health` (method B removes the host port, so don't curl 8787 from the host) |
+| 522 Origin Connect Timeout | the firewall does not accept 443 from CF ranges; or the tunnel's service address is wrong (it must be `http://app:8787`) | Open the CF ranges; confirm `tunnel` and `app` share the same network |
+| 523 Origin Unreachable | the proxied A record points at a wrong/decommissioned IP; or the Tunnel hostname has no matching ingress rule | Fix the DNS record; check the ingress entry above the `http_status:404` fallback |
+| 524 Origin Response Timeout | a non-streaming request stayed silent past 100 seconds (synchronous heavy work, blocked origin) | Just refresh the chat page — `GET .../messages/:msgId/stream` resumes it; check origin load; move long work onto async paths |
+| 525 / 526 SSL handshake / invalid certificate | method A set to Full (strict) but the origin has no TLS, or the certificate hostname mismatched or expired | Install an Origin Certificate / LE certificate, or switch to method B and skip origin TLS entirely |
+| Intermittent "can't reach this site", recovers on refresh | Nginx `keepalive_timeout` shorter than CF's ~15-minute connection reuse | Raise Nginx keepalive; direct-to-origin is already covered by the app's 20-minute `IdleTimeout` |
+| 413 Request Entity Too Large | request body over the plan-level edge cap, or over `MAX_UPLOAD_BYTES` | See "Upload Limits and 413" above |
+| 403 cross-site request blocked | `ALLOWED_ORIGINS` does not match the actual browser origin | Use the exact `https://hostname`, no path, no trailing slash; see [Domains, HTTPS, and OAuth](./domain-tls-oauth.mdx) |
+| 403 request-signature errors | the proxy rewrote or stripped the `/api` path; or client clock skew exceeds the ±(300s/60s) replay window | Remove Transform Rules / Workers rewrites; sync clocks via NTP |
+
+## Related Pages
+
+- [Domains, HTTPS, and OAuth](./domain-tls-oauth.mdx) — reverse-proxy baseline, `ALLOWED_ORIGINS`, and multi-domain OAuth
+- [Full Edition Deployment](../getting-started/full.mdx) — starting the full Compose stack
+- [Environment Variables Overview](./environment.mdx) — tuning knobs such as `AIVORY_HTTP_IDLE_TIMEOUT` and `MAX_UPLOAD_BYTES`

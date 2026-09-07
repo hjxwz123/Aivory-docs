@@ -1,0 +1,225 @@
+---
+title: 对话与消息表
+sidebar_position: 4
+description: projects、conversations、messages、message_feedback、user_feedback、conversation_shares、memories 与两张会话租约表的逐列参考。
+---
+
+# 对话与消息表
+
+对话域 9 张表。核心是 `messages` 的**消息 DAG**（`parent_id` 自引用）——分支、重生成、划词子会话都构建在它之上（记法约定见[总览](./overview.mdx)）。
+
+## `projects` — 项目
+
+会话与知识库的容器。共 14 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `p_` + 12 位十六进制 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `name` | TEXT | 否 | — | 项目名；按 `(user_id, workspace_id)` 作用域唯一（见下） |
+| `description` | TEXT | 否 | `''` | 描述 |
+| `instructions` | TEXT | 否 | `''` | 项目级系统指令（注入该空间会话的上下文） |
+| `accent` | TEXT | 否 | `'violet'` | 主题色标识（前端色板 key） |
+| `emoji` | TEXT | 否 | `''` | 图标 emoji |
+| `pinned` | INTEGER | 否 | `0` | 置顶 |
+| `kb_id` | TEXT | **是** | `NULL` | FK→`knowledge_bases(id)`，`SET NULL`（项目绑定的默认库；删库不删项目） |
+| `auto_add_uploads` | INTEGER | 否 | `0` | 项目内上传自动进入其知识库 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+| `is_public` | INTEGER | 否 | `1` | 工作空间内共享开关：`1` = 共享给成员，`0` = 仅创建者/空间管理员。个人行忽略 |
+| `workspace_id` | TEXT | 否 | `''` | ※附加列：软引用 `workspaces.id`；`''` = 个人 |
+
+- **索引**：`idx_projects_user(user_id)`；名字唯一索引在迁移中被替换为三列版 `idx_projects_user_name_unique` ON `(user_id, COALESCE(workspace_id,''), lower(trim(name)))`（`store.go:591-593`）——同一用户可在个人空间与多个工作空间里重名。
+- **入向**：`conversations.project_id`（SET NULL）。
+
+## `conversations` — 会话
+
+共 22 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `c_` + 12 位十六进制 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `project_id` | TEXT | **是** | `NULL` | FK→`projects(id)`，`SET NULL` |
+| `title` | TEXT | 否 | `'新对话'` | 标题；`task.title` 任务会自动改写 |
+| `provider` | TEXT | 否 | `''` | 供应商归属快照（无 FK） |
+| `model_id` | TEXT | 否 | `''` | 选择的模型（**无约束快照**——删模型不影响历史行） |
+| `fast` | INTEGER | 否 | `0` | 快速模式会话（真实模型由服务端解析，对用户掩码） |
+| `kb_ids` | TEXT（JSON） | 否 | `'[]'` | 挂接的知识库 id 数组 |
+| `rag_mode` | TEXT | 否 | `'auto'` | 检索策略：`auto`（服务端路由）/ `inject`（全量注入）。旧值 `tool` 与未知值被 `NormalizeConversationRAGMode` 归一为 `auto`（`store/conversations.go:20-29`） |
+| `summary_blocks` | TEXT（JSON） | 否 | `'[]'` | 上下文压缩产生的摘要块 |
+| `active_leaf_id` | TEXT | **是** | `NULL` | 当前活动叶子消息 id（软引用，无 FK；DAG 的"阅读指针"） |
+| `provider_state` | TEXT（JSON） | 否 | `'{}'` | 供应商会话状态（如 OpenAI Responses 回放状态；沙箱 session id 也存在这里） |
+| `pinned` | INTEGER | 否 | `0` | 置顶 |
+| `archived` | INTEGER | 否 | `0` | 归档。**工作空间行没有归档视图**，迁移会把空间内会话复位为 0（`store.go:524-530`） |
+| `starred` | INTEGER | 否 | `0` | 收藏 |
+| `inline_source_conv` | TEXT | 否 | `''` | 划词子会话：源会话 id；非空 = 子会话，列表隐藏 |
+| `inline_parent_id` | TEXT | 否 | `''` | 划词子会话：锚定的源消息 id |
+| `inline_quote` | TEXT | 否 | `''` | 划词子会话：被引用的原文 |
+| `is_public` | INTEGER | 否 | `0`（新库） | 工作空间会话是否共享。注意**方言细节**：CREATE 默认 `0`（新库），升级库由 ALTER 以默认 `1` 添加（历史共享行为保留），见 `store.go:226-229` |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+| `workspace_id` | TEXT | 否 | `''` | ※附加列：软引用 `workspaces.id`；`''` = 个人 |
+
+- **索引**：`idx_conv_user(user_id)`、`idx_conv_project(project_id)`、`idx_conv_user_updated(user_id, archived, pinned DESC, updated_at DESC)`；迁移另建 `idx_conv_inline(inline_source_conv)`、`idx_conv_workspace_updated(workspace_id, archived, pinned DESC, updated_at DESC)`（`store.go:563,578`）。
+- **入向**：`messages`（CASCADE）、`message_feedback`、`user_feedback`（SET NULL）、`conversation_shares`（CASCADE）、两张租约表（CASCADE）、`documents`/`files`/`chunks` 的 `conversation_id`。
+
+## `messages` — 消息（DAG）
+
+共 30 列。`parent_id` 自引用构成树：分支与重生成产生兄弟子树，`conversations.active_leaf_id` 指向当前活动叶子。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `msg_` + 12 位十六进制；SSE 重连时就是 `Last-Event-ID` 的锚点 |
+| `conversation_id` | TEXT | 否 | — | FK→`conversations(id)`，CASCADE |
+| `parent_id` | TEXT | **是** | `NULL` | FK→`messages(id)`，CASCADE——**自引用**边 |
+| `role` | TEXT | 否 | — | `user` / `assistant`（应用层只写这两种；无 CHECK） |
+| `provider` | TEXT | 否 | `''` | 供应商快照 |
+| `model_id` | TEXT | 否 | `''` | 实际服务模型（**无约束快照**） |
+| `model_label` | TEXT | 否 | `''` | 模型展示名快照——目录改名/删除后仍可读 |
+| `fast` | INTEGER | 否 | `0` | 该轮走了快速模式；用户边界会把 `model_id`/`model_label`/`provider` 掩码 |
+| `blocks` | TEXT（JSON） | 否 | `'[]'` | 内容块数组，kind 取值：`text` / `thinking` / `tool_call` / `tool_output` / `citation` / `image` / `document` / `artifact` / `research` / `error`（枚举定义见 `llm/types.go:17`） |
+| `raw` | TEXT | **是** | `NULL` | 上游原始响应（按需保留） |
+| `stop_reason` | TEXT | **是** | `NULL` | 停止原因（自由文本，无 CHECK）。编排器/供应商常见值：`end_turn`、`stop`、`stopped`（用户手动停）、`max_iterations`、`tool_budget_exceeded`、`content_moderation`、`quota_exceeded`、`insufficient_credits`、`error` |
+| `attachments` | TEXT（JSON） | 否 | `'[]'` | 文件引用数组（指向 `files.id`） |
+| `selected_user_skill_ids` | TEXT（JSON） | 否 | `'[]'` | 该用户轮选择的私人技能 id（分支/重生成保真） |
+| `citations` | TEXT（JSON） | 否 | `'[]'` | RAG/搜索引用 |
+| `input_tokens` | INTEGER → BIGINT | 否 | `0` | 输入 token |
+| `context_tokens` | INTEGER → BIGINT | 否 | `0` | 最后一次成功上游请求的真实 prompt 足迹（`0` = 供应商未报 usage） |
+| `output_tokens` | INTEGER → BIGINT | 否 | `0` | 输出 token |
+| `cache_read_tokens` | INTEGER → BIGINT | 否 | `0` | 缓存读 token |
+| `cache_write_tokens` | INTEGER → BIGINT | 否 | `0` | 缓存写 token |
+| `cost` | REAL → DOUBLE PRECISION | 否 | `0` | 该轮成本（管理员可见） |
+| `currency` | TEXT | 否 | `'USD'` | 成本币种 |
+| `credits` | REAL → DOUBLE PRECISION | 否 | `0` | 该轮向用户收的积分（对用户可见，与 cost 的"仅管理员"不同） |
+| `status` | TEXT | 否 | `'complete'` | `complete` / `streaming` / `error` |
+| `error` | TEXT | 否 | `''` | `status='error'` 的失败详情 |
+| `gen_ms` | INTEGER → BIGINT | 否 | `0` | 生成墙钟耗时（毫秒） |
+| `search_text` | TEXT | 否 | `''` | **写入时投影**的可见纯文本（仅 text 块；排除推理/工具/图片数据）。内容搜索扫这列，而不是对 `blocks` 整坨 JSON 做 `LOWER()`。旧行由一次性回填补齐（`store.go:770-777`） |
+| `verify` | TEXT（JSON） | 否 | `''` | Verify 模式审计结果 `{verdict, auditor_model_id?, auditor_label?, findings:[{severity,quote,issue}], at?}`（`llm/verify.go:39-46`，带 `?` 的键为空时省略）；`''` = 未审计 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `feedback` | TEXT | 否 | `''` | ※附加列（**遗留兼容镜像**）：旧版单值点赞 `''` / `like` / `dislike`（`store/models.go:495`）。新数据写 `message_feedback` 表；旧行经 `BackfillLegacyMessageFeedback` 一次性迁移 |
+| `author_id` | TEXT | 否 | `''` | ※附加列：共享工作空间会话里的**发言者**（个人行为空） |
+
+- **索引**：`idx_messages_conv(conversation_id)`、`idx_messages_parent(parent_id)`、`idx_messages_conv_created(conversation_id, created_at)`、`idx_messages_role_created(role, created_at)`、`idx_messages_model_role_created(model_id, role, created_at)`。
+- **备注**：浏览器断连**不会**中止生成——服务端在脱离请求的上下文里继续写完并落库（上限 90 分钟），重连从事件缓冲回放（见 [Cloudflare 反代要点](../../deployment/cloudflare-proxy.mdx)）。
+
+## `message_feedback` — 模型质量反馈
+
+每条助手消息 × 每个评价用户一行。共 12 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `mfb_` + 12 位十六进制 |
+| `message_id` | TEXT | 否 | — | FK→`messages(id)`，CASCADE |
+| `conversation_id` | TEXT | 否 | — | FK→`conversations(id)`，CASCADE |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `workspace_id` | TEXT | 否 | `''` | 快照（无 FK） |
+| `model_id` | TEXT | 否 | `''` | 快照（无 FK）——删模型不抹质量史 |
+| `channel_id` | TEXT | 否 | `''` | 快照（无 FK） |
+| `rating` | TEXT | 否 | — | `like` / `dislike`（CHECK） |
+| `reasons` | TEXT（JSON）→ **JSONB** | 否 | `'[]'`（PG `'[]'::jsonb`） | 点踩原因多选 |
+| `comment` | TEXT | 否 | `''` | 附言 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **唯一**：`UNIQUE(message_id, user_id)`。**索引**：按 `updated_at`、`(model_id, updated_at)`、`(rating, updated_at)`、`conversation_id`、`(user_id, message_id)` 五组。
+- **备注**：管理员在「用户反馈」页读取本表做质量分析；`messages.feedback` 旧列只作兼容镜像，不再由新写入路径维护。
+
+## `user_feedback` — 产品问题上报
+
+与模型质量无关的用户报障。共 15 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `uf_` + 12 位十六进制 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `message_id` | TEXT | **是** | `NULL` | FK→`messages(id)`，`SET NULL`（删消息报告仍留） |
+| `conversation_id` | TEXT | **是** | `NULL` | FK→`conversations(id)`，`SET NULL` |
+| `conversation_title` | TEXT | 否 | `''` | 标题快照——删会话后报告仍可读 |
+| `description` | TEXT | 否 | — | 必填的问题描述 |
+| `page_path` | TEXT | 否 | `''` | 发生问题的前端路由 |
+| `user_agent` | TEXT | 否 | `''` | 浏览器 UA |
+| `viewport_width` | INTEGER | 否 | `0` | 视口宽 |
+| `viewport_height` | INTEGER | 否 | `0` | 视口高 |
+| `screenshot` | BLOB → **BYTEA** | **是** | `NULL` | 可选的页面截图**字节本体**（库内存储，非对象存储——本地/对象存储部署的保留行为一致） |
+| `screenshot_mime` | TEXT | 否 | `''` | 截图 MIME |
+| `screenshot_width` | INTEGER | 否 | `0` | 截图宽 |
+| `screenshot_height` | INTEGER | 否 | `0` | 截图高 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 提交时间 |
+
+- **索引**：`(created_at DESC, id DESC)`、`(user_id, created_at DESC)`。
+
+## `conversation_shares` — 公开分享
+
+只读分享链接的宿主。共 6 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | **本身就是公开令牌**：`genToken()` 192-bit 十六进制，用于 `/share/:id` |
+| `conversation_id` | TEXT | 否 | — | FK→`conversations(id)`，CASCADE |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `title` | TEXT | 否 | `''` | 分享时刻的标题 |
+| `snapshot` | TEXT（JSON） | 否 | `'[]'` | 分享时刻活动路径的**冻结 JSON**（已剥离成本/敏感字段）——后续私聊永不泄漏 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+
+- **唯一**：`idx_conv_shares_conv(conversation_id)`——一会话至多一个有效分享；**撤销 = 删行**，即彻底断访问。索引 `idx_conv_shares_user(user_id)`。
+
+## `memories` — 长期记忆
+
+从对话里提炼的持久用户事实（memory worker 维护）。共 17 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | `mem_` + 12 位十六进制 |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，CASCADE |
+| `memory_text` | TEXT | 否 | — | 一句话事实描述 |
+| `memory_type` | TEXT | 否 | `''` | 提取提示词限定的类别：`location` / `preference` / `identity` / `schedule` / `habit` / `goal` / `constraint`（`llm/memory_worker.go:115`，无 CHECK） |
+| `slot` | TEXT | 否 | `''` | 名词键（如 `favorite_language`）——同槽位新值使旧行变 STALE |
+| `value` | TEXT | 否 | `''` | 槽位的具体值 |
+| `status` | TEXT | 否 | `'ACTIVE'` | `ACTIVE`（稳定事实）/ `QUERY_DEPENDENT`（时效依赖提问上下文）/ `STALE`（被新事实取代）/ `UNKNOWN_CURRENT`（冲突且时效不明，`llm/memory_worker.go:252-283`）。系统提示只注入 ACTIVE + QUERY_DEPENDENT |
+| `confidence` | REAL → DOUBLE PRECISION | 否 | `0.8` | 置信度 0..1 |
+| `source_message_ids` | TEXT（JSON） | 否 | `'[]'` | 来源消息 id |
+| `supersedes` | TEXT（JSON） | 否 | `'[]'` | 取代的旧记忆 id |
+| `superseded_by` | TEXT（JSON） | 否 | `'[]'` | 被谁取代（反链） |
+| `affected_domains` | TEXT（JSON） | 否 | `'[]'` | 受影响槽位域 |
+| `reason` | TEXT | 否 | `''` | 状态变更原因 |
+| `valid_from` | INTEGER → BIGINT | **是** | `NULL` | 有效期起 |
+| `valid_until` | INTEGER → BIGINT | **是** | `NULL` | 有效期止 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 创建时间 |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 更新时间 |
+
+- **索引**：`idx_memories_user_status(user_id, status)`、`idx_memories_user_slot(user_id, slot)`。
+
+## `conversation_compaction_leases` — 压缩租约
+
+上下文压缩的跨进程互斥锁（无 Redis 也能多副本安全）。共 3 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `conversation_id` | TEXT | 否（PK） | — | FK→`conversations(id)`，CASCADE |
+| `owner_token` | TEXT | 否 | — | 持租令牌（防误释放他人租约） |
+| `expires_at` | INTEGER → BIGINT | 否 | — | 租约到期秒 |
+
+- **索引**：`idx_conversation_compaction_leases_expires(expires_at)`（过期回收扫描）。
+
+## `conversation_generation_leases` — 生成租约
+
+同一主体在同一分支上的追加串行化。共 5 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `conversation_id` | TEXT | 否（PK 之一） | — | FK→`conversations(id)`，CASCADE |
+| `branch_key` | TEXT | 否（PK 之一） | — | 分支键 |
+| `principal_id` | TEXT | 否（PK 之一） | — | 主体（用户）id |
+| `owner_token` | TEXT | 否 | — | 持租令牌 |
+| `expires_at` | INTEGER → BIGINT | 否 | — | 到期秒 |
+
+- **主键**：复合 `(conversation_id, branch_key, principal_id)`。**索引**：`expires_at`。
+- **备注**：其他成员、显式分支编辑与重生成**不受**该锁影响，各走各的。
+
+## 相关页面
+
+- [对话与文件用户指南](../../user-guide/conversations-files.mdx) — 分支/重生成怎么用
+- [知识库与 RAG](../../admin/knowledge-rag.mdx) — 压缩阈值与记忆 worker 的管理界面
+- [平台运营与设置](../../admin/platform-operations.mdx) — 其余运行时配置页

@@ -705,25 +705,15 @@ body:has(.aivory-experience-page) .navbar {
   }
 }
 
-/* Story navigation uses a shallow page turn; the header stays in place. */
-html[data-aivory-turn] { background: oklch(15% 0.025 290); }
-html[data-aivory-turn] .navbar { view-transition-name: aivory-navigation; }
-html[data-aivory-turn]::view-transition-group(root) { perspective: 1800px; }
-html[data-aivory-turn]::view-transition-old(root),
-html[data-aivory-turn]::view-transition-new(root) { mix-blend-mode: normal; backface-visibility: hidden; }
-html[data-aivory-turn]::view-transition-old(root) { transform-origin: left center; animation: aivory-page-out 520ms cubic-bezier(0.65, 0, 0.35, 1) both; }
-html[data-aivory-turn]::view-transition-new(root) { transform-origin: right center; animation: aivory-page-in 620ms cubic-bezier(0.22, 1, 0.36, 1) both; }
-html[data-aivory-turn='backward']::view-transition-old(root) { transform-origin: right center; animation-name: aivory-page-out-back; }
-html[data-aivory-turn='backward']::view-transition-new(root) { transform-origin: left center; animation-name: aivory-page-in-back; }
-html[data-aivory-turn]::view-transition-group(aivory-navigation) { z-index: 2; animation-duration: 0s; }
-html[data-aivory-turn]::view-transition-old(aivory-navigation) { animation: none; opacity: 0; }
-html[data-aivory-turn]::view-transition-new(aivory-navigation) { animation: none; }
-@keyframes aivory-page-out { to { opacity: 0; transform: perspective(1800px) translateX(-6%) rotateY(-9deg) scale(0.97); } }
-@keyframes aivory-page-in { from { opacity: 0; transform: perspective(1800px) translateX(8%) rotateY(9deg) scale(0.97); clip-path: inset(0 0 0 16%); } to { opacity: 1; transform: none; clip-path: inset(0); } }
-@keyframes aivory-page-out-back { to { opacity: 0; transform: perspective(1800px) translateX(6%) rotateY(9deg) scale(0.97); } }
-@keyframes aivory-page-in-back { from { opacity: 0; transform: perspective(1800px) translateX(-8%) rotateY(-9deg) scale(0.97); clip-path: inset(0 16% 0 0); } to { opacity: 1; transform: none; clip-path: inset(0); } }
-@media (prefers-reduced-motion: reduce) {
-  html[data-aivory-turn]::view-transition-group(*),
-  html[data-aivory-turn]::view-transition-old(*),
-  html[data-aivory-turn]::view-transition-new(*) { animation: none !important; }
-}
+/* Three turning sheets connect the marketing chapters in every modern browser. */
+.aivory-transition-curtain { position: fixed; z-index: 10000; inset: var(--ifm-navbar-height) 0 0; display: grid; grid-template-columns: repeat(3, 1fr); visibility: hidden; pointer-events: none; overflow: hidden; }
+.aivory-transition-curtain[data-active='true'] { visibility: visible; }
+.aivory-transition-curtain > [data-transition-sheet] { background: oklch(22% 0.045 290); transform: translateY(110%); }
+.aivory-transition-curtain > [data-transition-sheet]:nth-child(2) { background: oklch(25% 0.055 290); }
+.aivory-transition-curtain > [data-transition-sheet]:nth-child(3) { background: oklch(28% 0.065 290); }
+.aivory-transition-title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; color: oklch(95% 0.01 290); opacity: 0; }
+.aivory-transition-title > span:first-child { font: italic clamp(4rem, 12vw, 10rem) / 1 'Fraunces', Georgia, serif; letter-spacing: -0.06em; }
+.aivory-transition-title > span:last-child { font: 0.75rem ui-monospace, monospace; letter-spacing: 0.15em; color: oklch(83% 0.06 290); }
+.aivory-transition-curtain[data-active='true'] .aivory-transition-title { animation: aivory-curtain-label 800ms 150ms both; }
+@keyframes aivory-curtain-label { 0%, 100% { opacity: 0; transform: translateY(15px); } 25%, 65% { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .aivory-transition-curtain { display: none; } }

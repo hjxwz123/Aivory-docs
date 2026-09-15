@@ -75,3 +75,11 @@ a:hover > .arrow { transform: translateX(4px); }
 @media (prefers-reduced-motion: reduce) {
   .home *, .home *::before { transition: none !important; animation: none !important; }
 }
+
+/* The opening screen leads into the longer, scroll-directed workspace story. */
+.journeyInvitation { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-block: 1rem; min-height: 64px; color: var(--page-muted); font-size: 0.78rem; }
+.journeyInvitation > span:last-child { color: var(--page-sage); }
+.journeyInvitation:hover { color: var(--page-fg); text-decoration: none; }
+@media (max-width: 480px) {
+  .journeyInvitation { font-size: 0.72rem; gap: 0.7rem; }
+}

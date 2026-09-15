@@ -1,0 +1,47 @@
+.ownership { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 4rem; padding-block: 5rem 7rem; border-top: 1px solid oklch(80% 0.05 290 / 0.2); perspective: 1600px; }
+.eyebrow { color: var(--page-sage); font: 0.7rem ui-monospace, monospace; letter-spacing: 0.06em; }
+.copy h2 { margin: 1.5rem 0 2rem; color: var(--page-fg); font: 470 clamp(2.6rem, 4.2vw, 4rem) / 1.2 var(--page-serif); letter-spacing: -0.04em; }
+.copy h2 em { color: var(--page-violet); }
+.copy p:not(.eyebrow) { max-width: 33rem; font-size: 0.9rem; color: var(--page-muted); line-height: 1.85; }
+.copy .lead { color: var(--page-fg) !important; font-size: 1rem !important; }
+.copy > a { display: inline-flex; gap: 1.5rem; align-items: center; min-height: 44px; margin-top: 1rem; color: var(--page-sage); font-size: 0.85rem; }
+.diagram { min-width: 0; background: var(--page-surface); border: 1px solid oklch(80% 0.05 290 / 0.2); border-radius: 10px; padding: 1.4rem; transform-origin: center bottom; }
+.diagramLabel { margin: 0 0 1.5rem; color: var(--page-muted); font-size: 0.8rem; }
+.diagram svg { display: block; width: 100%; height: auto; overflow: visible; }
+.connections { stroke: var(--page-sage); stroke-width: 1.5; }
+.appBox { fill: oklch(31% 0.07 290); stroke: var(--page-violet); }
+.dataBox { fill: var(--page-raised); stroke: oklch(80% 0.05 290 / 0.25); }
+.diagram text { text-anchor: middle; }
+.appLabel { fill: var(--page-fg); font: 30px var(--page-serif); }
+.nodeTitle { fill: var(--page-fg); font-size: 13px; }
+.nodeDetail { fill: var(--page-muted); font-size: 11px; }
+.diagram circle { fill: var(--page-sage); }
+.diagramFooter { display: flex; justify-content: space-between; gap: 1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid oklch(80% 0.05 290 / 0.2); color: var(--page-muted); font-size: 0.72rem; }
+.diagramFooter > span:last-child { color: var(--page-sage); }
+.principles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 1rem; }
+.principles a { position: relative; padding: 1.5rem 2.5rem 1.5rem 0; color: var(--page-fg); text-decoration: none; }
+.principles a + a { padding-left: 2.5rem; border-left: 1px solid oklch(80% 0.05 290 / 0.2); }
+.principles a > span { color: var(--page-sage); font: 0.65rem ui-monospace, monospace; letter-spacing: 0.07em; }
+.principles h3 { color: inherit; margin: 1.2rem 0 1rem; font: 470 1.65rem var(--page-serif); }
+.principles p { color: var(--page-muted); font-size: 0.85rem; line-height: 1.85; margin: 0; }
+.principles i { display: block; color: var(--page-violet); margin-top: 1.5rem; font-style: normal; transition: transform 200ms ease; }
+.principles a:hover i { transform: translate(5px, -5px); }
+@media (max-width: 899px) {
+  .ownership { grid-template-columns: 1fr; gap: 2.5rem; padding-block: 3.5rem 4rem; }
+  .copy h2 { font-size: clamp(2.6rem, 6vw, 4rem); }
+  .principles { grid-template-columns: 1fr; }
+  .principles a, .principles a + a { padding: 1.5rem 0; border-left: 0; border-top: 1px solid oklch(80% 0.05 290 / 0.2); }
+  .diagram { padding: 1rem 0.8rem; }
+}
+@media (max-width: 380px) { .copy h2 { font-size: 2.2rem; } }
+
+.mobileDataMap { display: none; }
+@media (max-width: 600px) {
+  .diagram svg { display: none; }
+  .mobileDataMap { display: grid; gap: 1.5rem; }
+  .mobileDataMap > strong { justify-self: center; padding: 0.8rem 2.5rem; color: var(--page-fg); background: oklch(31% 0.07 290); border: 1px solid var(--page-violet); border-radius: 6px; font: 1.6rem var(--page-serif); }
+  .mobileDataMap dl { margin: 0 0 0 0.5rem; padding-left: 1rem; border-left: 1px solid var(--page-sage); }
+  .mobileDataMap dl > div { padding: 0.65rem 0; }
+  .mobileDataMap dt { font-size: 0.85rem; color: var(--page-fg); }
+  .mobileDataMap dd { margin: 0.3rem 0 0; color: var(--page-muted); font-size: 0.75rem; }
+}

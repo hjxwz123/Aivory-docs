@@ -31,11 +31,6 @@ export default function AivoryPageMotion({scopeRef}: {scopeRef: RefObject<HTMLDi
       })
 
       if (context.conditions.wide) {
-        const heroBook = main.querySelector('[data-aivory-depth="hero-book"]')
-        if (heroBook) gsap.to(heroBook, {
-          y: -36, rotationY: -3, rotationX: 2, ease: 'none',
-          scrollTrigger: {trigger: heroBook, start: 'top top+=160', end: 'bottom top', scrub: 0.65},
-        })
         const productBook = main.querySelector('[data-aivory-depth="product-book"]')
         if (productBook) gsap.fromTo(productBook, {rotationX: 5, y: 28, scale: 0.965}, {
           rotationX: 0, y: 0, scale: 1, ease: 'none',

@@ -1,11 +1,18 @@
-import type { ReactNode } from 'react'
+import {useRef, type ReactNode} from 'react'
+import {useGSAP} from '@gsap/react'
+import {gsap} from 'gsap'
+import {ScrollTrigger} from 'gsap/ScrollTrigger'
 import Link from '@docusaurus/Link'
 import Layout from '@theme/Layout'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import ProductBook from '../components/product-book'
+import WorkspaceJourney from '../components/workspace-journey'
+import DataOwnership from '../components/data-ownership'
 import ExperienceNav from '../components/experience-nav'
 import experience from './experience.module.css'
 import styles from './index.module.css'
+
+if (typeof window !== 'undefined') gsap.registerPlugin(useGSAP, ScrollTrigger)
 
 function Arrow({ external = false }: { external?: boolean }): ReactNode {
   return (
@@ -18,6 +25,16 @@ function Arrow({ external = false }: { external?: boolean }): ReactNode {
 export default function Home(): ReactNode {
   const { i18n } = useDocusaurusContext()
   const en = i18n.currentLocale === 'en'
+  const home = useRef<HTMLElement>(null)
+  useGSAP(() => {
+    const media = gsap.matchMedia()
+    media.add('(min-width: 997px) and (prefers-reduced-motion: no-preference)', () => {
+      const hero = home.current!.querySelector('[data-aivory-motion="hero"]')
+      const preview = hero!.querySelector('[data-aivory-depth="hero-book"]')
+      gsap.to(preview, {y: -90, rotationY: -12, rotationX: 5, scale: 1.045, ease: 'none', scrollTrigger: {trigger: hero, start: 'top top', end: 'bottom top', scrub: 0.5}})
+    })
+    return () => media.revert()
+  }, {scope: home, dependencies: [en], revertOnUpdate: true})
   const groups = [
     {
       title: en ? 'Configure your workspace' : '配置你的工作空间',
@@ -102,7 +119,7 @@ export default function Home(): ReactNode {
           : '部署、配置与维护你的 Aivory AI 工作空间。查阅模型、知识库、团队、数据库与备份指南。'
       }
     >
-      <main className={`${experience.page} ${styles.home} aivory-home-page aivory-experience-page`} data-aivory-page="home">
+      <main ref={home} className={`${experience.page} ${styles.home} aivory-home-page aivory-experience-page`} data-aivory-page="home">
         <div className={styles.container}>
           <section className={styles.hero} aria-labelledby="hero-title" data-aivory-motion="hero">
             <div className={styles.heroCopy} data-aivory-motion="hero-copy">
@@ -116,8 +133,8 @@ export default function Home(): ReactNode {
               </h1>
               <p className={styles.intro}>
                 {en
-                  ? 'From your first deployment to a workspace for your whole team. Everything you need to connect models, organize knowledge, and keep your data in your hands.'
-                  : '从第一次部署，到整个团队的日常协作。在这里了解如何接入模型、组织知识，让 AI 与数据留在自己的掌控之中。'}
+                  ? 'A place for your projects, models, knowledge, and tools. Start with a conversation, carry it through to a result, and build a workspace your whole team can make their own.'
+                  : '让项目、模型、知识与工具，在同一个空间里协同。从一段对话，到一份可以交付的成果，再到整个团队的日常工作。把 AI 放进自己的工作方式里，也把数据留在自己的掌控之中。'}
               </p>
               <div className={styles.actions}>
                 <Link
@@ -147,6 +164,10 @@ export default function Home(): ReactNode {
               <ProductBook compact isEnglish={en} />
             </div>
           </section>
+
+          <a className={styles.journeyInvitation} href="#workspace-journey"><span>{en ? 'A workspace, in five chapters' : '五个章节，走进完整工作空间'}</span><span aria-hidden="true">{en ? 'Scroll to explore' : '向下探索'} ↓</span></a>
+          <WorkspaceJourney isEnglish={en} />
+          <DataOwnership isEnglish={en} />
 
           <section className={styles.deployment} aria-labelledby="deploy-title">
             <div className={styles.sectionHeading}>

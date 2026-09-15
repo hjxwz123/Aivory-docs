@@ -1,17 +1,17 @@
 ---
 title: 数据库总览与运维
 sidebar_position: 1
-description: Aivory 数据层权威参考的入口：60 张表如何存储、迁移如何执行、如何备份恢复，以及常用运维 SQL。
+description: Aivory 数据层权威参考的入口：61 张表如何存储、迁移如何执行、如何备份恢复，以及常用运维 SQL。
 ---
 
 # 数据库总览与运维
 
-本组页面是 Aivory v2.4.7 及发布后 main 分支关系数据模型的完整参考：**60 张表**逐一列出，包含当前的域名入组与 Passkey 表。权威 schema 内嵌在 Go 二进制里：
+本组页面覆盖 Aivory v2.4.7、发布后 main 更新及当前工作空间公告实现：**61 张表**逐一列出，包含域名入组、Passkey 与工作空间公告表。工作空间公告文档先于其下一次带标签的版本发布。权威 schema 内嵌在 Go 二进制里：
 
-- SQLite（个人版/开发）：`server/internal/store/schema.sql`（1120 行，经 `//go:embed` 打进二进制，`store.go:22-23`）
-- PostgreSQL（完整版）：`server/internal/store/schema_pg.sql`（1048 行，`store.go:25-26`）
+- SQLite（个人版/开发）：`server/internal/store/schema.sql`（经 `//go:embed` 打进二进制）
+- PostgreSQL（完整版）：`server/internal/store/schema_pg.sql`（经 `//go:embed` 打进二进制）
 
-两个文件声明**完全相同的 60 张表**（列名与语义一致，仅方言类型不同），启动时由 `store.Migrate()` 幂等应用。最终生效结构 = 内嵌 `CREATE TABLE` + `store.Migrate` 中的附加 `ALTER TABLE ADD COLUMN`（少数列只存在于 ALTER 里，如 `users.group_expires_at`、`messages.feedback`、`conversations.workspace_id`，正文中以 **※附加列** 标注）。
+两个文件声明**完全相同的 61 张表**（列名与语义一致，仅方言类型不同），启动时由 `store.Migrate()` 幂等应用。最终生效结构 = 内嵌 `CREATE TABLE` + `store.Migrate` 中的附加 `ALTER TABLE ADD COLUMN`（少数列只存在于 ALTER 里，如 `users.group_expires_at`、`messages.feedback`、`conversations.workspace_id`，正文中以 **※附加列** 标注）。
 
 :::caution[不要参考 server/migrations/]
 
@@ -28,30 +28,31 @@ description: Aivory 数据层权威参考的入口：60 张表如何存储、迁
 | [对话与消息](./conversations-messages.mdx) | 9 | `projects`、`conversations`、`messages`、`message_feedback`、`user_feedback`、`conversation_shares`、`memories`、两张会话租约表 |
 | [文件与知识库](./files-knowledge.mdx) | 7 | `files`、`knowledge_bases`、`knowledge_base_shares`、`documents`、`chunks`、`vector_points`、`artifacts` |
 | [订阅、积分与支付](./billing.mdx) | 15 | `user_groups`、积分/配额账本、充值包、兑换码、支付渠道/方式/订单/事件 |
-| [工作空间与成员](./workspaces-members.mdx) | 8 | `workspaces`、成员、邀请、策略、库级权限、审计日志、`registration_domains`、`domain_users` |
+| [工作空间与成员](./workspaces-members.mdx) | 9 | `workspaces`、成员、邀请、策略、`workspace_announcements`、库级权限、审计日志、`registration_domains`、`domain_users` |
 | [能力与集成](./tools-sandbox.mdx) | 7 | `skills`、`prompts`、私有副本 `user_*`、`mcp_servers`、`user_mcp_servers`、`image_styles` |
 | [系统与审计](./system-audit.mdx) | 2 | `settings`（全局键值）、`pending_storage_cleanup`（删号清理队列） |
 
-合计 6+6+9+7+15+8+7+2 = **60 张表**。Aivory 没有 `schema_migrations` 之类的迁移记账表（见下文[迁移机制](#迁移机制没有外部迁移工具)），因此不需要把它放在哪一页。
+合计 6+6+9+7+15+9+7+2 = **61 张表**。Aivory 没有 `schema_migrations` 之类的迁移记账表（见下文[迁移机制](#迁移机制没有外部迁移工具)），因此不需要把它放在哪一页。
 
 ## 数据模型总览
 
 下图按领域分组展示表与关键外键方向；逐表逐列细节见上面的页面导航。
 
-![Aivory 数据库 60 张表按领域分组的总览图，标注了主要外键与两种版本的存储引擎差异](/img/db-schema-overview.svg)
+![Aivory 数据库 61 张表按领域分组的总览图，标注了主要外键与两种版本的存储引擎差异](/img/db-schema-overview.svg)
 
 ## 总览：两种版本的数据存在哪里
 
-Aivory 只有一个 Go 后端二进制，启动时按 `DATABASE_URL` / `REDIS_URL` / `QDRANT_URL` 选择存储引擎（见[部署与环境变量](../../deployment/environment.mdx)）。**没有任何一张表是个人版独有的**——60 张表在两种版本中都会创建，区别只在向量、缓存与队列落在哪个引擎：
+Aivory 只有一个 Go 后端二进制，启动时按 `DATABASE_URL` / `REDIS_URL` / `QDRANT_URL` 选择存储引擎（见[部署与环境变量](../../deployment/environment.mdx)）。**没有任何一张表是个人版独有的**——61 张表在两种版本中都会创建，区别只在向量、缓存与队列落在哪个引擎：
 
 | 数据类别 | 个人版（SQLite） | 完整版（PostgreSQL + Redis + Qdrant） |
 | --- | --- | --- |
-| 全部 60 张关系表 | 单文件 `DATA_DIR/aivory.db`，WAL 模式（`DATABASE_URL=/app/data/aivory.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`，`deploy/docker-compose.personal.yml:28`） | `postgres` 容器的命名卷 `pgdata`（`postgres:16-alpine`） |
+| 全部 61 张关系表 | 单文件 `DATA_DIR/aivory.db`，WAL 模式（`DATABASE_URL=/app/data/aivory.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`，`deploy/docker-compose.personal.yml:28`） | `postgres` 容器的命名卷 `pgdata`（`postgres:16-alpine`） |
 | RAG 向量 | `vector_points` 表（内嵌精确余弦检索，`VECTOR_BACKEND=sqlite` 固定） | Qdrant（`qdrant/qdrant:v1.12.4`，卷 `qdrantdata`），集合按维度命名 `aivory_c<dim>`（`server/internal/vector/qdrant.go`）；`vector_points` 保持为空 |
 | 限流计数、请求签名 nonce、停止/封禁/配置广播（pub/sub）、SSE 断线重放缓冲 | 进程内存（单容器，够用） | Redis 7（卷 `redisdata`，`--appendonly yes`） |
 | RAG 摄取异步队列 | 进程内队列 | asynq（跑在 Redis 上） |
 | 上传文件、生成产物、本地对象存储、后台备份 ZIP | `DATA_DIR` 下由服务端启动创建的 `uploads/`（本地对象存储在 `uploads/object-storage/`）、`artifacts/`、`backups/` 目录（bind mount） | 同样在 `DATA_DIR`（`app` 容器 bind mount），管理员可改配 S3/OSS |
-| 管理员运行时配置（模型策略、RAG 参数、配额、审核、公告等） | [`settings`](./system-audit.mdx) 表（DB 键值，热加载） | 同左；多副本间经 Redis 频道 `cfg:invalidate` 广播失效 |
+| 管理员运行时配置（模型策略、RAG 参数、配额、审核、全局公告等） | [`settings`](./system-audit.mdx) 表（DB 键值，热加载） | 同左；多副本间经 Redis 频道 `cfg:invalidate` 广播失效 |
+| 工作空间公告配置 | [`workspace_announcements`](./workspaces-members.mdx#workspace_announcements)，每个工作空间一行 | 同一关系表；变更发布 `workspace.announcement_updated` |
 
 要点：
 
@@ -65,7 +66,7 @@ Aivory 只有一个 Go 后端二进制，启动时按 `DATABASE_URL` / `REDIS_UR
 
 | 约定 | 说明 |
 | --- | --- |
-| 文本主键 | 绝大多数表 `id TEXT PRIMARY KEY`，值形如 `前缀_` + 12 位十六进制（48 bit 随机，`genID`，`store/ids.go:14-19`），如 `u_a1b2c3d4e5f6`、`oa_0f1e2d3c4b5a`、`msg_9e8d7c6b5a43`、`kb_1a2b3c4d5e6f`、`qr_7f6e5d4c3b2a`。例外：`usage_logs.id`（自增整型）、`usage_stats.source_log_id`（整型）；没有 `id` 列的共 17 张表使用复合或替代单列主键（在原 15 张表基础上增加 `registration_domains`、`domain_users`） |
+| 文本主键 | 绝大多数表 `id TEXT PRIMARY KEY`，值形如 `前缀_` + 12 位十六进制（48 bit 随机，`genID`，`store/ids.go:14-19`），如 `u_a1b2c3d4e5f6`、`oa_0f1e2d3c4b5a`、`msg_9e8d7c6b5a43`、`kb_1a2b3c4d5e6f`、`qr_7f6e5d4c3b2a`。例外：`usage_logs.id`（自增整型）、`usage_stats.source_log_id`（整型）；没有 `id` 列的共 18 张表使用复合或替代单列主键（在原 15 张表基础上增加 `registration_domains`、`domain_users`、`workspace_announcements`） |
 | 高熵令牌 | 以 id 直接充当不可猜能力令牌的场合（公开分享 `conversation_shares.id`、`workspaces.invite_token`、`workspace_invites.token`）用 `genToken()`：48 位十六进制 = 192 bit（`ids.go:25-30`） |
 | 时间 | **unix 秒**整数。SQLite `INTEGER DEFAULT (strftime('%s','now'))`；PG 换成 `BIGINT DEFAULT (extract(epoch from now())::bigint)`（避免 2038 与大 token 求和溢出）。下文默认值里的 `now()` 即指这个方言默认表达式 |
 | 布尔标志 | `INTEGER` 0/1（如 `enabled`、`pinned`、`fast`）。PG 方言**刻意保留 INTEGER 而非 BOOLEAN**，因为 Go store 层以 `int` 读写（`schema_pg.sql:9-11`） |

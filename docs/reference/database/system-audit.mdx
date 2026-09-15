@@ -74,6 +74,8 @@ In addition, the **one-time backfill/cleanup idempotency markers** are rows of t
 
 :::
 
+Workspace announcements are stored in [`workspace_announcements`](./workspaces-members.mdx#workspace_announcements), separately from `settings.announcement`. Their JSON also contains `bar_enabled`, `bar_html`, and `bar_updated_at` for an independent top bar; the global announcement supports those properties as well. Workspace saves emit audit action `announcement.updated` and realtime event `workspace.announcement_updated`.
+
 ## `pending_storage_cleanup` — delete-purge queue
 
 The pre-deletion manifest of the async account purge (§8.1-A). 3 columns.

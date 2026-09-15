@@ -1,17 +1,17 @@
 ---
 title: Database overview and operations
 sidebar_position: 1
-description: 'Entry point of the authoritative Aivory data-layer reference: how the 60 tables are stored, how migrations run, how to back up and restore, and common operational SQL.'
+description: 'Entry point of the authoritative Aivory data-layer reference: how the 61 tables are stored, how migrations run, how to back up and restore, and common operational SQL.'
 ---
 
 # Database overview and operations
 
-This section is the complete reference for Aivory v2.4.7 and the post-release main branch's relational data model: **60 tables, including the current domain-enrollment and passkey tables**. The authoritative schema is embedded in the Go binary:
+This section covers Aivory v2.4.7, post-release main updates, and the current workspace-announcement implementation: **61 tables, including domain enrollment, passkeys, and workspace announcements**. Workspace announcements are documented ahead of their next tagged release. The authoritative schema is embedded in the Go binary:
 
-- SQLite (personal/dev): `server/internal/store/schema.sql` (1,120 lines, `//go:embed`, `store.go:22-23`)
-- PostgreSQL (full edition): `server/internal/store/schema_pg.sql` (1,048 lines, `store.go:25-26`)
+- SQLite (personal/dev): `server/internal/store/schema.sql` (embedded with `//go:embed`)
+- PostgreSQL (full edition): `server/internal/store/schema_pg.sql` (embedded with `//go:embed`)
 
-Both files declare **the same 60 tables** (identical column names and semantics; only dialect types differ), applied idempotently at startup by `store.Migrate()`. The final effective schema = embedded `CREATE TABLE` + additive `ALTER TABLE ADD COLUMN` statements in `store.Migrate` (a few columns exist only in ALTERs — e.g. `users.group_expires_at`, `messages.feedback`, `conversations.workspace_id`; they are marked **※ ALTER-added** in the text).
+Both files declare **the same 61 tables** (identical column names and semantics; only dialect types differ), applied idempotently at startup by `store.Migrate()`. The final effective schema = embedded `CREATE TABLE` + additive `ALTER TABLE ADD COLUMN` statements in `store.Migrate` (a few columns exist only in ALTERs — e.g. `users.group_expires_at`, `messages.feedback`, `conversations.workspace_id`; they are marked **※ ALTER-added** in the text).
 
 :::caution[Do not reference server/migrations/]
 
@@ -28,30 +28,31 @@ Both files declare **the same 60 tables** (identical column names and semantics;
 | [Conversations & messages](./conversations-messages.mdx) | 9 | `projects`, `conversations`, `messages`, `message_feedback`, `user_feedback`, `conversation_shares`, `memories`, two conversation lease tables |
 | [Files & knowledge](./files-knowledge.mdx) | 7 | `files`, `knowledge_bases`, `knowledge_base_shares`, `documents`, `chunks`, `vector_points`, `artifacts` |
 | [Subscriptions, credits & payments](./billing.mdx) | 15 | `user_groups`, credit/quota ledgers, packages, redeem codes, payment channels/methods/orders/events |
-| [Workspaces & members](./workspaces-members.mdx) | 8 | `workspaces`, members, invites, policies, per-library permissions, audit log, `registration_domains`, `domain_users` |
+| [Workspaces & members](./workspaces-members.mdx) | 9 | `workspaces`, members, invites, policies, `workspace_announcements`, per-library permissions, audit log, `registration_domains`, `domain_users` |
 | [Capabilities & integrations](./tools-sandbox.mdx) | 7 | `skills`, `prompts`, private copies `user_*`, `mcp_servers`, `user_mcp_servers`, `image_styles` |
 | [System & audit](./system-audit.mdx) | 2 | `settings` (global key/value), `pending_storage_cleanup` (delete-purge queue) |
 
-Totals: 6+6+9+7+15+8+7+2 = **60 tables**. Aivory has no `schema_migrations`-style bookkeeping table (see [migration mechanism](#migration-there-is-no-external-migration-tool) below), so there is nothing else to place.
+Totals: 6+6+9+7+15+9+7+2 = **61 tables**. Aivory has no `schema_migrations`-style bookkeeping table (see [migration mechanism](#migration-there-is-no-external-migration-tool) below), so there is nothing else to place.
 
 ## Data-model overview
 
 The diagram groups the tables by domain and marks the main foreign-key directions; per-table column detail lives on the pages above.
 
-![Aivory database overview: 60 tables grouped by domain with major foreign keys and the storage-engine split between editions](/img/db-schema-overview.svg)
+![Aivory database overview: 61 tables grouped by domain with major foreign keys and the storage-engine split between editions](/img/db-schema-overview.svg)
 
 ## Where data lives in each edition
 
-Aivory ships a single Go backend binary; the storage engine is chosen at boot by `DATABASE_URL` / `REDIS_URL` / `QDRANT_URL` (see [Deployment and environment](../../deployment/environment.mdx)). **No table is personal-edition-only** — all 60 tables are created in both editions; only vectors, cache, and the queue differ in engine:
+Aivory ships a single Go backend binary; the storage engine is chosen at boot by `DATABASE_URL` / `REDIS_URL` / `QDRANT_URL` (see [Deployment and environment](../../deployment/environment.mdx)). **No table is personal-edition-only** — all 61 tables are created in both editions; only vectors, cache, and the queue differ in engine:
 
 | Data category | Personal (SQLite) | Full (PostgreSQL + Redis + Qdrant) |
 | --- | --- | --- |
-| All 60 relational tables | single file `DATA_DIR/aivory.db`, WAL (`DATABASE_URL=/app/data/aivory.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`, `deploy/docker-compose.personal.yml:28`) | named volume `pgdata` of the `postgres` container (`postgres:16-alpine`) |
+| All 61 relational tables | single file `DATA_DIR/aivory.db`, WAL (`DATABASE_URL=/app/data/aivory.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`, `deploy/docker-compose.personal.yml:28`) | named volume `pgdata` of the `postgres` container (`postgres:16-alpine`) |
 | RAG vectors | `vector_points` table (embedded exact cosine search, `VECTOR_BACKEND=sqlite` pinned) | Qdrant (`qdrant/qdrant:v1.12.4`, volume `qdrantdata`), one collection per dimension named `aivory_c<dim>` (`server/internal/vector/qdrant.go`); `vector_points` stays empty |
 | Rate-limit counters, request-signature nonces, stop/ban/config pub/sub, SSE replay buffers | in-process memory (single container) | Redis 7 (volume `redisdata`, `--appendonly yes`) |
 | RAG ingest async queue | in-process queue | asynq (on Redis) |
 | Uploads, artifacts, local object storage, backup ZIPs | directories created under `DATA_DIR`: `uploads/` (local object storage under `uploads/object-storage/`), `artifacts/`, `backups/` (bind mount) | same `DATA_DIR` (bind-mounted into `app`); admins may switch to S3/OSS |
-| Admin runtime config (model policy, RAG knobs, quotas, moderation, announcement — full key list in [System & audit](./system-audit.mdx)) | [`settings`](./system-audit.mdx) table (DB key/value, hot reload) | same; across replicas via Redis channel `cfg:invalidate` |
+| Admin runtime config (model policy, RAG knobs, quotas, moderation, global announcement — full key list in [System & audit](./system-audit.mdx)) | [`settings`](./system-audit.mdx) table (DB key/value, hot reload) | same; across replicas via Redis channel `cfg:invalidate` |
+| Workspace announcement configuration | [`workspace_announcements`](./workspaces-members.mdx#workspace_announcements), one row per workspace | Same relational table; changes publish `workspace.announcement_updated` |
 
 Key points:
 
@@ -65,7 +66,7 @@ Keep these in mind before reading any table. Pages use the notation `SQLite type
 
 | Convention | Notes |
 | --- | --- |
-| Text primary keys | Most tables use `id TEXT PRIMARY KEY` shaped as `prefix_` + 12 hex chars (48 bits of randomness, `genID`, `store/ids.go:14-19`), e.g. `u_a1b2c3d4e5f6`, `oa_0f1e2d3c4b5a`, `msg_9e8d7c6b5a43`, `kb_1a2b3c4d5e6f`, `qr_7f6e5d4c3b2a`. Exceptions: `usage_logs.id` (autoincrement integer), `usage_stats.source_log_id` (integer); the 17 tables with no `id` column use composite or alternative single-column primary keys (`model_skills`, `model_group_quotas`, `workspace_members`, `workspace_policies`, `workspace_kb_member_permissions`, `oauth_identities`, `knowledge_base_shares`, `vector_points`, `refresh_tokens`, `settings`, `usage_stats`, `pending_storage_cleanup`, `payment_order_attempts`, `conversation_compaction_leases`, `conversation_generation_leases`, `registration_domains`, `domain_users`) |
+| Text primary keys | Most tables use `id TEXT PRIMARY KEY` shaped as `prefix_` + 12 hex chars (48 bits of randomness, `genID`, `store/ids.go:14-19`), e.g. `u_a1b2c3d4e5f6`, `oa_0f1e2d3c4b5a`, `msg_9e8d7c6b5a43`, `kb_1a2b3c4d5e6f`, `qr_7f6e5d4c3b2a`. Exceptions: `usage_logs.id` (autoincrement integer), `usage_stats.source_log_id` (integer); the 18 tables with no `id` column use composite or alternative single-column primary keys (`model_skills`, `model_group_quotas`, `workspace_members`, `workspace_policies`, `workspace_announcements`, `workspace_kb_member_permissions`, `oauth_identities`, `knowledge_base_shares`, `vector_points`, `refresh_tokens`, `settings`, `usage_stats`, `pending_storage_cleanup`, `payment_order_attempts`, `conversation_compaction_leases`, `conversation_generation_leases`, `registration_domains`, `domain_users`) |
 | High-entropy tokens | Where an id doubles as an unguessable capability secret (public shares `conversation_shares.id`, `workspaces.invite_token`, `workspace_invites.token`) the value comes from `genToken()`: 48 hex chars = 192 bits (`ids.go:25-30`) |
 | Time | **Unix seconds** integers. SQLite `INTEGER DEFAULT (strftime('%s','now'))`; PG uses `BIGINT DEFAULT (extract(epoch from now())::bigint)` (avoids 2038 and large token sums). `now()` below means this dialect default expression |
 | Boolean flags | `INTEGER` 0/1 (common examples: `enabled`, `pinned`, `fast`). The PG dialect **deliberately keeps INTEGER instead of BOOLEAN** because the Go store layer reads/writes them via `int` (`schema_pg.sql:9-11`) |

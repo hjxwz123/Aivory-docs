@@ -8,6 +8,12 @@ description: Detailed changes, upgrade impact, and compatibility notes for offic
 
 This page follows the tags and release times on [GitHub Releases](https://github.com/hjxwz123/Aivory/releases). For image deployments, pin the corresponding `IMAGE_TAG`; before upgrading, complete backups as described in [Upgrades and Backups](../deployment/upgrade-backup.mdx). The complete commit range, verification records, and original notes for each version remain authoritative on the corresponding GitHub Release.
 
+## Unreleased — workspace announcements
+
+The current implementation adds a **Workspace menu → Members → Announcement** editor for workspace owners and administrators, with an HTML popup, optional image, five-second required-reading delay, and an independently enabled top bar. Members and guests see notices for the active workspace; dismissal is stored in the browser, with no server-side read receipt. See [Workspace announcements](../admin/workspace-announcements.mdx).
+
+The new `workspace_announcements` table brings both database schemas to **61 tables**. Startup migration creates it automatically; each save records `announcement.updated` and publishes `workspace.announcement_updated`. Full backups include its rows, uploaded images require files to be included, and configuration-only exports exclude the rows. Compatible older archives without this new table restore with no workspace announcement configured. These notes describe development functionality and do not imply it is included in the `v2.4.7` image.
+
 ## v2.4 Series
 
 ### v2.4.7 and post-release main updates - 2026-09-15

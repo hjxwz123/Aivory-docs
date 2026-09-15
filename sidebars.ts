@@ -32,6 +32,7 @@ const sidebars: SidebarsConfig = {
         'admin/tools-sandbox',
         'admin/access-auth',
         'admin/domain-management',
+        'admin/workspace-announcements',
         'admin/billing',
         'admin/platform-operations',
       ],

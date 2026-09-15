@@ -1,12 +1,12 @@
 ---
 title: 工作空间与成员表
 sidebar_position: 7
-description: workspaces、成员、策略、审计及邮箱域自动入组绑定表的逐列参考。
+description: workspaces、成员、策略、公告、审计及邮箱域自动入组绑定表的逐列参考。
 ---
 
 # 工作空间与成员表
 
-工作空间域 8 张表。理解本域先记住一条：**业务表的归属靠 `workspace_id` 软引用列**（`''` = 个人数据），该列没有外键；本页的表负责"空间本身、成员、策略、审计与域名入组"（记法约定见[总览](./overview.mdx)）。
+工作空间域 9 张表。理解本域先记住一条：**业务表的归属靠 `workspace_id` 软引用列**（`''` = 个人数据），该列没有外键；本页的表负责"空间本身、成员、策略、公告、审计与域名入组"（记法约定见[总览](./overview.mdx)）。
 
 ## `workspaces` — 空间主体
 
@@ -109,6 +109,42 @@ description: workspaces、成员、策略、审计及邮箱域自动入组绑定
 | `updated_by` | TEXT | 否 | `''` | 最后修改的管理员 id |
 | `updated_at` | INTEGER → BIGINT | 否 | `0` | 最后修改时间（**默认 0 而非 now()**——行可能由策略首次编辑时才创建） |
 
+## `workspace_announcements`
+
+每个已配置工作空间一行，弹窗与顶部通知栏共同保存在一份配置中。共 4 列。此表在 `v2.4.7` 之后新增，由启动迁移在两种数据库中自动创建。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `workspace_id` | TEXT | 否（PK） | — | FK→`workspaces(id)`，`ON DELETE CASCADE` |
+| `config` | TEXT（JSON） | 否 | `'{}'` | 完整公告对象；保存时整体替换，不逐字段合并 |
+| `updated_by` | TEXT | 否 | `''` | 最后编辑用户的 ID；**未声明用户外键** |
+| `updated_at` | INTEGER → BIGINT | 否 | `now()` | 最后保存时间，Unix 秒；与 `config.updated_at` 保持一致 |
+
+### `config` 内部字段
+
+以下是 JSON 属性，不是额外的 SQL 列。布尔值使用 JSON boolean，与关系表列中的 0/1 标志不同。
+
+| 字段 | JSON 类型 | 含义 |
+| --- | --- | --- |
+| `enabled` | boolean | 是否启用弹窗 |
+| `title` | string | 纯文本，去首尾空白后最多 120 UTF-8 字节 |
+| `body` | string | 正文 HTML，最多 64 KiB |
+| `image_url` | string | 图片引用，最多 2 KiB；图片文件不在此表中 |
+| `remember_dismiss` | boolean | 是否提供弹窗“下次不再提示”选项 |
+| `require_read` | boolean | 弹窗显示后 5 秒内禁止关闭 |
+| `updated_at` | number | 服务端生成的弹窗版本，Unix 秒 |
+| `bar_enabled` | boolean | 是否启用独立的顶部通知栏 |
+| `bar_html` | string | 通知栏 HTML，最多 8 KiB；关闭后保存会清空 |
+| `bar_updated_at` | number | 服务端决定的通知栏版本；启用状态及去首尾空白后的内容未变时保留原值 |
+
+- **没有配置时**：先校验成员身份，再将缺失行读取为 `{}`，弹窗与通知栏均不启用；不会为每个空间预先填充一行。
+- **写入事务**：锁定工作空间，重新校验所有者/管理员身份，UPSERT 配置，并记录审计动作 `announcement.updated`，目标类型 `workspace_announcement`，目标 ID 为工作空间 ID，元数据为 `{"updated_at": …}`。审计记录不复制公告正文。提交后，接口发布实时事件 `workspace.announcement_updated`。
+- **生命周期**：删除工作空间时级联删除公告行；审计日志没有工作空间外键，继续保留。
+- **客户端关闭记录**：`aivory.workspace.<workspaceID>.announcement.dismissed` 保存 `updated_at`，`aivory.workspace.<workspaceID>.announcement.bar.dismissed` 保存 `bar_updated_at`。二者都是浏览器 `localStorage` 项，不区分账号，也不是服务端已读记录。版本精度为一秒。
+- **备份**：完整归档包含本表，配置导入导出不包含本表。上传配图位于 `UPLOAD_DIR/icons/`，需要包含文件的备份；外部图片和浏览器关闭记录不会被打包。兼容的历史归档可缺少这张新增表，恢复后为空。
+
+发布操作和图片访问范围见[工作空间通知与公告](../../admin/workspace-announcements.mdx)。
+
 ## `workspace_audit_logs` — 空间审计
 
 轻量审计流水。共 8 列。
@@ -118,8 +154,8 @@ description: workspaces、成员、策略、审计及邮箱域自动入组绑定
 | `id` | TEXT | 否（PK） | — | 审计行 id |
 | `workspace_id` | TEXT | 否 | — | **故意无 FK**——行要活过工作空间删除 |
 | `actor_user_id` | TEXT | 否 | — | 操作者（同样无 FK，删号不毁审计） |
-| `action` | TEXT | 否 | — | 动作名。当前实现使用：`workspace.created` / `workspace.deleted` / `member.joined` / `member.left` / `member.removed` / `member.role_updated` / `member.permissions_updated` / `invite.created` / `invite.used` / `invite.revoked` / `invite.rotated` / `policy.updated` / `resource.visibility_changed`（`store/workspace_audit.go`；自由文本，随功能扩展） |
-| `target_type` | TEXT | 否 | `''` | 目标类型，由 store 层审计写入（`conversation` / `project` / `knowledge_base` / `workspace` / `workspace_member` / `workspace_invite`；无 CHECK 约束） |
+| `action` | TEXT | 否 | — | 动作名。当前实现使用：`workspace.created` / `workspace.deleted` / `member.joined` / `member.left` / `member.removed` / `member.role_updated` / `member.permissions_updated` / `invite.created` / `invite.used` / `invite.revoked` / `invite.rotated` / `policy.updated` / `announcement.updated` / `resource.visibility_changed`（`store/workspace_audit.go`；自由文本，随功能扩展） |
+| `target_type` | TEXT | 否 | `''` | 目标类型，由 store 层审计写入（`conversation` / `project` / `knowledge_base` / `workspace` / `workspace_member` / `workspace_invite` / `workspace_announcement`；无 CHECK 约束） |
 | `target_id` | TEXT | 否 | `''` | 目标 id |
 | `metadata` | TEXT（JSON） | 否 | `'{}'` | 上下文。**约定永不写入**邀请令牌、API key、请求体、文档内容 |
 | `created_at` | INTEGER → BIGINT | 否 | `now()` | 时间 |

@@ -8,6 +8,12 @@ description: Aivory 正式发布版本的详细变更、升级影响与兼容性
 
 本页以 [GitHub Releases](https://github.com/hjxwz123/Aivory/releases) 的 tag 和发布时间为准。镜像部署请固定对应的 `IMAGE_TAG`；升级前按[升级与备份](../deployment/upgrade-backup.mdx)完成备份。每个版本的完整提交范围、校验记录和原始说明仍以对应 GitHub Release 为准。
 
+## 尚未发布 — 工作空间通知与公告
+
+当前实现新增**工作空间菜单 → 成员 → 公告**入口，工作空间所有者和管理员可配置 HTML 弹窗、配图、五秒必须阅读，以及独立启用的顶部通知栏。普通成员和游客查看当前空间的公告；关闭记录保存在浏览器，不提供服务端已读回执。操作说明见[工作空间通知与公告](../admin/workspace-announcements.mdx)。
+
+新增 `workspace_announcements` 表，两种数据库均为 **61 张表**，启动迁移自动创建。每次保存记录 `announcement.updated` 并发布 `workspace.announcement_updated`。完整备份包含公告数据行，配图需要包含文件，配置导出不包含公告行。兼容的旧归档缺少此新表时，恢复后没有已配置的工作空间公告。本节描述开发中的功能，不代表 `v2.4.7` 镜像已包含。
+
 ## v2.4 系列
 
 ### v2.4.7 及发布后的 main 更新 - 2026-09-15

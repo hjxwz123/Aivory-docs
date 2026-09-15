@@ -117,6 +117,16 @@ The admin "Backup and Migration" page can create a migration-oriented full archi
 
 Keep both physical backups and admin logical backups whenever possible: the former for full disaster recovery, the latter for easier cross-server or cross-deployment-mode migrations. Archives produced by backup jobs also live in persistent locations and should not be kept only inside temporary containers about to be replaced.
 
+### Workspace announcement backup coverage
+
+Builds containing [workspace announcements](../admin/workspace-announcements.mdx) create `workspace_announcements` automatically at startup. Full archives include this table and workspace audit records. Select **include files** to preserve uploaded announcement images in `UPLOAD_DIR/icons/`; a database-only archive retains image URLs but does not copy image bytes. External image URLs still depend on their external host.
+
+Configuration export/import excludes workspace announcement rows and does not migrate or overwrite a workspace's notice. Although that archive can include shared icon files, those files alone do not recreate the announcement configuration.
+
+An otherwise valid, supported historical backup may omit this newly added table. Restore leaves it empty, so no workspace announcement is shown until an administrator saves one. Full restore replaces target data and does not retain target-only announcements. Browser-local dismissal records are not part of either archive.
+
+After restore, enter a workspace as a member and check the popup, top bar, and image. Use a fresh browser profile to avoid confusing a previously remembered dismissal with missing restored data.
+
 ## Recovery Principles and Procedure
 
 Recovery is a destructive write operation. Before starting, stop new writes, save an independent copy of the current deployment, record the original version and the recovery target, and — if possible — rehearse in an isolated environment first.

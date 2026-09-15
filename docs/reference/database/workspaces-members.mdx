@@ -1,12 +1,12 @@
 ---
 title: Workspace and member tables
 sidebar_position: 7
-description: Column-by-column reference for workspaces, members, policies, audit logs, and email-domain enrollment bindings.
+description: Column-by-column reference for workspaces, members, policies, announcements, audit logs, and email-domain enrollment bindings.
 ---
 
 # Workspace and member tables
 
-Eight workspace-domain tables. Before reading, remember one rule: **business tables belong to a workspace via a soft-reference `workspace_id` column** (`''` = personal data) with no foreign key; the tables here own "the workspace itself, membership, policy, audit, and domain enrollment" (notation per the [overview](./overview.mdx)).
+Nine workspace-domain tables. Before reading, remember one rule: **business tables belong to a workspace via a soft-reference `workspace_id` column** (`''` = personal data) with no foreign key; the tables here own "the workspace itself, membership, policy, announcements, audit, and domain enrollment" (notation per the [overview](./overview.mdx)).
 
 ## `workspaces` — workspace roots
 
@@ -109,6 +109,42 @@ One row per workspace; **can only narrow platform capabilities, never widen them
 | `updated_by` | TEXT | no | `''` | last-editing admin id |
 | `updated_at` | INTEGER → BIGINT | no | `0` | last edit time (**defaults to 0, not `now()`** — the row may only be created on the first policy edit) |
 
+## `workspace_announcements`
+
+One row per configured workspace, with the popup and top bar stored together. 4 columns. Added after `v2.4.7`; startup migration creates the table in both database dialects.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `workspace_id` | TEXT | no (PK) | — | FK→`workspaces(id)`, `ON DELETE CASCADE` |
+| `config` | TEXT (JSON) | no | `'{}'` | Complete announcement object; saved as a replacement, not a field merge |
+| `updated_by` | TEXT | no | `''` | Last editing user's ID; **no declared user FK** |
+| `updated_at` | INTEGER → BIGINT | no | `now()` | Last save, in Unix seconds; synchronized with `config.updated_at` |
+
+### Fields inside `config`
+
+These are JSON properties, not additional SQL columns. Boolean properties are JSON booleans, unlike the 0/1 flags in relational columns.
+
+| Field | JSON type | Meaning |
+| --- | --- | --- |
+| `enabled` | boolean | Enable the popup |
+| `title` | string | Plain text; at most 120 UTF-8 bytes after trimming |
+| `body` | string | Body HTML, at most 64 KiB |
+| `image_url` | string | Image reference, at most 2 KiB; image bytes are outside this table |
+| `remember_dismiss` | boolean | Offer the popup's “Don't show again” choice |
+| `require_read` | boolean | Prevent closing the popup for 5 seconds |
+| `updated_at` | number | Server-generated popup version, Unix seconds |
+| `bar_enabled` | boolean | Enable the independent top bar |
+| `bar_html` | string | Bar HTML, at most 8 KiB; cleared when saved disabled |
+| `bar_updated_at` | number | Server-owned bar version; preserved if the bar's enabled state and trimmed content are unchanged |
+
+- **Missing configuration**: membership is checked first, then a missing row is read as `{}`. Both displays are off. There is no seeded row for each workspace.
+- **Write transaction**: locks the workspace, rechecks owner/admin authority, upserts configuration, and records audit action `announcement.updated`, target type `workspace_announcement`, target ID = workspace ID, metadata `{"updated_at": …}`. Announcement content is not copied into that audit record. After commit, the API publishes realtime event `workspace.announcement_updated`.
+- **Lifetime**: deleting a workspace cascades to its announcement row. The audit log has no workspace FK and survives deletion.
+- **Client dismissal**: `aivory.workspace.<workspaceID>.announcement.dismissed` stores `updated_at`; `aivory.workspace.<workspaceID>.announcement.bar.dismissed` stores `bar_updated_at`. Both are browser `localStorage` entries, without account scoping or server-side read tracking. Versions have one-second resolution.
+- **Backup**: the full archive includes this table; configuration-only export/import excludes it. Uploaded images live under `UPLOAD_DIR/icons/` and require a file-inclusive backup; external images and browser dismissal records are not bundled. Historical compatible archives can omit this newly added table, leaving it empty after restore.
+
+Publishing workflow and image-access scope: [Workspace announcements](../../admin/workspace-announcements.mdx).
+
 ## `workspace_audit_logs` — workspace audit
 
 Lightweight audit trail. 8 columns.
@@ -118,8 +154,8 @@ Lightweight audit trail. 8 columns.
 | `id` | TEXT | no (PK) | — | audit row id |
 | `workspace_id` | TEXT | no | — | **deliberately no FK** — rows outlive workspace deletion |
 | `actor_user_id` | TEXT | no | — | actor (also without an FK, so account deletion preserves the audit trail) |
-| `action` | TEXT | no | — | action name. Currently emitted: `workspace.created` / `workspace.deleted` / `member.joined` / `member.left` / `member.removed` / `member.role_updated` / `member.permissions_updated` / `invite.created` / `invite.used` / `invite.revoked` / `invite.rotated` / `policy.updated` / `resource.visibility_changed` (`store/workspace_audit.go`; free text, grows with features) |
-| `target_type` | TEXT | no | `''` | target kind written by the store audit layer (`conversation` / `project` / `knowledge_base` / `workspace` / `workspace_member` / `workspace_invite`; no CHECK constraint) |
+| `action` | TEXT | no | — | action name. Currently emitted: `workspace.created` / `workspace.deleted` / `member.joined` / `member.left` / `member.removed` / `member.role_updated` / `member.permissions_updated` / `invite.created` / `invite.used` / `invite.revoked` / `invite.rotated` / `policy.updated` / `announcement.updated` / `resource.visibility_changed` (`store/workspace_audit.go`; free text, grows with features) |
+| `target_type` | TEXT | no | `''` | target kind written by the store audit layer (`conversation` / `project` / `knowledge_base` / `workspace` / `workspace_member` / `workspace_invite` / `workspace_announcement`; no CHECK constraint) |
 | `target_id` | TEXT | no | `''` | target id |
 | `metadata` | TEXT (JSON) | no | `'{}'` | context. **Never contains** invite tokens, API keys, request bodies, or document content |
 | `created_at` | INTEGER → BIGINT | no | `now()` | time |

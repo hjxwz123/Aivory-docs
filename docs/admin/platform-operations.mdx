@@ -93,7 +93,7 @@ Use a **separate, least-privilege account** for object storage: only the needed 
 
 | Field | Description | Limit |
 | --- | --- | --- |
-| Show announcement | Master switch; off clears everything | — |
+| Show announcement | Popup switch; the top bar has its own switch | — |
 | Must read | Users wait 5 seconds before closing or opting out | — |
 | Allow "don't show again" | Off re-displays the notice on every visit | — |
 | Title | Plain text | ≤ 120 characters |
@@ -101,6 +101,8 @@ Use a **separate, least-privilege account** for object storage: only the needed 
 | Body | HTML supported; line breaks via `<br>` | Preview before publishing |
 
 Test display scope, dismissal behavior, and mobile layout with a test account; urgent notices should stay terse and must not embed sensitive internal details or unverifiable external scripts. Prompts, skills, and image styles that touch all users deserve a small-canary rollout with a fast disable/rollback path.
+
+Global announcements also support an independently enabled top bar with HTML and links. For notices limited to a team, use **Workspace menu → Members → Announcement**; see [Workspace announcements](./workspace-announcements.mdx) for permissions, dismissal behavior, and image limits. Workspace notices are stored separately from the global `settings.announcement` value.
 
 ## Moderation and voice
 
@@ -141,7 +143,7 @@ Know the full-backup ZIP's edges:
 
 | Inside the archive | Outside the archive |
 | --- | --- |
-| All data tables (users, conversations, file records, credits, orders, passkeys, and domain bindings — the full 60 tables) | Environment variables (`JWT_SECRET`, `DATABASE_URL` — still required in the deployment after restore) |
+| All data tables (users, conversations, file records, credits, orders, passkeys, workspace announcements, and domain bindings — the full 61 tables) | Environment variables (`JWT_SECRET`, `DATABASE_URL` — still required in the deployment after restore) |
 | Optionally uploads and artifacts | Redis cache (disposable by design) |
 | Full edition: Qdrant vectors | Running sandbox containers and un-archived live workspaces |
 | Step progress during export (prepare / read DB / write archive) | Host system and reverse-proxy configuration |

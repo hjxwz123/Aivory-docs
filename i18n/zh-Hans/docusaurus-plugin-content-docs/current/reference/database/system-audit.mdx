@@ -74,6 +74,8 @@ description: settings 全局键值表与 pending_storage_cleanup 删除清理队
 
 :::
 
+工作空间公告存储在 [`workspace_announcements`](./workspaces-members.mdx#workspace_announcements)，与 `settings.announcement` 分开。其 JSON 还包含独立顶部通知栏的 `bar_enabled`、`bar_html` 和 `bar_updated_at`，全局公告也支持这三个属性。工作空间公告保存时记录审计动作 `announcement.updated`，并发布实时事件 `workspace.announcement_updated`。
+
 ## `pending_storage_cleanup` — 删除清理队列
 
 异步删号（§8.1-A）的"删除前清单"。共 3 列。

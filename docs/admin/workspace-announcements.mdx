@@ -1,0 +1,116 @@
+---
+title: Workspace announcements
+description: Publish workspace popups and top bars, control dismissal, and understand permissions, storage, and backup coverage.
+---
+
+# Workspace announcements
+
+Workspace announcements let a team publish a maintenance notice, onboarding instructions, or a shared update inside its own workspace. Each workspace has one current configuration containing a **popup** and an independently enabled **top announcement bar**.
+
+:::info[Availability]
+
+This page documents the current workspace-announcement implementation under development after `v2.4.7`. Use an application build that includes this feature; the `2.4.7` image alone does not imply support.
+
+:::
+
+## Open the announcement editor
+
+1. Switch to the target workspace in the sidebar.
+2. Open its workspace menu and select **Members**.
+3. In the management dialog, select **Announcement**.
+4. Configure the popup, the top bar, or both. Check the previews and select **Save**.
+5. Enter the same workspace with a member account to verify the result.
+
+The workspace **owner and administrators** can publish and upload announcement images. Ordinary members and guests can read announcements but cannot edit them. A platform administrator needs the appropriate role in this workspace; platform administration alone does not grant this editor's write permission.
+
+Announcements are displayed for the **currently active workspace**. Personal space does not display workspace announcements. Members of another workspace do not receive this workspace's announcement through its announcement API.
+
+| Notice | Managed from | Display scope |
+| --- | --- | --- |
+| Global announcement | Admin → System → Announcement | Application-wide, including personal space |
+| Workspace announcement | Workspace menu → Members → Announcement | Members using the corresponding workspace |
+
+Global and workspace announcements may both be enabled. Startup popups use a shared queue so they appear in sequence. The workspace top bar appears below the global bar when both are present, above the content area rather than across the sidebar.
+
+## Configure the popup
+
+| Setting | Behavior |
+| --- | --- |
+| Show announcement | Enables the popup. At least one of title, body, or image must be nonempty |
+| Require reading | Locks closing for **5 seconds**, including buttons, Escape, and clicking outside |
+| Allow users to hide the announcement | Adds a “Don't show again” choice for this version |
+| Title | Optional plain text |
+| Body | HTML supported; preview and display sanitize the HTML. Use `<br>` for line breaks |
+| Image | Optional URL or uploaded PNG/JPG/JPEG; shown beside the text on desktop and stacked on mobile |
+
+The popup waits until the user has completed onboarding and any required password setup. Disabling the popup leaves the independently configured top bar available.
+
+### Closing and version changes
+
+**Close** dismisses the current popup without remembering that choice for later visits. If enabled, **Don't show again** remembers the current version in this browser. A later save with a new version timestamp makes the popup eligible to appear again, including saves that change only the bar.
+
+These choices live in browser storage, keyed by workspace and version, and are **not synchronized between devices or browsers**. The keys are not scoped by account, so accounts sharing the same browser profile can share a dismissal. Clearing site data also clears the remembered choice.
+
+“Require reading” is a five-second waiting period. The feature does **not** collect server-side read receipts, unread counts, or a list of members who have read the notice, and it does not send email or system push notifications.
+
+## Configure the top bar
+
+Enable **Top announcement bar** and enter a short HTML message, optionally with a link. The bar works even when the popup is disabled, and requires nonempty content to appear.
+
+- Closing the bar remembers its version in this browser, independently of the popup's dismissal setting.
+- Editing its content or enabled state updates the bar version. Saving popup-only changes preserves the version of an unchanged bar, so a previously dismissed bar stays hidden.
+- Saving with the bar disabled clears its stored HTML. Enter the message again when re-enabling it.
+- After a successful save, connected clients receive an update event and reload the active workspace's announcement. Entering the workspace also fetches its current configuration.
+
+## Content and image limits
+
+The workspace API trims surrounding whitespace, then enforces these limits. Text limits count **UTF-8 bytes**, so Chinese characters and emoji can reach the limit before the editor's character counter.
+
+| Content | Server limit |
+| --- | --- |
+| Title | 120 bytes; typically 40 Chinese characters |
+| Body HTML | 64 KiB |
+| Image URL | 2 KiB |
+| Top-bar HTML | 8 KiB |
+| Uploaded image | PNG/JPG/JPEG; **256 KiB by default**, controlled by `AIVORY_API_ADMIN_ICON_UPLOAD_SIZE` |
+
+The editor resizes images before upload. The server validates file extension, detected type, and image headers; SVG, GIF, and WebP are not supported by this upload endpoint. Uploaded images use the shared `/api/icons/…` asset service, which is readable by authenticated users who have the URL; the image URL itself is not a workspace-private download link.
+
+## API reference
+
+All three endpoints require authentication and use a concrete workspace ID.
+
+| Method | Endpoint | Permission / result |
+| --- | --- | --- |
+| `GET` | `/api/workspaces/:id/announcement` | Workspace member; returns the current configuration, disabled when none has been saved |
+| `PATCH` | `/api/workspaces/:id/announcement` | Workspace owner/admin; saves and returns the complete configuration |
+| `POST` | `/api/workspaces/:id/announcement/image` | Workspace owner/admin; multipart field `file`; returns `url` and `filename` |
+
+Despite the `PATCH` method, saving **replaces the configuration**, rather than merging individual fields. Read the current object, modify it, and send all settings that should remain. The server owns `updated_at` and `bar_updated_at`; use the response values. Both use Unix seconds, so saves in the same second are not guaranteed distinct versions.
+
+Field definitions, audit records, and browser-storage keys are listed in [Workspace and member tables](../reference/database/workspaces-members.mdx#workspace_announcements).
+
+## Storage, upgrades, and backups
+
+Startup migration creates `workspace_announcements` in both SQLite and PostgreSQL. There is one row per configured workspace; deleting the workspace cascades to that row. Each save records `announcement.updated` in the workspace audit log.
+
+| Backup choice | Announcement coverage |
+| --- | --- |
+| Full backup | Includes configuration and audit rows |
+| Full backup with files | Also includes locally uploaded images under `UPLOAD_DIR/icons/` |
+| Configuration export | Excludes workspace announcement rows; it may carry shared icon files, which alone do not recreate an announcement |
+| External image URL | Stores the URL only; neither backup mode fetches the external image |
+
+An otherwise compatible historical backup that predates this feature can be restored without an announcement table entry. The new table remains empty and no workspace announcement is shown until one is saved. Full restore does not preserve announcements from the target deployment. Browser dismissal choices are outside database backups.
+
+See [Upgrades, backups, and recovery](../deployment/upgrade-backup.mdx) for the full restore procedure.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| No Announcement tab | Select a workspace first; verify that the account is its owner or an administrator and the deployed build includes the feature |
+| Popup does not appear | Check the popup switch, nonempty content, onboarding/password setup, and whether this browser dismissed the current version |
+| Top bar does not appear | Check its own switch and content; it has an independent remembered dismissal |
+| Saving a Chinese title fails | The API limit is 120 UTF-8 bytes, even if the input still accepts more characters |
+| Restored notice has a broken image | Confirm the backup included files and the icon exists in the target upload directory, or verify the external URL |

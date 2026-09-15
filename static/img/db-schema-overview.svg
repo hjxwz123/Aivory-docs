@@ -9,8 +9,8 @@
   </defs>
 
   <rect x="0" y="0" width="1320" height="760" rx="14" fill="#0f172a"/>
-  <text x="660" y="34" text-anchor="middle" font-size="19" font-weight="700" fill="#e2e8f0">Aivory 数据库表结构总览 · Database Schema Overview (v2.4.7)</text>
-  <text x="660" y="56" text-anchor="middle" font-size="11.5" fill="#94a3b8">60 张表，SQLite（个人版）与 PostgreSQL（完整版）同构 — 权威定义：server/internal/store/schema.sql / schema_pg.sql（随二进制内嵌）</text>
+  <text x="660" y="34" text-anchor="middle" font-size="19" font-weight="700" fill="#e2e8f0">Aivory 数据库表结构总览 · Database Schema Overview · current development</text>
+  <text x="660" y="56" text-anchor="middle" font-size="11.5" fill="#94a3b8">61 张表，SQLite（个人版）与 PostgreSQL（完整版）同构 — 权威定义：server/internal/store/schema.sql / schema_pg.sql（随二进制内嵌）</text>
 
   <!-- ================= ROW 1 ================= -->
   <!-- G1 identity -->
@@ -90,7 +90,7 @@
   <!-- G5 workspaces -->
   <g>
     <rect x="20" y="350" width="288" height="320" rx="10" fill="#111c33" stroke="#a78bfa" stroke-width="1.4"/>
-    <text x="34" y="371" font-size="14" font-weight="700" fill="#c4b5fd">工作空间与成员 · 8 表</text>
+    <text x="34" y="371" font-size="14" font-weight="700" fill="#c4b5fd">工作空间与成员 · 9 表</text>
     <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#dbe6ff">
       <rect x="32" y="388" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="401">workspaces</text>
       <rect x="32" y="408" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="421">workspace_members</text>
@@ -100,11 +100,12 @@
       <rect x="32" y="488" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="501">workspace_audit_logs</text>
       <rect x="32" y="508" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="521">registration_domains / domain_users</text>
     </g>
-    <text x="34" y="546" font-size="9.5" fill="#8ea0c0">成员角色 admin/member/guest + 14 个 can_* 细粒度列；</text>
-    <text x="34" y="559" font-size="9.5" fill="#8ea0c0">policy 只能收窄平台能力。域规则精确匹配邮箱，</text>
-    <text x="34" y="572" font-size="9.5" fill="#8ea0c0">锁定状态可按用户覆盖；审计行无 FK，故意活过删除。</text>
-    <text x="34" y="596" font-size="9.5" fill="#64748b">业务表以 workspace_id 列归属空间（软引用），</text>
-    <text x="34" y="609" font-size="9.5" fill="#64748b">空串 '' = 个人数据。</text>
+      <rect x="32" y="528" width="264" height="18" rx="4" fill="#1e293b"/><text x="40" y="541" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#dbe6ff">workspace_announcements</text>
+    <text x="34" y="566" font-size="9.5" fill="#8ea0c0">成员角色 admin/member/guest + 13 个 can_* 细粒度列；</text>
+    <text x="34" y="579" font-size="9.5" fill="#8ea0c0">policy 只能收窄平台能力。域规则精确匹配邮箱，</text>
+    <text x="34" y="592" font-size="9.5" fill="#8ea0c0">锁定状态可按用户覆盖；审计行无 FK，故意活过删除。</text>
+    <text x="34" y="616" font-size="9.5" fill="#64748b">业务表以 workspace_id 列归属空间（软引用），</text>
+    <text x="34" y="629" font-size="9.5" fill="#64748b">空串 '' = 个人数据。</text>
   </g>
 
   <!-- G6 billing -->
@@ -201,7 +202,7 @@
     <line x1="230" y1="700" x2="262" y2="700" stroke="#64748b" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrc)"/>
     <text x="270" y="704">软引用 / 无约束快照 id / 触发器镜像</text>
     <text x="560" y="704">个人版：单文件 SQLite（DATA_DIR/aivory.db，WAL）+ 内嵌 vector_points + 进程内队列/缓存</text>
-    <text x="560" y="722">完整版：PostgreSQL（60 表同构）+ Redis（限流/nonce/pub-sub/asynq 队列）+ Qdrant（collection aivory_c&lt;dim&gt;）</text>
+    <text x="560" y="722">完整版：PostgreSQL（61 表同构）+ Redis（限流/nonce/pub-sub/asynq 队列）+ Qdrant（collection aivory_c&lt;dim&gt;）</text>
     <text x="40" y="722" font-size="9.5">时间列均为 unix 秒（SQLite INTEGER / PG BIGINT）；布尔标志刻意保持 INTEGER 0/1；JSON 一律放 TEXT 列。</text>
   </g>
 </svg>

@@ -77,6 +77,12 @@ openssl rand -hex 32
 
 ## 应用启动、网络和后端
 
+### 数据库引擎与 DSN 形式
+
+`DATABASE_URL` 在进程启动时选择关系数据库。以 `postgres://` 或 `postgresql://` 开头时使用 PostgreSQL；也接受 `host=db user=aivory dbname=aivory sslmode=require` 这类 libpq 格式。其他值都按 SQLite 路径处理，包括个人版的 WAL URL。SQLite 固定一个写连接并开启外键；PostgreSQL 使用连接池，也是多副本应用必须采用的拓扑。
+
+两种引擎都使用同一份内嵌 schema 和幂等启动迁移。不要手工执行 `server/migrations/0001_init.sql`，也不要在 `-wal` 旁文件仍变化时复制运行中的 SQLite 文件。请使用在线 `.backup` 流程，或停止应用后整体归档 `DATA_DIR`；PostgreSQL 使用 `pg_dump`/`pg_restore`。RAG 向量由 `VECTOR_BACKEND` 决定：`sqlite` 把向量存进 `vector_points`，`qdrant` 把向量存入 Qdrant，但文档和切块元数据仍在关系库中。
+
 | 变量 | 适用范围 | 默认值 | 作用与取值 | 敏感性 |
 | --- | --- | --- | --- | --- |
 | `AIVORY_LISTEN` | 自定义部署 | `:8787` | API/Web 监听地址，例如 `:8787` 或 `127.0.0.1:8787`。官方 Compose 已固定容器内端口。 | 普通 |

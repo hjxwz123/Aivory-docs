@@ -8,6 +8,8 @@ description: Maintain the Aivory Personal and Full editions with pinned image ve
 
 Updating Aivory should cover four phases: decide the target version, create a restorable backup, deploy and verify, and roll back if necessary. Do not mix pulling the latest image, deleting containers, and deleting data volumes into a single operation.
 
+The current application branch is based on `v2.4.7` and includes the post-release domain enrollment changes. Its startup migration creates the `passkeys`, `registration_domains`, and `domain_users` tables automatically; no manual SQL is required.
+
 ## Pin Release Versions
 
 Testing may use `IMAGE_TAG=latest`, but stable environments should pin a fully released semantic version, for example:
@@ -45,6 +47,7 @@ Before every upgrade, complete the following:
 3. Create a backup and confirm it is accessible; do not rely solely on "the backup job was submitted".
 4. Confirm `DATA_DIR` and the named volumes still have enough free disk space, and that the certificates and domain are healthy.
 5. For instances with real users, work within a maintenance window or during off-peak hours, and have a definite rollback version ready.
+6. If domain enrollment is enabled, export the current domain rules and record which workspaces are locked. Plan a test registration and a locked-user switch attempt after the upgrade.
 
 Do not run `docker compose down -v` before upgrading. `-v` deletes named volumes, which may delete PostgreSQL, Redis, Qdrant, or sandbox archive data.
 
@@ -92,6 +95,8 @@ Then verify in a browser:
 - With a knowledge base present, retrieve a known item; on the Full edition, also check Qdrant status.
 - With Python enabled, run a harmless small task to confirm the sandbox works.
 - With OAuth, email, or payments enabled, at least verify the corresponding callback/send/order flow on a test account.
+- With passkeys enabled, verify one existing passkey login and device removal from Account settings on HTTPS (or `localhost`).
+- With domain enrollment enabled, verify a matching registration joins the configured workspace, a locked user cannot switch to personal space, and an explicit personal-space override still works.
 
 When you find a problem, first save redacted logs from the app and related services. If the issue is tied to the new version and cannot be fixed quickly, follow the rollback procedure below; do not experiment with deletions, imports, or forced rebuilds on production data.
 
@@ -105,8 +110,8 @@ When post-upgrade data writes have already occurred and compatibility is unconfi
 
 | Deployment mode | What must be protected | Notes |
 | --- | --- | --- |
-| Personal edition | The entire `DATA_DIR` | Contains `aivory.db`, embedded vectors, uploads, artifacts, local objects, and backup archives |
-| Full edition | `pgdata`, `redisdata`, `qdrantdata`, `sandbox-archives`, `DATA_DIR` | Relational data, vectors, cache persistence, and durable workspaces and files must stay consistent |
+| Personal edition | The entire `DATA_DIR` | Contains `aivory.db`, embedded vectors, uploads, artifacts, local objects, passkey credentials, domain rules, and backup archives |
+| Full edition | `pgdata`, `redisdata`, `qdrantdata`, `sandbox-archives`, `DATA_DIR` | Relational data (including passkeys and domain bindings), vectors, cache persistence, and durable workspaces and files must stay consistent |
 
 The admin "Backup and Migration" page can create a migration-oriented full archive, typically including a logical database backup, vectors, and optional files; "Configuration Export" copies admin settings. Both may contain API keys and OAuth/SMTP/storage/payment credentials, so they must be encrypted at rest, access-restricted, and never uploaded to tickets, public repositories, or chat logs.
 
@@ -122,7 +127,7 @@ Recommended order:
 2. Stop writes on the target application and preserve its existing data directory and volume snapshots.
 3. Restore the full archive through the admin console, or restore the data directory and all relevant volumes using whatever backup tool you use.
 4. Start the services and review the database, vector, application, and sandbox logs.
-5. Verify the health endpoint, admin login, normal conversations, file downloads, knowledge base retrieval, workspace permissions, and any required integrations.
+5. Verify the health endpoint, admin login, normal conversations, file downloads, knowledge base retrieval, workspace permissions, domain enrollment/lock exceptions, passkey login (if enabled), and any required integrations.
 6. Only after acceptance is complete should you update DNS, shut down the old instance, or clean up old data.
 
 Do not hand a SQLite file actively used by a Personal edition to multiple containers or multiple servers; do not restore PostgreSQL while leaving behind Qdrant and files; do not treat Redis, Qdrant, or sandbox archive volumes as disposable "cache" unless you have assessed the recovery consequences.

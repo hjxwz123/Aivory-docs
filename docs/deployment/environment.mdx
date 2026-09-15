@@ -77,6 +77,12 @@ Model provider API keys are not written in these variables; they should be store
 
 ## Application startup, network, and backends
 
+### Database engine and DSN forms
+
+`DATABASE_URL` selects the relational store at process start. A value beginning with `postgres://` or `postgresql://` uses PostgreSQL; a libpq-style value such as `host=db user=aivory dbname=aivory sslmode=require` is also accepted. Any other value is treated as a SQLite path, including the Personal edition's WAL URL. SQLite runs with one write connection and foreign keys enabled; PostgreSQL uses a connection pool and is the required topology for multiple application replicas.
+
+Both engines run the same embedded schema and idempotent boot migration. Do not run `server/migrations/0001_init.sql` by hand and do not copy a live SQLite file while its `-wal` sidecar is changing. Use the online `.backup` procedure or stop the app and archive the complete `DATA_DIR`; for PostgreSQL use `pg_dump`/`pg_restore`. RAG vectors follow `VECTOR_BACKEND`: `sqlite` stores them in `vector_points`, while `qdrant` stores them in Qdrant and still keeps document/chunk metadata in the relational database.
+
 | Variable | Applies to | Default | Purpose and values | Sensitivity |
 | --- | --- | --- | --- | --- |
 | `AIVORY_LISTEN` | Custom deployments | `:8787` | API/Web listen address, e.g. `:8787` or `127.0.0.1:8787`. The official Compose already pins the in-container port. | Normal |

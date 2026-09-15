@@ -1,12 +1,12 @@
 ---
 title: 工作空间与成员表
 sidebar_position: 7
-description: workspaces、workspace_members、workspace_invites、workspace_policies、workspace_kb_member_permissions、workspace_audit_logs 六表的逐列参考。
+description: workspaces、成员、策略、审计及邮箱域自动入组绑定表的逐列参考。
 ---
 
 # 工作空间与成员表
 
-工作空间域 6 张表。理解本域先记住一条：**业务表的归属靠 `workspace_id` 软引用列**（`''` = 个人数据），该列没有外键；本页的表只负责"空间本身、成员、策略与审计"（记法约定见[总览](./overview.mdx)）。
+工作空间域 8 张表。理解本域先记住一条：**业务表的归属靠 `workspace_id` 软引用列**（`''` = 个人数据），该列没有外键；本页的表负责"空间本身、成员、策略、审计与域名入组"（记法约定见[总览](./overview.mdx)）。
 
 ## `workspaces` — 空间主体
 
@@ -126,8 +126,38 @@ description: workspaces、workspace_members、workspace_invites、workspace_poli
 
 - **索引**：`idx_ws_audit_workspace(workspace_id, created_at DESC)`。
 
+## `registration_domains` — 自动入组规则
+
+一行将一个精确邮箱域映射到一个工作空间。平台管理员在独立的 `/admin/domains` 页面管理。共 4 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `domain` | TEXT | 否（PK） | — | 取邮箱最后一个 `@` 后的归一化域名；匹配不区分大小写，不展开通配符或子域 |
+| `workspace_id` | TEXT | 否 | — | FK→`workspaces(id)`，`ON DELETE RESTRICT`；仍被规则引用的工作空间不能删除 |
+| `lock_personal` | INTEGER | 否 | `0` | 0/1；开启后，绑定的普通用户不能访问或创建个人空间 |
+| `enabled` | INTEGER | 否 | `1` | 0/1；关闭只停止后续自动入组，不解除已有绑定 |
+
+- **匹配规则**：`example.com` 只匹配 `user@example.com`，不匹配 `user@sub.example.com`；输入不能包含协议、路径、通配符或尾部句点。
+- **注册事务**：新建密码账号或可信 OAuth 账号时，创建用户、写入 `domain_users` 并加入工作空间在同一事务完成；命中规则的密码注册即使全局未要求验证也必须完成邮箱验证。规则创建后不追溯加入已有用户。
+- **生命周期**：创建后 `domain` 与 `workspace_id` 不可修改；需要更换时删除旧规则再新建。删除规则会解除该规则下的绑定和个人空间锁定，但保留已有工作空间成员关系与数据。
+
+## `domain_users` — 账号绑定与例外
+
+每行记录将用户加入域规则的绑定关系。共 3 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `user_id` | TEXT | 否（PK） | — | FK→`users(id)`，`ON DELETE CASCADE` |
+| `domain` | TEXT | 否 | — | FK→`registration_domains(domain)`，`ON DELETE CASCADE` |
+| `lock_override` | INTEGER | **是** | `NULL` | 0/1 的单用户例外；NULL 表示继承 `registration_domains.lock_personal` |
+
+- **绑定不随邮箱修改消失**：主键是 `user_id`，用户改邮箱不会静默解除入组或访问限制。
+- **实际锁定值**：`COALESCE(lock_override, registration_domains.lock_personal)`。设置为允许个人空间后，该账号可恢复个人空间开关，但仍保留指定工作空间成员身份。
+- **平台管理员**：拥有平台 `admin` 角色的账号不受域规则锁定，可以使用个人空间。规则对启用后创建的普通用户生效，管理员之后仍可修改单个用户例外。
+
 ## 相关页面
 
 - [访问与权限管理](../../admin/access-auth.mdx) — 用户/工作空间的管理界面
 - [对话与消息表](./conversations-messages.mdx) — 业务侧 `workspace_id` 软引用列的宿主
 - [能力与集成表](./tools-sandbox.mdx) — `user_skills`/`user_prompts`/`user_mcp_servers` 的空间作用域
+- [域名入组与工作空间访问](../../admin/domain-management.mdx) — 管理员操作流程与锁定行为

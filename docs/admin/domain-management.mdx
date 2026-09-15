@@ -1,0 +1,96 @@
+---
+title: Domain enrollment and workspace access
+sidebar_position: 3
+description: Configure exact email-domain enrollment, personal-space restrictions, per-user exceptions, and workspace ownership from the administrator console.
+---
+
+# Domain enrollment and workspace access
+
+Platform administrators use two separate pages for organization access: `/admin/workspaces` creates workspaces and manages their owners; `/admin/domains` maps an email domain to a workspace and controls whether enrolled users may use a personal space. This page is separate from the general access and authentication reference because domain rules change registration and workspace routing together.
+
+## Before you configure a rule
+
+1. Create the destination workspace in `/admin/workspaces`.
+2. Select an active existing account as the workspace administrator. That account becomes the owner and is added as a member in the same operation.
+3. Make sure the account is not already locked to another domain workspace. A platform administrator can have a personal space and can own more than one workspace.
+4. Confirm SMTP delivery before enabling a domain rule. A password registration that matches an enabled rule must verify its email even when the global email-verification switch is off.
+
+## Create a workspace and choose its owner
+
+Open **Admin → Workspaces → Create workspace**. Enter a name, search active users by name or email, and choose an administrator. The selected user must already exist and must be eligible for the new workspace. The server creates the workspace, membership, owner relation, and initial administrator role as one transaction; a failure rolls the whole operation back.
+
+To change ownership, open a workspace and select **Change administrator**. The candidate list contains only current members. The new owner receives the owner and administrator roles, the previous owner becomes a regular member, and other administrators keep their roles. The operation also revokes outstanding administrator invitations atomically and writes a workspace audit event.
+
+This administrator action is distinct from the owner-facing **Transfer ownership** flow. The owner-facing flow intentionally leaves the previous owner as an administrator after transfer; the platform-admin operation demotes that previous owner to a regular member.
+
+## Add an email-domain rule
+
+Open **Admin → Domains → Add domain** and provide:
+
+| Field | Meaning |
+| --- | --- |
+| Domain | A bare domain such as `example.com`; no email address, scheme, path, wildcard, or trailing dot |
+| Workspace | The destination workspace; it cannot be changed after creation |
+| Auto-enrollment | When enabled, new eligible registrations are added to the workspace |
+| Lock personal space | When enabled, enrolled ordinary users can only enter the assigned workspace |
+
+Matching is exact and case-insensitive on the text after the final `@`. `user@example.com` matches `example.com`; `user@sub.example.com` does not. A rule does not retroactively enroll existing users. It applies to new password accounts and to OAuth accounts only when the provider has supplied a verified, trusted email claim.
+
+The account creation, domain binding, and workspace membership write happen in one database transaction. If membership or binding fails, the account is not left half-created. A bound user's record is keyed by user id, so changing the email later does not release the binding.
+
+## Lock the personal space
+
+When **Lock personal space** is enabled, a bound ordinary user:
+
+- enters only the assigned workspace and cannot switch to personal or another workspace;
+- cannot create a workspace, accept an invitation to another workspace, or leave the assigned workspace;
+- cannot access personal conversations, files, projects, knowledge bases, or the temporary private-chat route;
+- is protected server-side even if a client sends a forged `workspace_id` or directly opens a personal URL.
+
+The user's personal data is retained. The lock is evaluated on each request, so changing a rule or an individual exception takes effect without requiring a new login; online clients receive the updated access state and stale generation/upload permissions are revoked.
+
+Platform administrators are exempt from domain locks. An administrator therefore can use a personal space, switch between it and workspaces, and still manage the domain rule. The exemption is based on the platform `admin` role, not on workspace membership.
+
+## Per-user exceptions
+
+Open a rule's **Domain users** list and choose one of three effective states for an enrolled account:
+
+| State | Effective behavior |
+| --- | --- |
+| Follow domain rule | Inherit the current `lock_personal` value |
+| Workspace only | Force the personal-space lock for this user |
+| Allow personal space | Override the rule and restore personal-space access |
+
+Only platform administrators can change these exceptions. An override remains explicit when the domain-level switch changes; selecting **Follow domain rule** returns the user to inheritance. Restoring personal access does not remove the user's membership in the assigned workspace.
+
+## Pause, replace, or remove a rule
+
+- **Pause auto-enrollment** by turning off **Auto-enrollment**. Existing bindings and locks remain active.
+- **Change a domain or destination workspace** by deleting the old rule and creating a new one. These fields are immutable to prevent silent migration of existing data.
+- **Delete a rule** only after reviewing the impact confirmation. Deletion releases every binding and personal-space lock under that rule, while existing workspace membership and data remain.
+- **Delete a workspace** only after removing all domain rules that reference it. The database uses `ON DELETE RESTRICT` so a locked user cannot be stranded in a deleted workspace.
+
+If a locked user left the assigned workspace while an administrator temporarily allowed personal access, re-enabling the lock restores the membership needed for the user to enter the assigned workspace.
+
+## Data and backup implications
+
+The relational database stores rules in `registration_domains` and user bindings in `domain_users`. `registration_domains.workspace_id` uses `ON DELETE RESTRICT`; `domain_users` points to both the user and rule with `ON DELETE CASCADE`. The binding and lock state therefore belongs in every logical and physical backup.
+
+For a recovery or migration:
+
+1. Restore the relational database, including both domain tables, before allowing registrations.
+2. Restore workspace memberships and files as part of the same consistency point.
+3. Start the application so its idempotent migration can verify the schema and reload current permissions.
+4. Test a matching registration, an allowed-personal exception, and a locked account's attempted workspace switch before opening the instance to users.
+
+See [Database overview and operations](../reference/database/overview.mdx) for schema, foreign-key, and SQLite/PostgreSQL details, and [Upgrades, Backups, and Recovery](../deployment/upgrade-backup.mdx) for the full restore order.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| Matching user was not enrolled | Rule was disabled at registration time, the email was not verified/trusted, or the domain was entered with a subdomain or trailing dot |
+| Existing users did not appear in the rule | Enrollment is prospective; add an existing user through the normal workspace membership flow |
+| User can still see personal data | Check the effective per-user state and confirm the session reached the current database; the platform admin role is exempt |
+| Workspace deletion is rejected | One or more `registration_domains` rows still reference it; remove those rules first |
+| User changed email and remains locked | This is expected: `domain_users` is keyed by `user_id`; change the per-user override or delete the rule |

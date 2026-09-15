@@ -8,7 +8,7 @@ description: Configure email, storage and uploads, logging and privacy, announce
 
 :::info Applies to
 
-Aivory v2.4.6 and later. This covers the "System" rail (Announcement, Email service, Storage & uploads, Legal & contact, Logging & privacy, Backup & Migration) and the "Data & operations" tabs, plus Moderation and Voice under "Capabilities & integrations". Screenshots show the Chinese admin UI; English labels are cited inline.
+Aivory v2.4.7 and the current post-release main branch. This covers the "System" rail (Announcement, Email service, Storage & uploads, Legal & contact, Logging & privacy, Backup & Migration), the "Data & operations" tabs, Moderation and Voice under "Capabilities & integrations", and the separate domain/workspace administration pages. Screenshots show the Chinese admin UI; English labels are cited inline.
 
 :::
 
@@ -22,6 +22,8 @@ System settings decide how the instance sends mail, stores objects, logs request
 | Capabilities & integrations | Voice | Moderation and voice |
 | System | Announcement / Email service / Storage & uploads / Legal & contact / Logging & privacy / Backup & Migration | sections below |
 | Data & operations | Usage & billing / Usage / Content resources / Files / User feedback | Operations rhythm |
+
+Organization access is documented on its own [Domain enrollment and workspace access](./domain-management.mdx) page. Use `/admin/workspaces` for workspace creation and owner changes, and `/admin/domains` for exact email-domain enrollment and personal-space locks; do not treat the global email allowlist as a replacement for these rules.
 
 ## Email service
 
@@ -137,7 +139,7 @@ Know the full-backup ZIP's edges:
 
 | Inside the archive | Outside the archive |
 | --- | --- |
-| All data tables (users, conversations, file records, credits, orders — the full 57 tables) | Environment variables (`JWT_SECRET`, `DATABASE_URL` — still required in the deployment after restore) |
+| All data tables (users, conversations, file records, credits, orders, passkeys, and domain bindings — the full 60 tables) | Environment variables (`JWT_SECRET`, `DATABASE_URL` — still required in the deployment after restore) |
 | Optionally uploads and artifacts | Redis cache (disposable by design) |
 | Full edition: Qdrant vectors | Running sandbox containers and un-archived live workspaces |
 | Step progress during export (prepare / read DB / write archive) | Host system and reverse-proxy configuration |

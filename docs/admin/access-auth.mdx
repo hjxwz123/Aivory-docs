@@ -8,7 +8,7 @@ description: Configure the registration policy, enterprise sign-in modes, OAuth/
 
 :::info Applies to
 
-Aivory v2.4.6 and later. Relevant screens: "Users & access → Users / Registration policy / Login methods / Workspaces". Proxy and HTTPS prerequisites: [Domain, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx). Screenshots show the Chinese admin UI; English labels are cited inline.
+Aivory v2.4.7 and later. Relevant screens: "Users & access → Users / Registration policy / Login methods / Workspaces". Proxy and HTTPS prerequisites: [Domain, HTTPS, and OAuth](../deployment/domain-tls-oauth.mdx). Screenshots show the Chinese admin UI; English labels are cited inline.
 
 :::
 
@@ -164,6 +164,10 @@ Workspaces are team collaboration spaces (created user-side; admins inspect and 
 - Give invite links sane expiry and use limits and revoke after use; legacy invite tokens are not an auth bypass.
 - Put distinct customers, legal entities, or confidentiality tiers in separate workspaces; don't rely on verbal isolation.
 - Audit: workspace operations log entries that **outlive workspace deletion**, and metadata never contains tokens, keys, or request bodies.
+
+Platform administrators retain a personal space. The domain-lock feature is deliberately scoped to ordinary users bound by an email rule; an account with the platform `admin` role can still switch between its personal space and workspaces. To restrict one administrator, change the account role first and then apply the domain rule or per-user override from [Domain enrollment and workspace access](./domain-management.mdx).
+
+For domain-based organization entry, use the separate [Domain enrollment and workspace access](./domain-management.mdx) page. It documents exact-domain matching, mandatory verification for matching registrations, prospective (not retroactive) enrollment, personal-space locking, and the `/admin/workspaces` owner workflow.
 
 After changing roles, groups, or workspace membership, verify with a low-privilege test account that access actually tightened or opened — never judge permissions from the admin view alone.
 

@@ -1,12 +1,12 @@
 ---
 title: Workspace and member tables
 sidebar_position: 7
-description: Column-by-column reference for workspaces, workspace_members, workspace_invites, workspace_policies, workspace_kb_member_permissions, and workspace_audit_logs.
+description: Column-by-column reference for workspaces, members, policies, audit logs, and email-domain enrollment bindings.
 ---
 
 # Workspace and member tables
 
-Six workspace-domain tables. Before reading, remember one rule: **business tables belong to a workspace via a soft-reference `workspace_id` column** (`''` = personal data) with no foreign key; the tables here own "the workspace itself, membership, policy, and audit" (notation per the [overview](./overview.mdx)).
+Eight workspace-domain tables. Before reading, remember one rule: **business tables belong to a workspace via a soft-reference `workspace_id` column** (`''` = personal data) with no foreign key; the tables here own "the workspace itself, membership, policy, audit, and domain enrollment" (notation per the [overview](./overview.mdx)).
 
 ## `workspaces` — workspace roots
 
@@ -126,8 +126,38 @@ Lightweight audit trail. 8 columns.
 
 - **Index**: `idx_ws_audit_workspace(workspace_id, created_at DESC)`.
 
+## `registration_domains` — automatic enrollment rules
+
+One row maps an exact email domain to one workspace. The platform administrator manages these records from the separate `/admin/domains` page. 4 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `domain` | TEXT | no (PK) | — | normalized domain after the last `@`; case-insensitive matching, no wildcard or subdomain expansion |
+| `workspace_id` | TEXT | no | — | FK→`workspaces(id)`, `ON DELETE RESTRICT`; a workspace cannot be deleted while a rule points to it |
+| `lock_personal` | INTEGER | no | `0` | 0/1; when enabled, bound non-platform-admin users cannot access or create a personal space |
+| `enabled` | INTEGER | no | `1` | 0/1; disabling stops future auto-enrollment but does not release existing bindings |
+
+- **Matching**: `example.com` matches `user@example.com` only. It does not match `user@sub.example.com`; domains must be entered without a scheme, path, wildcard, or trailing dot.
+- **Registration transaction**: a new password or trusted OAuth account is created, bound in `domain_users`, and added as a workspace member in one transaction. A matching password registration requires email verification even when the global verification switch is off. Existing users are not retroactively enrolled when a rule is created.
+- **Lifecycle**: `domain` and `workspace_id` are immutable after creation. Delete and recreate a rule to change either value. Deleting a rule releases its user bindings and personal-space locks while preserving existing workspace membership and data.
+
+## `domain_users` — account bindings and overrides
+
+One row records the domain rule that enrolled a user. 3 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `user_id` | TEXT | no (PK) | — | FK→`users(id)`, `ON DELETE CASCADE` |
+| `domain` | TEXT | no | — | FK→`registration_domains(domain)`, `ON DELETE CASCADE` |
+| `lock_override` | INTEGER | **yes** | `NULL` | 0/1 explicit per-user exception; NULL inherits `registration_domains.lock_personal` |
+
+- **Binding survives email changes**: the row is keyed by `user_id`, so editing a user's email does not silently remove enrollment or access restrictions.
+- **Effective lock**: `COALESCE(lock_override, registration_domains.lock_personal)`. An unlocked override restores the personal-space switch for that account; the user still remains a member of the assigned workspace.
+- **Platform administrators**: accounts with the platform `admin` role are never locked by domain rules and can use a personal space. The rule applies to ordinary users created after it is enabled; an administrator can later change an individual user's override.
+
 ## Related pages
 
 - [Access and permissions admin](../../admin/access-auth.mdx) — matching UI
 - [Conversations and messages tables](./conversations-messages.mdx) — where the business-side `workspace_id` soft references live
 - [Capabilities and integrations tables](./tools-sandbox.mdx) — workspace scoping of `user_skills`/`user_prompts`/`user_mcp_servers`
+- [Domain enrollment and workspace access](../../admin/domain-management.mdx) — administrator workflow and lock behavior

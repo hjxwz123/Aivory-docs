@@ -1,12 +1,12 @@
 ---
 title: 用户与认证表
 sidebar_position: 2
-description: users、refresh_tokens、login_histories、oauth_providers、oauth_identities 五表的逐列参考，含 2FA、会话家族与第三方登录。
+description: users、会话、OAuth 身份与 Passkey 表的逐列参考，含 2FA、会话家族与 WebAuthn 登录。
 ---
 
 # 用户与认证表
 
-本页覆盖身份域 5 张表（列类型记法见[总览页的命名与类型约定](./overview.mdx)；**※附加列** = 只由 `store.Migrate` 的 ALTER 添加、不在 `schema.sql` 的 CREATE TABLE 中）。
+本页覆盖身份域 6 张表（列类型记法见[总览页的命名与类型约定](./overview.mdx)；**※附加列** = 只由 `store.Migrate` 的 ALTER 添加、不在 `schema.sql` 的 CREATE TABLE 中）。
 
 ## `users` — 用户主表
 
@@ -121,8 +121,29 @@ description: users、refresh_tokens、login_histories、oauth_providers、oauth_
 - **主键**：复合 `(provider_id, subject)`。**索引**：`idx_oauth_identities_user(user_id)`。
 - **备注**：以提供商不可变 subject 为键，邮箱变更后重登仍能找回账号；解链走 `/api/me/identities`。
 
+## `passkeys` — WebAuthn 凭据
+
+每个用户注册的 Passkey 设备一行。表内只保存凭据公钥和验证器状态，不保存生物特征或设备 PIN。共 9 列。
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | 否（PK） | — | 凭据行 id |
+| `user_id` | TEXT | 否 | — | FK→`users(id)`，`ON DELETE CASCADE` |
+| `credential_id` | BLOB | 否（UNIQUE） | — | WebAuthn 原始凭据标识 |
+| `public_key` | BLOB | 否 | — | CBOR 编码的凭据公钥 |
+| `sign_count` | INTEGER | 否 | `0` | 验证器签名计数器；回退可用于发现克隆凭据 |
+| `authenticator_flags` | INTEGER | **是** | `NULL` | 已签名的验证器标志；NULL 表示旧行，首次成功验证后回填 |
+| `name` | TEXT | 否 | `''` | 用户可见的设备名称 |
+| `created_at` | INTEGER → BIGINT | 否 | `now()` | 注册时间 |
+| `last_used_at` | INTEGER → BIGINT | 否 | `0` | 最近一次成功断言（`0` = 从未使用） |
+
+- **索引**：`idx_passkeys_user(user_id)`，以及 `credential_id` 的唯一约束。
+- **安全行为**：Passkey 登录要求安全上下文（HTTPS 或 `localhost`）和用户验证。Passkey 本身是完整认证因子，成功断言后不会再要求 TOTP；密码 + TOTP 流程不变。注册策略中的全局 Passkey 开关同时控制注册、列表和登录。
+- **删除**：删除用户会级联删除其全部 Passkey；在账户设置中移除单个设备只删除该凭据，不影响其他会话。
+
 ## 相关页面
 
 - [登录方式与第三方登录配置](../../admin/access-auth.mdx) — 对应管理界面
 - [Cloudflare 反代要点](../../deployment/cloudflare-proxy.mdx) — 登录历史里 IP 的取值规则
 - [首次启动与管理员](../../admin/first-run.mdx) — 第一个 `users` 行如何产生
+- [域名入组与工作空间访问](../../admin/domain-management.mdx) — 域绑定如何关联用户与工作空间

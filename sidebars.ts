@@ -31,6 +31,7 @@ const sidebars: SidebarsConfig = {
         'admin/knowledge-rag',
         'admin/tools-sandbox',
         'admin/access-auth',
+        'admin/domain-management',
         'admin/billing',
         'admin/platform-operations',
       ],

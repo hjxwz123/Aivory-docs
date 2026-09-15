@@ -1,12 +1,12 @@
 ---
 title: Users and authentication tables
 sidebar_position: 2
-description: Column-by-column reference for users, refresh_tokens, login_histories, oauth_providers, and oauth_identities, covering 2FA, session families, and social login.
+description: Column-by-column reference for users, sessions, OAuth identities, and passkeys, covering 2FA, session families, and WebAuthn login.
 ---
 
 # Users and authentication tables
 
-Five identity-domain tables (type notation defined in the [overview conventions](./overview.mdx); **※ ALTER-added** = exists only via `store.Migrate`'s ALTER loop, not in `schema.sql`'s CREATE TABLE).
+Six identity-domain tables (type notation defined in the [overview conventions](./overview.mdx); **※ ALTER-added** = exists only via `store.Migrate`'s ALTER loop, not in `schema.sql`'s CREATE TABLE).
 
 ## `users` — master user table
 
@@ -121,8 +121,29 @@ Maps "provider row + immutable subject" to a local account. 5 columns.
 - **PK**: composite `(provider_id, subject)`. **Index**: `idx_oauth_identities_user(user_id)`.
 - **Notes**: keyed on the provider's immutable subject, so links survive email changes; unlinking goes through `/api/me/identities`.
 
+## `passkeys` — WebAuthn credentials
+
+One row per user-registered passkey device. The table stores the credential public key and authenticator state; it never stores a biometric or device PIN. 9 columns.
+
+| Column | Type | Nullable | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | TEXT | no (PK) | — | credential row id |
+| `user_id` | TEXT | no | — | FK→`users(id)`, `ON DELETE CASCADE` |
+| `credential_id` | BLOB | no (UNIQUE) | — | raw WebAuthn credential identifier |
+| `public_key` | BLOB | no | — | CBOR-encoded credential public key |
+| `sign_count` | INTEGER | no | `0` | authenticator signature counter; regressions help detect cloned credentials |
+| `authenticator_flags` | INTEGER | **yes** | `NULL` | signed authenticator flags; NULL means a legacy row until its first verified assertion backfills the value |
+| `name` | TEXT | no | `''` | user-visible device label |
+| `created_at` | INTEGER → BIGINT | no | `now()` | registration time |
+| `last_used_at` | INTEGER → BIGINT | no | `0` | last successful assertion (`0` = never) |
+
+- **Indexes**: `idx_passkeys_user(user_id)` and the unique constraint on `credential_id`.
+- **Security behavior**: passkey login requires a secure context (HTTPS or `localhost`) and user verification. A passkey is a complete authentication factor, so a successful passkey assertion does not additionally require TOTP; password + TOTP remains unchanged. The platform-wide passkey switch in the registration policy gates registration, listing, and login.
+- **Deletion**: deleting a user cascades to all of their passkeys. Removing one device from Account settings deletes only that credential and leaves other sessions intact.
+
 ## Related pages
 
 - [Login methods admin page](../../admin/access-auth.mdx) — matching UI
 - [Cloudflare proxy notes](../../deployment/cloudflare-proxy.mdx) — how login-history IPs are resolved
 - [First run and admin bootstrap](../../admin/first-run.mdx) — how the first `users` row is created
+- [Domain enrollment and workspace access](../../admin/domain-management.mdx) — how domain bindings relate to users and workspaces

@@ -10,6 +10,19 @@ This page follows the tags and release times on [GitHub Releases](https://github
 
 ## v2.4 Series
 
+### v2.4.7 and post-release main updates - 2026-09-15
+
+The `v2.4.7` release added ephemeral private chat, optional WebAuthn passkeys, complete conversation export/archive tooling, request-proof hardening, Gemini and strict Responses compatibility fixes, batched document retrieval, and administrator model refresh. The release also raises source builds to Go 1.26 and creates the `passkeys` table automatically at startup; pin Docker images to `2.4.7` only after the application, runner, and sidecar images are available for both `linux/amd64` and `linux/arm64`. See the [full release notes](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.7).
+
+The main branch after the tag also contains these documented features:
+
+- **Email-domain enrollment and access restrictions**: platform administrators map an exact email domain to a workspace from the separate `/admin/domains` page. New eligible registrations are enrolled transactionally; optional personal-space locks prevent ordinary bound users from switching, creating, joining, or directly addressing personal resources. Per-user overrides can restore personal access. Platform administrators retain a personal space. See [Domain enrollment and workspace access](../admin/domain-management.mdx).
+- **Workspace administration**: `/admin/workspaces` can create a workspace with an existing active user as owner/administrator. The workspace detail view can transfer ownership only to a current member; the previous owner becomes a regular member for this platform-admin operation.
+- **Conversation and project operations**: users can archive conversations in bulk and manage project conversations from the project action menu; clearing personal conversations preserves workspace isolation.
+- **Image editing**: generated images support masked editing with preserved mask state across message updates, and generation/editing states received reliability and accessibility polish.
+
+The domain feature adds `registration_domains` and `domain_users` to both database dialects. These tables are included in backup ordering, use `ON DELETE RESTRICT` for workspace references and `ON DELETE CASCADE` for user/rule bindings, and are covered in the [database reference](../reference/database/overview.mdx). Existing users are not retroactively enrolled; changing an email does not remove an existing binding.
+
 ### [v2.4.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.6) - 2026-09-01
 
 - Reworked long-context compaction into incremental, observable summaries. Retired target-percent and merge-budget settings are migrated away, complete tool evidence remains available to compaction, and compare-and-swap persistence protects concurrent manual, inline, asynchronous, and multi-instance runs.

@@ -6,7 +6,8 @@ description: Configure email, storage and uploads, logging and privacy, announce
 
 # System, Backup, and Operations
 
-:::info Applies to
+:::info[Applies to]
+
 
 Aivory v2.4.7 and the current post-release main branch. This covers the "System" rail (Announcement, Email service, Storage & uploads, Legal & contact, Logging & privacy, Backup & Migration), the "Data & operations" tabs, Moderation and Voice under "Capabilities & integrations", and the separate domain/workspace administration pages. Screenshots show the Chinese admin UI; English labels are cited inline.
 
@@ -44,7 +45,8 @@ Requirements and validation:
 3. Match the port to the mode: direct TLS (implicit SSL) versus STARTTLS, per the provider's docs.
 4. After saving, test end to end with a **non-admin** mailbox: delivery, code-based sign-in, and the full password-reset flow.
 
-:::note Without SMTP
+:::note[Without SMTP]
+
 
 "Require email verification" and "forgot password" are effectively unavailable. When debugging, never print verification codes or SMTP passwords into public logs.
 
@@ -144,13 +146,15 @@ Know the full-backup ZIP's edges:
 | Full edition: Qdrant vectors | Running sandbox containers and un-archived live workspaces |
 | Step progress during export (prepare / read DB / write archive) | Host system and reverse-proxy configuration |
 
-:::danger Import replaces everything and logs you out
+:::danger[Import replaces everything and logs you out]
+
 
 Import demands typing a confirmation word verbatim. After restore all sessions are invalid — the current admin is signed out and must log in **with an account from the imported data**. Stop writes and keep a copy of current data beforehand; afterwards verify admin login, plain chat, attachments, knowledge-base state, vector retrieval, object storage, OAuth, and email. `docker compose down -v` deletes named volumes and is never a routine restart command.
 
 :::
 
-:::note A config export is a password vault
+:::note[A config export is a password vault]
+
 
 The config ZIP includes channel keys, OAuth secrets, SMTP, payment, and storage credentials in plaintext. Encrypt it, restrict access, and keep it out of version control and ticket attachments.
 
@@ -198,7 +202,8 @@ The environment variables day-to-day ops touches most (full list: [Advanced envi
 | `AIVORY_API_MAX_GEN_DURATION` | Wall-clock cap for one generation turn; browser disconnects do not abort server-side work | 90m |
 | `AIVORY_REQUEST_SIGNATURES_REQUIRED` | HMAC proof on authenticated writes; switch off for debugging only | true |
 
-:::note No official screenshots for this rail
+:::note[No official screenshots for this rail]
+
 
 "System" pages and the "Data & operations" dashboards ship without bundled screenshots; they follow the standard form/list layout.
 

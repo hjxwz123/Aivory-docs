@@ -6,7 +6,8 @@ description: "From a zero-user instance to the first working chat: how the initi
 
 # Administrator first-run setup
 
-:::info Applies to
+:::info[Applies to]
+
 
 Aivory v2.4.7 and later. Screenshots show the Simplified Chinese admin UI; English labels are cited inline.
 
@@ -46,7 +47,8 @@ STATIC_DIR=../dist ./aivory                     # open http://localhost:8787
 
 The first account registered on `/setup` likewise becomes admin automatically. Note: in development mode without `JWT_SECRET`, the process mints a random ephemeral key, so **every restart invalidates all sessions** — that is expected, not a bug.
 
-:::tip After signing in, start at the Overview
+:::tip[After signing in, start at the Overview]
+
 
 `/admin` lands on "Overview → Admin overview". The **configuration health** panel lists warnings that currently block users (no enabled channel, no default model, and so on), and a skippable guided tour — reopenable via "review setup tour" — walks the same checklist this page describes.
 
@@ -56,7 +58,8 @@ The first account registered on `/setup` likewise becomes admin automatically. N
 
 _Admin overview. Clear the configuration-health warnings first; treat recommended settings as phase two. Model names in screenshots are placeholders from a test instance._
 
-:::note About screenshots
+:::note[About screenshots]
+
 
 Admin screenshots come from a local test instance with placeholder channels and dummy keys. They illustrate layout only — never copy names from them as real model IDs or endpoints.
 
@@ -66,7 +69,8 @@ Admin screenshots come from a local test instance with placeholder channels and 
 
 Completing these three steps gives regular users real chat. Do **not** treat task models, web search, embeddings, email, or the Python sandbox as hard prerequisites for the first conversation.
 
-:::tip Rehearse the three steps without real keys
+:::tip[Rehearse the three steps without real keys]
+
 
 `ENABLE_MOCK_PROVIDER=true` (Personal compose) seeds a Mock channel that returns controlled fake responses without any real network calls — a zero-cost way to validate the full "channel → model → default model → streamed reply" path. Turn it off and restart before real users arrive.
 
@@ -111,7 +115,8 @@ A channel alone never surfaces models in the user picker — you still need mode
 
 _Once the three steps are done, regular users see the enabled chat models on the welcome screen._
 
-:::tip Policy-page guardrails
+:::tip[Policy-page guardrails]
+
 
 If the default model's channel gets disabled or the model deleted, the Model policy page warns that "some saved model policies are currently unavailable". Re-run a test message after every policy change — a still-selectable dropdown entry is not proof the request will succeed.
 
@@ -153,7 +158,8 @@ Before onboarding real users, build a post-change acceptance checklist: admin an
 | D4–D5 | Set up email and the registration policy; run the whole product through a regular test account |
 | D7 | Perform an actual restore drill (import the backup in isolation); log what it taught you |
 
-:::warning What not to do on day one
+:::warning[What not to do on day one]
+
 
 Don't open sign-up, expose expensive models, connect production payments, enable every tool at once, or change network topology in the same window. Every step needs a revertible "previous snapshot" — the admin config export is itself a rollback asset.
 

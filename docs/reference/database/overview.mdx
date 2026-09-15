@@ -13,8 +13,10 @@ This section is the complete reference for Aivory v2.4.7 and the post-release ma
 
 Both files declare **the same 60 tables** (identical column names and semantics; only dialect types differ), applied idempotently at startup by `store.Migrate()`. The final effective schema = embedded `CREATE TABLE` + additive `ALTER TABLE ADD COLUMN` statements in `store.Migrate` (a few columns exist only in ALTERs — e.g. `users.group_expires_at`, `messages.feedback`, `conversations.workspace_id`; they are marked **※ ALTER-added** in the text).
 
-:::caution Do not reference server/migrations/
+:::caution[Do not reference server/migrations/]
+
 `server/migrations/0001_init.sql` is an early initial snapshot. **No runtime code references it** and it does not reflect the current structure. The only source of truth is the two `schema*.sql` files plus the additive migration steps in `store.go`.
+
 :::
 
 ## Page navigation
@@ -93,7 +95,9 @@ Aivory does **not** use goose / golang-migrate / Flyway and has **no `schema_mig
 ### On manual schema changes
 
 :::danger
+
 The only change path for DDL is editing Go source: `schema*.sql` + a new ALTER + the column-parity guard — all three together, shipped together. Hand-adding a column to a production database is invisible to the app (the column guard and queries do not know it) and can skew the next release's migration behavior.
+
 :::
 
 Rules for manual **DML** (row-level) work:
@@ -254,7 +258,9 @@ SELECT name, SUM(pgsize)/1024/1024 AS mb FROM dbstat GROUP BY name ORDER BY mb D
 ```
 
 :::tip
+
 SQLite's `dbstat` requires `SQLITE_ENABLE_DBSTAT_VIRT` at compile time (mattn/go-sqlite3 ships with it); if the table is missing, just `du -h` the `DATA_DIR`.
+
 :::
 
 ## Related pages

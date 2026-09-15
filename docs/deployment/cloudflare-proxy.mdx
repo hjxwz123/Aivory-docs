@@ -20,7 +20,8 @@ The shared prerequisites (exact `ALLOWED_ORIGINS`, never exposing PostgreSQL / R
 | Real client IP | Not recoverable (see below) | Recoverable; per-IP server-side rate limits work correctly |
 | Best for | A VPS with a fixed public IP and an existing local proxy | No public IP, NAT/home servers, or zero inbound ports |
 
-:::tip Aivory recommends method B
+:::tip[Aivory recommends method B]
+
 Aivory only trusts `X-Forwarded-For` when the direct peer is a loopback or RFC-1918 private address. With method A the direct peer is a Cloudflare public egress IP, so the app ignores forwarding headers (to prevent spoofing) and the login, registration, and captcha per-IP rate limits collapse onto a handful of shared CF egress addresses, which can lock out real users. With method B, cloudflared reaches the app from the Docker private network — a trusted peer — so the app recovers the real client IP.
 :::
 
@@ -56,7 +57,8 @@ chat.example.com {
 }
 ```
 
-:::warning Keep-alive when Nginx sits in front of the app
+:::warning[Keep-alive when Nginx sits in front of the app]
+
 The Cloudflare edge reuses origin connections for about 15 minutes. Aivory's own `IdleTimeout` defaults to 20 minutes (`AIVORY_HTTP_IDLE_TIMEOUT`) precisely to exceed that reuse window. But if the TLS terminator is Nginx, its default `keepalive_timeout` of roughly 75 seconds closes connections before Cloudflare finishes reusing them, producing intermittent 502 / "can't reach this site" pages that recover on refresh. Raise it explicitly in the Nginx server block:
 
 ```nginx
@@ -74,7 +76,8 @@ keepalive_timeout 600s 2000;
 curl -s https://api.cloudflare.com/client/v4/ips | jq -r '.result[].cidr'
 ```
 
-:::danger Rotate the IP before proxying
+:::danger[Rotate the IP before proxying]
+
 If the origin IP ever served traffic directly, appeared in historical DNS, or leaked through certificate-transparency logs, an attacker can bypass Cloudflare and hit the origin. Request a new public IP from your VPS provider **before** adding the proxied record.
 :::
 
@@ -191,7 +194,8 @@ The corresponding Aivory-side limits:
 - Admins can lower the image cap (`max_image_upload_mb`, default 5 MB) under Storage & uploads, but every single file is still bound by the plan-level edge cap above.
 - The case that actually hits the wall is **backup import**: the Backup & Migration admin screen uploads the whole ZIP, which the server allows up to `MAX_BACKUP_BYTES` (default 20 GiB).
 
-:::note Workarounds for large backup imports
+:::note[Workarounds for large backup imports]
+
 A Tunnel goes through the same CF edge and **cannot** bypass the 100 MB limit. Reliable options for large imports:
 1. Temporarily switch the hostname record to **DNS only** (grey cloud), upload directly to the origin on 443, then switch back to proxied;
 2. Or point your workstation's `hosts` entry at the origin IP during the admin operation and go through the local TLS terminator;

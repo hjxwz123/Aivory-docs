@@ -68,8 +68,10 @@ All seeded via `INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) D
 
 In addition, the **one-time backfill/cleanup idempotency markers** are rows of this very table (the complete set: `oauth_pwset_backfill_v1`, `msg_search_text_backfill_v1`, `user_sort_order_backfill_v1`, `user_onboarded_backfill_v1`, `user_group_billing_prices_backfill_v2`, `message_feedback_backfill_v1`, `daily_token_quota_ledger_backfill_v1`, `user_tool_mode_settings_cleanup_v1`) — they are Aivory's "migration bookkeeping". Retired keys are deleted by migration (`summary_target_percent`, `summary_merge_max_tokens`, `store.go:32-35,469`).
 
-:::note Known stale code comment
+:::note[Known stale code comment]
+
 `store.go:1176-1177` describes `register_captcha_required` as an "arithmetic captcha (text math question)"; the actual implementation is a **slider-puzzle** captcha (`/api/public/captcha`, `internal/api/captcha.go`). Behavior wins over the comment.
+
 :::
 
 ## `pending_storage_cleanup` — delete-purge queue

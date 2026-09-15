@@ -1,0 +1,10 @@
+{
+  "aivory.docs.onThisPage": {
+    "message": "本页目录",
+    "description": "Document table of contents heading"
+  },
+  "aivory.docs.table": {
+    "message": "表格（可横向滚动查看全部列）",
+    "description": "Accessible label for scrollable document tables"
+  }
+}

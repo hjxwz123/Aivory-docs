@@ -82,5 +82,25 @@
   "item.label.Get started": {
     "message": "开始使用",
     "description": "Navbar item with label Get started"
+  },
+  "item.label.Documentation": {
+    "message": "文档",
+    "description": "Navbar item with label Documentation"
+  },
+  "item.label.Reference": {
+    "message": "参考",
+    "description": "Navbar item with label Reference"
+  },
+  "item.label.Database and tables": {
+    "message": "数据库与表结构",
+    "description": "Navbar item with label Database and tables"
+  },
+  "item.label.Environment variables": {
+    "message": "环境变量",
+    "description": "Navbar item with label Environment variables"
+  },
+  "item.label.Domain management": {
+    "message": "域管理",
+    "description": "Navbar item with label Domain management"
   }
 }

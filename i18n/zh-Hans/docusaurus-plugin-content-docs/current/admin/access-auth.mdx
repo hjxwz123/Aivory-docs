@@ -6,7 +6,8 @@ description: 配置注册策略、企业登录模式、OAuth/OIDC 身份源、�
 
 # 用户、登录与工作区
 
-:::info 适用版本
+:::info[适用版本]
+
 
 本文档基于 Aivory v2.4.7 编写。相关界面：“用户与访问 → 用户 / 注册策略 / 登录方式 / 工作空间”。反向代理与 HTTPS 前置配置见[域名、HTTPS 与 OAuth](../deployment/domain-tls-oauth.mdx)。
 
@@ -26,7 +27,8 @@ description: 配置注册策略、企业登录模式、OAuth/OIDC 身份源、�
 | 重置密码 / 关闭 2FA | 先核验身份，操作后通知账号所有者并留审计记录 |
 | 删除用户 | 影响数据的不可逆操作：先确认法律保留、工作区所有权、共享资料与备份；删除≠暂时禁用 |
 
-:::note 账号删除的异步清理
+:::note[账号删除的异步清理]
+
 
 删除用户会先登记待清理对象路径，再执行破坏性 SQL，物理删除在启动时清扫。排查“文件还在吗”这类问题时以“数据与运营 → 文件”视图为准。
 
@@ -57,7 +59,8 @@ description: 配置注册策略、企业登录模式、OAuth/OIDC 身份源、�
 | 允许第三方登录创建新账号 | 关闭后仅已绑定账号可第三方登录 | 开 |
 | 第三方账号初始密码 | 必须设置 / 可选设置 / 禁止设置 | 可选 |
 
-:::danger 关闭密码登录之前
+:::danger[关闭密码登录之前]
+
 
 “仅显示第三方登录”或“自动跳转”都要求至少存在一个**已启用且配置完整**的身份源；关闭密码登录时也不能同时要求第三方账号“必须设置本站密码”（页面会拒绝该组合）。务必先在另一个浏览器或无痕窗口用测试账号走通登录，再关闭原入口。
 
@@ -115,7 +118,8 @@ https://aivory.example.com/api/auth/oauth/<提供方ID>/callback
 | Scopes | 通用 | OAuth2 按文档；OIDC 留空用 `openid email profile` |
 | 启用（在登录页显示） | 全部 | — |
 
-:::note 多域名与 `token_exchange_failed`
+:::note[多域名与 `token_exchange_failed`]
+
 
 多个公开域名时，用 `OAUTH_CALLBACK_BASE_URL` 固定回调规范主机、`OAUTH_RETURN_ORIGINS` 白名单允许的返回源（跨域一次性 handoff 令牌 60 秒有效），见[域名、HTTPS 与 OAuth](../deployment/domain-tls-oauth.mdx)。第三方登录出现 `token_exchange_failed` 时，账号绑定正常不代表**服务器出网**正常：检查服务器到服务商 token endpoint 的 HTTPS、DNS、代理、防火墙与系统时间（令牌交换超时约 40 秒、state 有效期 10 分钟），不要反复解绑用户账号。
 

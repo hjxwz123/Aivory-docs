@@ -20,7 +20,8 @@ description: 通过 Cloudflare DNS 代理（橙色云）或 Cloudflare Tunnel �
 | 真实客户端 IP | 拿不到（见下文说明） | 能拿到，服务端按 IP 的限流可正常工作 |
 | 适用场景 | 有固定公网 IP 的 VPS、已有本机反代 | 无公网 IP、NAT/家庭服务器、不想开任何入站端口 |
 
-:::tip Aivory 推荐方式 B
+:::tip[Aivory 推荐方式 B]
+
 Aivory 只信任来自回环或 RFC-1918 私网直连对端的 `X-Forwarded-For`。方式 A 中源站直连对端是 Cloudflare 的公网出口 IP，应用会忽略转发头（防止伪造），登录、注册、验证码的按 IP 限流全部聚在少数 CF 出口上，容易误伤真实用户。方式 B 中 cloudflared 从 Docker 内网访问应用，属于可信私网对端，应用能还原真实客户端 IP。
 :::
 
@@ -56,7 +57,8 @@ chat.example.com {
 }
 ```
 
-:::warning 在 Cloudflare 前面再加 Nginx 时的 keep-alive
+:::warning[在 Cloudflare 前面再加 Nginx 时的 keep-alive]
+
 Cloudflare 边缘会复用回源连接约 15 分钟。Aivory 应用自身的 `IdleTimeout` 默认 20 分钟（`AIVORY_HTTP_IDLE_TIMEOUT`），就是为了大于这个复用窗口。但如果 TLS 终结器是 Nginx，其默认 `keepalive_timeout` 只有约 75 秒，Nginx 先关连接而 CF 还在复用，用户会看到间歇性的 502 / "无法访问此网站"，刷新即恢复。请在 Nginx 站点配置中显式加大：
 
 ```nginx
@@ -74,7 +76,8 @@ keepalive_timeout 600s 2000;
 curl -s https://api.cloudflare.com/client/v4/ips | jq -r '.result[].cidr'
 ```
 
-:::danger 先换 IP 再上代理
+:::danger[先换 IP 再上代理]
+
 如果源站 IP 曾经直接对外服务、出现在历史 DNS 或证书透明度日志中，攻击者绕过 Cloudflare 直连即可打穿源站。接入前先向 VPS 厂商申请更换公网 IP，再添加橙色云记录。
 :::
 
@@ -191,7 +194,8 @@ Aivory 侧的相关上限：
 - 管理员可在"存储与上传"里调低图片上限（`max_image_upload_mb`，默认 5 MB），但任何单文件仍受上面的边缘套餐限制约束。
 - 真正会撞墙的是**备份导入**：管理后台"备份与迁移"上传整包 ZIP，服务端允许到 `MAX_BACKUP_BYTES`（默认 20 GiB）。
 
-:::note 大备份的绕行方案
+:::note[大备份的绕行方案]
+
 Tunnel 同样经过 CF 边缘，**不能**绕过 100 MB 限制。大文件导入的可靠做法：
 1. 把该主机名临时切为 **DNS only**（灰云），直连源站 443 完成导入，再切回橙色云；
 2. 或者在管理操作时于本机 `hosts` 指向源站 IP、经本地 TLS 终结器直接访问；

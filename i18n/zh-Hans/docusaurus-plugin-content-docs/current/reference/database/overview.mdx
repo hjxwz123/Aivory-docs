@@ -13,8 +13,10 @@ description: Aivory 数据层权威参考的入口：60 张表如何存储、迁
 
 两个文件声明**完全相同的 60 张表**（列名与语义一致，仅方言类型不同），启动时由 `store.Migrate()` 幂等应用。最终生效结构 = 内嵌 `CREATE TABLE` + `store.Migrate` 中的附加 `ALTER TABLE ADD COLUMN`（少数列只存在于 ALTER 里，如 `users.group_expires_at`、`messages.feedback`、`conversations.workspace_id`，正文中以 **※附加列** 标注）。
 
-:::caution 不要参考 server/migrations/
+:::caution[不要参考 server/migrations/]
+
 `server/migrations/0001_init.sql` 是早期初始快照，**没有任何运行时代码引用它**，不代表当前结构。当前结构的唯一真相是上面两个 `schema*.sql` 文件加上 `store.go` 的附加迁移步骤。
+
 :::
 
 ## 页面导航
@@ -93,7 +95,9 @@ Aivory **不使用** goose / golang-migrate / Flyway，**没有 `schema_migratio
 ### 关于手动改库
 
 :::danger
+
 数据库结构（DDL）的唯一变更通道是改 Go 源码：`schema*.sql` + 一条新 ALTER + 加入列一致性守卫，三处同改，随下次发版自动应用。直接在生产库上手加列不会被应用感知（列守卫/查询都不认识它），还可能让下一次发版的迁移行为偏离预期。
+
 :::
 
 手工 **DML**（数据行）操作守则：
@@ -253,7 +257,9 @@ SELECT name, SUM(pgsize)/1024/1024 AS mb FROM dbstat GROUP BY name ORDER BY mb D
 ```
 
 :::tip
+
 SQLite 的 `dbstat` 需要编译时开启 `SQLITE_ENABLE_DBSTAT_VIRT`（mattn/go-sqlite3 默认带了）；若报表不存在，用 `du -h` 看 `DATA_DIR` 即可。
+
 :::
 
 ## 相关页面

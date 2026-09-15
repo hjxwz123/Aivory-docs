@@ -6,7 +6,8 @@ description: Manage built-in tools and web search, register Streamable HTTP MCP 
 
 # Tools, MCP, and sandbox
 
-:::info Applies to
+:::info[Applies to]
+
 
 Aivory v2.4.7 and later. Relevant screens: "Capabilities & integrations → Tools / MCP services / Skills / Prompts". The sandbox architecture and HTTP contract have their own pages: [Python sandbox guide](../sandbox/overview.mdx) and [Sandbox API](../sandbox/api.mdx). Screenshots show the Chinese admin UI; English labels are cited inline.
 
@@ -33,7 +34,8 @@ Tool enablement works in **two layers**:
 
 All tools share a per-turn total cap (default 48, `AIVORY_LLM_MAX_TOOL_CALLS_PER_TURN`); "Fast" mode tightens it to 12; deep research relaxes it to roughly 150. Related environment variables and provider-round limits: [Advanced environment variables](../deployment/environment-advanced.mdx).
 
-:::note Wording for external claims
+:::note[Wording for external claims]
+
 
 The README's "48 tool calls across 12 provider cycles" is imprecise: 48 is the normal-mode per-turn tool cap, while provider request rounds are a separate limit (default 20). Use the numbers on this page in public material.
 
@@ -56,7 +58,8 @@ Boot defaults come from `SEARCH_PROVIDER` / `SEARCH_API_KEY` / `SEARCH_BASE_URL`
 
 Recommended rollout: pick a provider meeting your region, privacy, quota, and latency needs → validate result quality with a question that has a known answer → confirm the target models may call search and set credits/quotas per user group → watch cost, failure rate, and objectionable-content exposure before enabling deep research or page fetching.
 
-:::tip SSRF and data exfiltration
+:::tip[SSRF and data exfiltration]
+
 
 The search key is a server-side secret — never a frontend variable. On instances that can reach internal networks, also assess `web_fetch` / `fetch_image` targets: don't give the model a reason to fetch `http://169.254.169.254` or internal service URLs.
 
@@ -81,7 +84,8 @@ Aivory accepts **Streamable HTTP** MCP transports only (no stdio subprocesses). 
 
 ![MCP services page (empty state)](/img/admin-mcp.png)
 
-:::warning Answer four questions before adding one
+:::warning[Answer four questions before adding one]
+
 
 1. What external data can this service read or modify?
 2. Are its headers / Bearer keys / OAuth credentials scoped to least privilege?
@@ -124,7 +128,8 @@ Admin fields ("Code sandbox" section):
 | Execution timeout (seconds) | Longest single run; range 10–600; blank = 120 | 120 |
 | Idle recycle (seconds) | Reap idle sessions (archiving the workspace first); range 60–86400 | 1800 |
 
-:::note The real deployed timeout cap
+:::note[The real deployed timeout cap]
+
 
 Both official composes set `SANDBOX_EXEC_TIMEOUT_CAP_MS=600000` (10 minutes) on the sidecar; the admin "Execution timeout" is clamped to [10, 600] seconds with a 120-second client-side safety margin. The "2 minutes" figure in some README text is the sidecar's code default when unconfigured — not the deployed value.
 
@@ -161,7 +166,8 @@ When Python is unavailable, check in order:
 4. Are execution timeout, concurrent-session cap, or upload size set too low?
 5. Is the target model blocked by a global tool disable, per-model tool defaults, or workspace policy?
 
-:::danger Do not "fix" it this way
+:::danger[Do not "fix" it this way]
+
 
 Never resolve errors by publishing the sandbox port, disabling auth (`SANDBOX_ALLOW_NO_AUTH` is for localhost development only), or raising resource caps to infinity. Read the sanitized app and sandbox logs first and identify whether the failure is network, auth, image, resource, or model authorization.
 

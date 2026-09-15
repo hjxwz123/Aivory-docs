@@ -6,7 +6,8 @@ description: Connect model cost, user capability, and order flow with user group
 
 # Plans, Credits, and Payments
 
-:::info Applies to
+:::info[Applies to]
+
 
 Aivory v2.4.7 and later. Relevant screens: "Billing & entitlements → User Groups / Credits and quotas / Redeem codes / Payment channels / Payment methods / Payment orders", plus "Data & operations → Usage & billing / Usage".
 
@@ -37,7 +38,8 @@ Test with cheap models and small allowances. Don't expose expensive models, deep
 | Platform limits | Daily message cap (default 200), daily image cap (default 30), concurrent generations, per user; 0 = unlimited. Boot defaults: `DAILY_MESSAGE_LIMIT` / `IMAGE_DAILY_LIMIT` |
 | Settlement currency | Three-letter ISO 4217 code for group prices and permanent-credit packages; changing it never rewrites existing prices |
 
-:::note Which ledger is authoritative
+:::note[Which ledger is authoritative]
+
 
 Credit debits land in an append-only credit ledger that usage-log cleanup never prunes, and every successful call's cost facts append to a separate statistics table. Deleting "Usage" records changes neither the global trends in "Usage & billing" analytics nor refunded credits — different data, different jobs; reconciliation trusts the ledgers and orders.
 
@@ -90,7 +92,8 @@ Catalog-scoped selection per group, with modes All / Selected / None:
 
 Search and page through members of the group to verify migrations.
 
-:::tip Start with simple tiers
+:::tip[Start with simple tiers]
+
 
 Admin, staff, trial, paid. Per tier define default model, visible models, daily quotas, credit balance caps, and sensitive-tool rights. Avoid untrackable per-user exceptions — use one-off credit adjustments or time-limited redeem codes instead, and record the reason.
 :::
@@ -161,7 +164,8 @@ Two layers, so one channel can back several methods and an outage disables only 
 5. In the provider's sandbox run: checkout, success, failure, cancellation, **duplicate callbacks**, and delayed callbacks.
 6. Verify order states, credit arrival, usage records, and the refund/manual-reconciliation path before switching to production keys and going public.
 
-:::warning Idempotency and stalled orders
+:::warning[Idempotency and stalled orders]
+
 
 Payment events are deduplicated by (provider, channel, event ID): a duplicate webhook never double-credits, so don't "help" it along manually. Long-stalled orders get closed via the orders page "safe close" action — not by editing the database.
 
@@ -238,7 +242,8 @@ Buyers and end users never touch the admin rail. Their entry points mirror the s
 
 Payments, channels, OAuth, SMTP, and storage configs all contain secrets: encrypt admin config exports and full backups, restrict access, and protect them to production-key standards.
 
-:::note No official screenshots for this rail
+:::note[No official screenshots for this rail]
+
 
 The "Billing & entitlements" pages ship without bundled screenshots; they follow the same list-and-editor layout language as User Groups and Channels.
 

@@ -1,599 +1,706 @@
-/* Aivory documentation theme: restrained surfaces, high-contrast ink, and
-   one electric violet accent shared with the main application. */
+/* Aivory's shared shell: a quiet reading surface and a single violet accent. */
 :root {
-  --ifm-color-primary: oklch(53% 0.2 290);
-  --ifm-color-primary-dark: oklch(47% 0.21 290);
-  --ifm-color-primary-darker: oklch(43% 0.2 290);
-  --ifm-color-primary-darkest: oklch(36% 0.17 290);
-  --ifm-color-primary-light: oklch(61% 0.18 290);
-  --ifm-color-primary-lighter: oklch(67% 0.15 290);
-  --ifm-color-primary-lightest: oklch(75% 0.11 290);
-  --ifm-background-color: oklch(98.4% 0.006 290);
-  --ifm-background-surface-color: oklch(99.2% 0.007 290);
-  --ifm-font-family-base: 'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ifm-color-primary: oklch(48% 0.19 290);
+  --ifm-color-primary-dark: oklch(43% 0.19 290);
+  --ifm-color-primary-darker: oklch(39% 0.18 290);
+  --ifm-color-primary-darkest: oklch(33% 0.15 290);
+  --ifm-color-primary-light: oklch(55% 0.18 290);
+  --ifm-color-primary-lighter: oklch(62% 0.16 290);
+  --ifm-color-primary-lightest: oklch(74% 0.12 290);
+  --ifm-background-color: oklch(100% 0 0);
+  --ifm-background-surface-color: oklch(98% 0.004 290);
+  --ifm-font-color-base: oklch(27% 0.018 290);
+  --ifm-color-content: var(--ifm-font-color-base);
+  --ifm-color-content-secondary: oklch(45% 0.018 290);
+  --ifm-heading-color: oklch(22% 0.018 290);
+  --ifm-font-family-base:
+    'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --ifm-heading-font-family: var(--ifm-font-family-base);
-  --ifm-font-family-monospace: 'Geist Mono', 'SFMono-Regular', Consolas, monospace;
+  --ifm-font-family-monospace:
+    'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --ifm-line-height-base: 1.75;
   --ifm-global-radius: 0.5rem;
   --ifm-navbar-height: 4rem;
-  --ifm-navbar-background-color: oklch(98.4% 0.006 290 / 0.96);
-  --ifm-footer-background-color: oklch(22% 0.04 290);
-  --ifm-code-font-size: 90%;
-  --ifm-code-background: oklch(95% 0.018 290);
-  --ifm-toc-border-color: oklch(88% 0.018 290);
-  --ifm-color-emphasis-200: oklch(91% 0.016 290);
-  --ifm-color-emphasis-300: oklch(86% 0.02 290);
+  --ifm-navbar-padding-horizontal: 1.5rem;
+  --ifm-navbar-background-color: var(--ifm-background-color);
+  --ifm-navbar-link-color: var(--aivory-text-secondary);
+  --ifm-footer-background-color: oklch(18% 0.022 290);
+  --ifm-code-font-size: 85%;
+  --ifm-code-background: oklch(96% 0.008 290);
+  --ifm-toc-border-color: oklch(90% 0.008 290);
+  --ifm-color-emphasis-200: oklch(92% 0.008 290);
+  --ifm-color-emphasis-300: oklch(86% 0.012 290);
+  --ifm-menu-color: oklch(43% 0.018 290);
+  --ifm-menu-color-background-active: oklch(94.5% 0.025 290);
+  --ifm-menu-color-background-hover: oklch(95% 0.006 290);
   --docusaurus-highlighted-code-line-bg: oklch(93% 0.025 290);
+  --aivory-surface: oklch(98% 0.004 290);
+  --aivory-accent-surface: oklch(96% 0.018 290);
+  --aivory-text-secondary: oklch(46% 0.018 290);
+  --aivory-border: oklch(90% 0.008 290);
+  --aivory-on-accent: white;
+  --ifm-navbar-search-input-background-color: var(--aivory-surface);
+  --ifm-navbar-search-input-color: var(--ifm-font-color-base);
+  --ifm-navbar-search-input-placeholder-color: var(--aivory-text-secondary);
+  --search-local-modal-background: var(--ifm-background-color);
+  --search-local-modal-shadow: 0 3px 8px oklch(20% 0.02 290 / 0.18);
+  --search-local-hit-background: var(--aivory-surface);
+  --search-local-hit-color: var(--ifm-font-color-base);
+  --search-local-hit-shadow: none;
+  --search-local-muted-color: var(--aivory-text-secondary);
+  --search-local-hit-active-color: var(--aivory-on-accent);
+  --search-local-highlight-color: var(--ifm-color-primary);
+  --search-local-modal-width: min(35rem, calc(100vw - 3rem));
+  --search-local-modal-width-sm: calc(100vw - 2.5rem);
 }
 
 [data-theme='dark'] {
-  --ifm-color-primary: oklch(76% 0.14 290);
-  --ifm-color-primary-dark: oklch(70% 0.16 290);
-  --ifm-color-primary-darker: oklch(66% 0.17 290);
-  --ifm-color-primary-darkest: oklch(58% 0.18 290);
-  --ifm-color-primary-light: oklch(82% 0.11 290);
-  --ifm-color-primary-lighter: oklch(86% 0.09 290);
-  --ifm-color-primary-lightest: oklch(91% 0.06 290);
-  --ifm-background-color: oklch(19% 0.03 290);
-  --ifm-background-surface-color: oklch(23% 0.035 290);
-  --ifm-navbar-background-color: oklch(19% 0.03 290 / 0.96);
-  --ifm-footer-background-color: oklch(14% 0.025 290);
-  --ifm-code-background: oklch(24% 0.035 290);
-  --ifm-toc-border-color: oklch(34% 0.035 290);
-  --ifm-color-emphasis-200: oklch(31% 0.035 290);
-  --ifm-color-emphasis-300: oklch(37% 0.035 290);
+  --ifm-color-primary: oklch(78% 0.12 290);
+  --ifm-color-primary-dark: oklch(72% 0.14 290);
+  --ifm-color-primary-darker: oklch(68% 0.16 290);
+  --ifm-color-primary-darkest: oklch(62% 0.17 290);
+  --ifm-color-primary-light: oklch(84% 0.09 290);
+  --ifm-color-primary-lighter: oklch(88% 0.07 290);
+  --ifm-color-primary-lightest: oklch(93% 0.04 290);
+  --ifm-background-color: oklch(18% 0.015 290);
+  --ifm-background-surface-color: oklch(21% 0.017 290);
+  --ifm-font-color-base: oklch(89% 0.009 290);
+  --ifm-color-content-secondary: oklch(74% 0.018 290);
+  --ifm-heading-color: oklch(96% 0.006 290);
+  --ifm-code-background: oklch(25% 0.025 290);
+  --ifm-toc-border-color: oklch(32% 0.018 290);
+  --ifm-color-emphasis-200: oklch(29% 0.018 290);
+  --ifm-color-emphasis-300: oklch(36% 0.022 290);
+  --ifm-menu-color: oklch(76% 0.015 290);
+  --ifm-menu-color-background-active: oklch(28% 0.048 290);
+  --ifm-menu-color-background-hover: oklch(25% 0.018 290);
   --docusaurus-highlighted-code-line-bg: oklch(30% 0.04 290);
+  --aivory-surface: oklch(21% 0.017 290);
+  --aivory-accent-surface: oklch(25% 0.035 290);
+  --aivory-text-secondary: oklch(74% 0.018 290);
+  --aivory-border: oklch(32% 0.018 290);
+  --aivory-on-accent: oklch(19% 0.03 290);
 }
 
 html {
-  scroll-behavior: smooth;
+  --doc-sidebar-width: 264px;
+  scroll-padding-top: calc(var(--ifm-navbar-height) + 1.5rem);
 }
-
 body {
   letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+/* Root must participate in the flex layout so short pages fill the viewport. */
+.aivory-motion-scope {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+:where(a, button, input, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
 }
 
+/* A single navigation treatment for home and documentation, with room for search. */
 .navbar {
-  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  border-bottom: 1px solid var(--aivory-border);
   box-shadow: none;
+  padding-block: 0;
 }
-
+.navbar__inner {
+  flex-wrap: nowrap;
+  gap: 1rem;
+}
+.navbar__items {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.navbar__items--right {
+  flex: 0 0 auto;
+  gap: 0.25rem;
+}
+.navbar__brand {
+  flex-shrink: 0;
+  gap: 0.55rem;
+  margin-right: 1.75rem;
+  min-height: 44px;
+}
 .navbar__logo {
-  width: auto;
-  height: 2rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  margin: 0;
 }
-
-[data-theme='dark'] .navbar__logo {
-  filter: brightness(1.9) saturate(0.65);
+.navbar__title {
+  color: var(--ifm-heading-color);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
-
-/* The home page uses the site navbar as its single hero navbar.
-   Scoping this to the body marker keeps documentation pages unchanged. */
-body.aivory-home-page {
-  background: oklch(15% 0.025 290);
-}
-
-body.aivory-home-page .navbar {
-  position: absolute;
-  z-index: 50;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: auto;
-  min-height: 4.75rem;
-  padding-top: env(safe-area-inset-top);
-  border-bottom: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-body.aivory-home-page .navbar::after {
-  position: absolute;
-  right: clamp(1.25rem, 4vw, 3rem);
-  bottom: 0;
-  left: clamp(1.25rem, 4vw, 3rem);
-  height: 1px;
-  background: linear-gradient(
-    to right,
-    transparent,
-    hsl(40 6% 95% / 0.2) 22%,
-    hsl(40 6% 95% / 0.2) 78%,
-    transparent
-  );
-  content: '';
-  pointer-events: none;
-}
-
-body.aivory-home-page .navbar__inner {
-  width: 100%;
-  max-width: none;
-  min-height: 4.75rem;
-  padding: 0 clamp(1.25rem, 4vw, 3rem);
-  column-gap: clamp(0.75rem, 2vw, 1.75rem);
-  flex-wrap: nowrap;
-}
-
-body.aivory-home-page .navbar__items:not(.navbar__items--right) {
-  flex: 1 1 auto;
-  flex-wrap: nowrap;
-}
-
-body.aivory-home-page .navbar__items--right {
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-}
-
-body.aivory-home-page .navbar__brand {
-  flex: 0 0 auto;
-  min-height: 44px;
-  gap: 0.65rem;
-  margin-right: clamp(1rem, 3vw, 3rem);
-}
-
-body.aivory-home-page .navbar__logo {
-  width: auto;
-  height: 2rem;
-  filter: brightness(2) saturate(0.55);
-}
-
-body.aivory-home-page .navbar__title,
-body.aivory-home-page .navbar__link,
-body.aivory-home-page .navbar__item {
-  color: hsl(40 6% 95% / 0.9);
-  font-family: 'Geist Variable', 'Geist', 'Inter', ui-sans-serif, system-ui, sans-serif;
-}
-
-body.aivory-home-page .navbar__title {
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-body.aivory-home-page .navbar__link {
-  min-height: 44px;
-  padding: 0.7rem 0.65rem;
+.navbar__link {
   font-size: 0.86rem;
   font-weight: 550;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.4rem;
   white-space: nowrap;
-  transition: color 180ms ease, background-color 180ms ease;
+  transition:
+    color 160ms ease-out,
+    background-color 160ms ease-out;
 }
-
-body.aivory-home-page .navbar__link:hover,
-body.aivory-home-page .navbar__link--active {
-  color: hsl(40 6% 100%);
-  background: hsl(40 6% 95% / 0.08);
+.navbar__link:hover {
+  background: var(--aivory-surface);
 }
-
-body.aivory-home-page .dropdown__menu {
-  min-width: 12rem;
-  margin-top: 0.55rem;
-  padding: 0.45rem;
-  border: 0;
-  border-radius: 0.75rem;
-  background: hsl(260 38% 8% / 0.96);
-  box-shadow: 0 18px 45px hsl(260 70% 2% / 0.42), inset 0 1px 0 hsl(40 6% 95% / 0.1);
-  backdrop-filter: blur(12px);
+.navbar__link--active {
+  background: var(--aivory-accent-surface);
 }
-
-/* The 0.55rem margin above the home dropdown menu is a hover dead zone:
-   while the pointer crosses it, .dropdown loses :hover and the CSS-only
-   hoverable menu closes before a click can land. This invisible bridge
-   extends the dropdown container across that gap. It cannot live on
-   .dropdown__menu itself because the menu clips overflow (overflow-y: auto). */
-@media (min-width: 997px) {
-  body.aivory-home-page .dropdown::after {
-    content: '';
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    height: 0.65rem;
-  }
+.navbar__toggle,
+.navbar-sidebar__close {
+  width: 44px;
+  height: 44px;
+  color: var(--ifm-font-color-base);
 }
-
-body.aivory-home-page .dropdown__link {
+.navbar__items--right button {
+  color: var(--ifm-font-color-base);
+}
+.dropdown__menu {
+  min-width: 13.5rem;
+  padding: 0.4rem;
+  border: 1px solid var(--aivory-border);
+  border-radius: 0.6rem;
+  background: var(--ifm-background-color);
+  box-shadow: none;
+  margin-top: 0;
+}
+.dropdown__link {
+  display: flex;
+  align-items: center;
   min-height: 42px;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--aivory-text-secondary);
+  white-space: normal;
+}
+.dropdown__link:hover,
+.dropdown__link--active {
+  color: var(--ifm-color-primary);
+  background: var(--aivory-accent-surface);
+}
+.navbar__search-input {
+  height: 38px;
+  width: 12.5rem;
+  border: 1px solid var(--aivory-border);
   border-radius: 0.5rem;
-  color: hsl(40 6% 88% / 0.9);
   font-size: 0.84rem;
 }
-
-body.aivory-home-page .dropdown__link:hover {
-  background: hsl(258 92% 76% / 0.15);
-  color: hsl(40 6% 100%);
+.navbar__search-input::placeholder {
+  opacity: 1;
 }
-
-body.aivory-home-page .aivory-navbar-cta {
-  min-height: 42px;
-  margin-left: 0.7rem;
-  padding: 0.55rem 1rem;
-  border-radius: 999px;
-  background: hsl(40 6% 95%);
-  color: hsl(260 35% 8%) !important;
-  font-weight: 700;
+.navbar [class*='searchBarContainer'] {
+  margin-left: 0.4rem;
 }
-
-body.aivory-home-page .aivory-navbar-cta:hover {
-  background: hsl(40 6% 100%);
-  color: hsl(260 35% 8%) !important;
+.navbar [class*='searchHint'] {
+  font-size: 0.7rem;
 }
-
-body.aivory-home-page .navbar__toggle {
-  min-width: 44px;
-  min-height: 44px;
-  color: hsl(40 6% 95%);
+.navbar [class*='searchHintContainer'] {
+  gap: 2px;
 }
-
-body.aivory-home-page .navbar-sidebar {
-  background: hsl(260 38% 7%);
-  color: hsl(40 6% 95%);
+.navbar-sidebar {
+  background: var(--ifm-background-color);
 }
-
-body.aivory-home-page .navbar-sidebar .menu__link,
-body.aivory-home-page .navbar-sidebar__back {
-  color: hsl(40 6% 90%);
-}
-
-body.aivory-home-page .navbar-sidebar .menu__link:hover {
-  background: hsl(258 92% 76% / 0.14);
-  color: hsl(40 6% 100%);
-}
-
-/* Product, architecture and playground routes use the same quiet midnight
-   navigation surface as the home page while remaining in normal document flow. */
-body.aivory-experience-page {
-  background: oklch(15% 0.025 290);
-}
-
-body.aivory-experience-page .navbar {
-  border-bottom: 1px solid oklch(95% 0.01 290 / 0.1);
-  background: oklch(15% 0.025 290 / 0.96);
+.navbar-sidebar__brand {
   box-shadow: none;
-  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--aivory-border);
 }
-
-body.aivory-experience-page .navbar__title,
-body.aivory-experience-page .navbar__link,
-body.aivory-experience-page .navbar__item,
-body.aivory-experience-page .navbar__toggle {
-  color: oklch(95% 0.01 290 / 0.9);
+.navbar-sidebar .menu__link {
+  min-height: 44px;
 }
-
-body.aivory-experience-page .navbar__link:hover,
-body.aivory-experience-page .navbar__link--active {
-  background: oklch(95% 0.01 290 / 0.08);
-  color: oklch(95% 0.01 290);
-}
-
-body.aivory-experience-page .dropdown__menu {
-  border: 0;
-  background: oklch(20% 0.03 290 / 0.98);
-  box-shadow: 0 0.75rem 1.8rem oklch(5% 0.025 290 / 0.3), inset 0 1px 0 oklch(95% 0.01 290 / 0.08);
-}
-
-body.aivory-experience-page .dropdown__link {
-  color: oklch(88% 0.015 290);
-}
-
-body.aivory-experience-page .dropdown__link:hover {
-  background: oklch(72% 0.215 290 / 0.14);
-  color: oklch(98% 0.01 290);
-}
-
-body.aivory-experience-page .aivory-navbar-cta {
-  background: oklch(72% 0.215 290);
-  color: oklch(18% 0.04 290) !important;
-}
-
-body.aivory-experience-page .aivory-navbar-cta:hover {
-  background: oklch(78% 0.185 290);
-  color: oklch(18% 0.04 290) !important;
-}
-
-/* The main wrapper is rendered after Navbar, so :has() lets modern browsers
-   apply the hero treatment during the first server-rendered paint. Keep this
-   block a complete mirror of every body.aivory-home-page / body.aivory-experience-page
-   rule above: the hydration effect that adds the body class must change zero
-   computed values on browsers that support :has(), otherwise the navbar
-   reflows the moment React finishes hydrating. The body-class rules above
-   remain the fallback for engines without :has() (and for no-JS loads). */
-@supports selector(body:has(*)) {
-  body:has(main.aivory-home-page) {
-    background: oklch(15% 0.025 290);
-  }
-
-  body:has(main.aivory-home-page) .navbar {
-    position: absolute;
-    z-index: 50;
-    top: 0;
-    right: 0;
-    left: 0;
-    height: auto;
-    min-height: 4.75rem;
-    padding-top: env(safe-area-inset-top);
-    border-bottom: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  body:has(main.aivory-home-page) .navbar::after {
-    position: absolute;
-    right: clamp(1.25rem, 4vw, 3rem);
-    bottom: 0;
-    left: clamp(1.25rem, 4vw, 3rem);
-    height: 1px;
-    background: linear-gradient(
-      to right,
-      transparent,
-      hsl(40 6% 95% / 0.2) 22%,
-      hsl(40 6% 95% / 0.2) 78%,
-      transparent
-    );
-    content: '';
-    pointer-events: none;
-  }
-
-  body:has(main.aivory-home-page) .navbar__inner {
-    width: 100%;
-    max-width: none;
-    min-height: 4.75rem;
-    padding: 0 clamp(1.25rem, 4vw, 3rem);
-    column-gap: clamp(0.75rem, 2vw, 1.75rem);
-    flex-wrap: nowrap;
-  }
-
-  body:has(main.aivory-home-page) .navbar__items:not(.navbar__items--right) {
-    flex: 1 1 auto;
-    flex-wrap: nowrap;
-  }
-
-  body:has(main.aivory-home-page) .navbar__items--right {
-    flex: 0 0 auto;
-    flex-wrap: nowrap;
-    justify-content: flex-end;
-  }
-
-  body:has(main.aivory-home-page) .navbar__brand {
-    flex: 0 0 auto;
-    min-height: 44px;
-    gap: 0.65rem;
-    margin-right: clamp(1rem, 3vw, 3rem);
-  }
-
-  body:has(main.aivory-home-page) .navbar__logo {
-    width: auto;
-    height: 2rem;
-    filter: brightness(2) saturate(0.55);
-  }
-
-  body:has(main.aivory-home-page) .navbar__title,
-  body:has(main.aivory-home-page) .navbar__link,
-  body:has(main.aivory-home-page) .navbar__item {
-    color: hsl(40 6% 95% / 0.9);
-    font-family: 'Geist Variable', 'Geist', 'Inter', ui-sans-serif, system-ui, sans-serif;
-  }
-
-  body:has(main.aivory-home-page) .navbar__title {
-    font-size: 1.05rem;
-    font-weight: 600;
-    letter-spacing: 0;
-  }
-
-  body:has(main.aivory-home-page) .navbar__link {
-    min-height: 44px;
-    padding: 0.7rem 0.65rem;
-    font-size: 0.86rem;
-    font-weight: 550;
-    white-space: nowrap;
-    transition: color 180ms ease, background-color 180ms ease;
-  }
-
-  body:has(main.aivory-home-page) .navbar__link:hover,
-  body:has(main.aivory-home-page) .navbar__link--active {
-    color: hsl(40 6% 100%);
-    background: hsl(40 6% 95% / 0.08);
-  }
-
-  body:has(main.aivory-home-page) .dropdown__menu {
-    min-width: 12rem;
-    margin-top: 0.55rem;
-    padding: 0.45rem;
-    border: 0;
-    border-radius: 0.75rem;
-    background: hsl(260 38% 8% / 0.96);
-    box-shadow: 0 18px 45px hsl(260 70% 2% / 0.42), inset 0 1px 0 hsl(40 6% 95% / 0.1);
-    backdrop-filter: blur(12px);
-  }
-
-  @media (min-width: 997px) {
-    body:has(main.aivory-home-page) .dropdown::after {
-      content: '';
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      height: 0.65rem;
-    }
-  }
-
-  body:has(main.aivory-home-page) .dropdown__link {
-    min-height: 42px;
-    border-radius: 0.5rem;
-    color: hsl(40 6% 88% / 0.9);
-    font-size: 0.84rem;
-  }
-
-  body:has(main.aivory-home-page) .dropdown__link:hover {
-    background: hsl(258 92% 76% / 0.15);
-    color: hsl(40 6% 100%);
-  }
-
-  body:has(main.aivory-home-page) .aivory-navbar-cta {
-    min-height: 42px;
-    margin-left: 0.7rem;
-    padding: 0.55rem 1rem;
-    border-radius: 999px;
-    background: hsl(40 6% 95%);
-    color: hsl(260 35% 8%) !important;
-    font-weight: 700;
-  }
-
-  body:has(main.aivory-home-page) .aivory-navbar-cta:hover {
-    background: hsl(40 6% 100%);
-    color: hsl(260 35% 8%) !important;
-  }
-
-  body:has(main.aivory-home-page) .navbar__toggle {
-    min-width: 44px;
-    min-height: 44px;
-    color: hsl(40 6% 95%);
-  }
-
-  body:has(main.aivory-home-page) .navbar-sidebar {
-    background: hsl(260 38% 7%);
-    color: hsl(40 6% 95%);
-  }
-
-  body:has(main.aivory-home-page) .navbar-sidebar .menu__link,
-  body:has(main.aivory-home-page) .navbar-sidebar__back {
-    color: hsl(40 6% 90%);
-  }
-
-  body:has(main.aivory-home-page) .navbar-sidebar .menu__link:hover {
-    background: hsl(258 92% 76% / 0.14);
-    color: hsl(40 6% 100%);
-  }
-
-  body:has(main.aivory-experience-page) {
-    background: oklch(15% 0.025 290);
-  }
-
-  body:has(main.aivory-experience-page) .navbar {
-    border-bottom: 1px solid oklch(95% 0.01 290 / 0.1);
-    background: oklch(15% 0.025 290 / 0.96);
-    box-shadow: none;
-    backdrop-filter: blur(14px);
-  }
-
-  body:has(main.aivory-experience-page) .navbar__title,
-  body:has(main.aivory-experience-page) .navbar__link,
-  body:has(main.aivory-experience-page) .navbar__item,
-  body:has(main.aivory-experience-page) .navbar__toggle {
-    color: oklch(95% 0.01 290 / 0.9);
-  }
-
-  body:has(main.aivory-experience-page) .navbar__link:hover,
-  body:has(main.aivory-experience-page) .navbar__link--active {
-    background: oklch(95% 0.01 290 / 0.08);
-    color: oklch(95% 0.01 290);
-  }
-
-  body:has(main.aivory-experience-page) .dropdown__menu {
-    border: 0;
-    background: oklch(20% 0.03 290 / 0.98);
-    box-shadow: 0 0.75rem 1.8rem oklch(5% 0.025 290 / 0.3), inset 0 1px 0 oklch(95% 0.01 290 / 0.08);
-  }
-
-  body:has(main.aivory-experience-page) .dropdown__link {
-    color: oklch(88% 0.015 290);
-  }
-
-  body:has(main.aivory-experience-page) .dropdown__link:hover {
-    background: oklch(72% 0.215 290 / 0.14);
-    color: oklch(98% 0.01 290);
-  }
-
-  body:has(main.aivory-experience-page) .aivory-navbar-cta {
-    background: oklch(72% 0.215 290);
-    color: oklch(18% 0.04 290) !important;
-  }
-
-  body:has(main.aivory-experience-page) .aivory-navbar-cta:hover {
-    background: oklch(78% 0.185 290);
-    color: oklch(18% 0.04 290) !important;
-  }
-}
-
-.navbar__title {
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.navbar__link,
-.menu__link {
+.navbar-sidebar__back {
+  color: var(--aivory-text-secondary);
+  background: var(--aivory-surface);
   font-size: 0.9rem;
+  min-height: 44px;
+}
+.navbar-sidebar--show .navbar__inner .navbar__items--right {
+  visibility: hidden;
 }
 
-.footer {
-  border-top: 1px solid oklch(34% 0.035 290);
+/* Product tour pages retain their existing dark identity within the unified shell. */
+body:has(.aivory-experience-page) .navbar {
+  --ifm-navbar-background-color: oklch(18% 0.015 290);
+  --ifm-heading-color: oklch(96% 0.006 290);
+  --ifm-font-color-base: oklch(89% 0.009 290);
+  --ifm-color-primary: oklch(78% 0.12 290);
+  --aivory-text-secondary: oklch(76% 0.015 290);
+  --ifm-navbar-link-color: var(--aivory-text-secondary);
+  --aivory-surface: oklch(23% 0.025 290);
+  --aivory-accent-surface: oklch(27% 0.04 290);
+  --aivory-border: oklch(33% 0.022 290);
+  --ifm-background-color: oklch(18% 0.015 290);
+  --ifm-menu-color: oklch(76% 0.015 290);
+  --ifm-menu-color-background-hover: var(--aivory-surface);
+  --ifm-menu-color-background-active: var(--aivory-accent-surface);
+  --aivory-on-accent: oklch(19% 0.03 290);
 }
 
-.footer__title {
-  color: oklch(88% 0.02 290);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  text-transform: none;
+/* Sidebar navigation is quieter than the article and stays independently scrollable. */
+.theme-doc-sidebar-container {
+  background: var(--aivory-surface);
+  border-right: 1px solid var(--aivory-border);
+}
+.theme-doc-sidebar-menu {
+  padding: 0.5rem 0.55rem 1.5rem;
+}
+.menu__link {
+  font-size: 0.84rem;
+  line-height: 1.55;
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.65rem;
+  overflow-wrap: anywhere;
+}
+.menu__list .menu__list {
+  padding-left: 0.75rem;
+  margin-left: 0.6rem;
+  border-left: 1px solid var(--aivory-border);
+}
+.menu__list-item:not(:first-child) {
+  margin-top: 0.15rem;
+}
+.menu__link--active:not(.menu__link--sublist) {
+  font-weight: 600;
+}
+.menu__caret:before,
+.menu__link--sublist-caret:after {
+  background-size: 1.2rem;
 }
 
-.footer__link-item {
-  color: oklch(70% 0.025 290);
+/* The document layout owns its spacing; discard the preset container gutters. */
+.docs-wrapper main > .container {
+  max-width: none !important;
+  padding: 0 !important;
+  margin-block: 0 !important;
 }
-
-.footer__link-item:hover {
-  color: oklch(86% 0.08 290);
+.theme-doc-breadcrumbs {
+  margin-bottom: 1.5rem;
 }
-
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem;
+  font-size: 0.76rem;
+}
+.breadcrumbs__item {
+  max-width: 100%;
+}
+.breadcrumbs__link {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border-radius: 0.3rem;
+}
+.markdown {
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
 .markdown h1,
 .markdown h2,
 .markdown h3 {
-  letter-spacing: -0.02em;
+  color: var(--ifm-heading-color);
   text-wrap: balance;
+  letter-spacing: -0.025em;
+  line-height: 1.4;
+  scroll-margin-top: calc(var(--ifm-navbar-height) + 1.5rem);
 }
-
+.markdown h1 {
+  font-size: 2.25rem;
+  margin-bottom: 1.5rem;
+}
+.markdown h2 {
+  margin-top: 3rem;
+  margin-bottom: 1.25rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--aivory-border);
+  font-size: 1.55rem;
+}
+.markdown h3 {
+  margin-top: 2rem;
+  font-size: 1.2rem;
+}
 .markdown p,
 .markdown li {
-  line-height: 1.75;
+  line-height: 1.85;
+  text-wrap: pretty;
 }
-
+.markdown > p,
+.markdown > ul,
+.markdown > ol {
+  max-width: 75ch;
+}
+.markdown p {
+  margin-bottom: 1.25rem;
+}
+.markdown li + li {
+  margin-top: 0.45rem;
+}
+.markdown li > p {
+  margin-block: 0.5rem;
+}
+.markdown a:not(.hash-link) {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-color: color-mix(
+    in oklch,
+    var(--ifm-color-primary) 40%,
+    transparent
+  );
+}
+.markdown a:hover {
+  text-decoration-color: currentColor;
+}
 .markdown code {
   border: 0;
-  border-radius: 0.3rem;
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.3rem;
 }
-
-.theme-doc-sidebar-container {
-  border-right: 1px solid var(--ifm-color-emphasis-200);
+.markdown :not(pre) > code {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
-
+.markdown pre {
+  font-size: 0.82rem;
+  line-height: 1.7;
+  border: 1px solid var(--aivory-border);
+  border-radius: 0.6rem;
+  box-shadow: none;
+}
+.markdown pre code {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.markdown [class*='codeBlockContainer'] {
+  box-shadow: none;
+}
+.markdown [class*='codeBlockTitle'] {
+  background: var(--aivory-surface);
+  border-color: var(--aivory-border);
+  font-size: 0.82rem;
+}
+.markdown table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  border-spacing: 0;
+  margin-block: 1.5rem;
+  font-size: 0.87rem;
+  line-height: 1.7;
+  overscroll-behavior-x: contain;
+}
+.markdown table th,
+.markdown table td {
+  border: 1px solid var(--aivory-border);
+  padding: 0.8rem 0.9rem;
+  text-align: left;
+  vertical-align: top;
+}
+.markdown table th {
+  background: var(--aivory-surface);
+  font-size: 0.82rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.markdown table td {
+  min-width: 6rem;
+}
+.markdown table td:first-child {
+  min-width: 8rem;
+}
+.markdown table tr {
+  background: transparent;
+}
+.markdown table tr:nth-child(even) {
+  background: var(--aivory-surface);
+}
+.markdown table code {
+  font-size: 0.91em;
+}
+.aivory-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  margin-block: 1.5rem;
+  border-radius: 0.35rem;
+}
+.markdown .aivory-table-scroll table {
+  display: table;
+  margin: 0;
+  min-width: 34rem;
+}
+.markdown .aivory-table-scroll table:has(th:nth-child(5)) td:last-child {
+  min-width: 14rem;
+}
+.markdown img {
+  display: block;
+  height: auto;
+  margin-block: 1.5rem;
+  border: 1px solid var(--aivory-border);
+  border-radius: 0.6rem;
+  background: white;
+}
+.markdown blockquote {
+  border: 1px solid var(--aivory-border);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--aivory-surface);
+  color: var(--aivory-text-secondary);
+}
+.theme-admonition {
+  --ifm-alert-border-left-width: 1px;
+  border: 1px solid var(--ifm-alert-border-color);
+  border-radius: 0.6rem;
+  box-shadow: none;
+  padding: 1.1rem 1.25rem;
+  margin-block: 1.5rem;
+}
+.theme-admonition p:last-child {
+  margin-bottom: 0;
+}
+.theme-admonition [class*='admonitionHeading'] {
+  font-size: 0.85rem;
+  text-transform: none;
+}
 .theme-doc-toc-desktop {
-  border-left-color: var(--ifm-color-emphasis-200);
+  position: static !important;
+  max-height: calc(100vh - var(--ifm-navbar-height) - 6rem) !important;
+  padding-left: 0;
+  border-left: 0;
+  font-size: 0.78rem;
+}
+.table-of-contents {
+  line-height: 1.6;
+}
+.table-of-contents li {
+  margin: 0.6rem 0;
+}
+.table-of-contents ul {
+  padding-left: 0.8rem;
+}
+.table-of-contents__link {
+  display: block;
+  color: var(--aivory-text-secondary);
+  padding: 0.1rem 0;
+  overflow-wrap: anywhere;
+}
+.table-of-contents__link--active {
+  color: var(--ifm-color-primary);
+  font-weight: 600;
+}
+.theme-doc-toc-mobile {
+  border: 1px solid var(--aivory-border);
+  border-radius: 0.5rem;
+  background: var(--aivory-surface);
+  font-size: 0.86rem;
+  margin-bottom: 1.75rem;
+}
+.theme-doc-toc-mobile button {
+  padding: 0.8rem 1rem;
+}
+.theme-doc-footer {
+  margin-top: 3rem;
+  color: var(--aivory-text-secondary);
+  font-size: 0.8rem;
+}
+.pagination-nav {
+  margin-top: 2.5rem;
+  gap: 1rem;
+}
+.pagination-nav__link {
+  border: 1px solid var(--aivory-border);
+  border-radius: 0.6rem;
+  padding: 1rem 1.15rem;
+  transition:
+    border-color 180ms ease-out,
+    background-color 180ms ease-out;
+}
+.pagination-nav__link:hover {
+  background: var(--aivory-surface);
+}
+.pagination-nav__sublabel {
+  color: var(--aivory-text-secondary);
+  font-size: 0.78rem;
+  margin-bottom: 0.35rem;
+}
+.pagination-nav__label {
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
+.footer {
+  padding: 3rem 2rem 2rem;
+  background: oklch(18% 0.022 290);
+  border-top: 1px solid oklch(32% 0.022 290);
+}
+.footer > .container {
+  max-width: 78rem;
+}
+.footer__title {
+  color: oklch(94% 0.008 290);
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+.footer__link-item {
+  color: oklch(78% 0.015 290);
+  font-size: 0.83rem;
+  line-height: 2;
+}
+.footer__link-item:hover {
+  color: oklch(90% 0.06 290);
+}
+.footer__copyright {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid oklch(32% 0.022 290);
+  color: oklch(74% 0.018 290);
+  font-size: 0.76rem;
+  text-align: left;
+}
+
+@media (min-width: 997px) and (max-width: 1150px) {
+  .navbar__brand {
+    margin-right: 1rem;
+  }
+  .navbar__link {
+    padding-inline: 0.6rem;
+    font-size: 0.82rem;
+  }
+  .navbar__search-input {
+    width: 10rem;
+  }
+  .navbar__items--right .aivory-navbar-github {
+    display: none;
+  }
+}
+@media (min-width: 997px) and (max-width: 1279px) {
+  .theme-doc-toc-mobile {
+    display: block !important;
+  }
+}
+@media (max-width: 996px) {
+  :root {
+    --ifm-navbar-padding-horizontal: 1rem;
+  }
+  .navbar__brand {
+    margin-right: 0;
+  }
+  .navbar__toggle {
+    margin-right: 0.4rem;
+  }
+  .navbar [class*='navbarSearchContainer'] {
+    position: static;
+    padding: 0;
+  }
+  .navbar__search-input {
+    width: 12rem;
+  }
+  .navbar__inner {
+    gap: 0.5rem;
+  }
+  .navbar-sidebar .menu__list {
+    border-left: 0;
+  }
+}
+@media (max-width: 600px) {
+  .markdown h1 {
+    font-size: 1.9rem;
+  }
+  .markdown h2 {
+    font-size: 1.35rem;
+    margin-top: 2.5rem;
+    padding-top: 1.25rem;
+  }
+  .markdown h3 {
+    font-size: 1.12rem;
+  }
+  .markdown table th,
+  .markdown table td {
+    padding: 0.65rem 0.75rem;
+  }
+  .theme-doc-breadcrumbs {
+    margin-bottom: 1.1rem;
+  }
+  .pagination-nav {
+    gap: 0.6rem;
+  }
+  .pagination-nav__link {
+    padding: 0.8rem;
+  }
+  .footer {
+    padding: 2rem 1.25rem;
+  }
+}
+@media (max-width: 576px) {
+  .navbar .navbar__search-input,
+  .navbar .navbar__search-input:not(:focus) {
+    width: 8rem;
+    padding-right: 1.6rem;
+  }
+  .navbar__brand {
+    gap: 0.3rem;
+  }
+  .navbar__title {
+    font-size: 1.05rem;
+  }
+  .navbar__logo {
+    width: 1.65rem;
+    height: 1.65rem;
+  }
+  .navbar .navbar__search [class*='dropdownMenu'] {
+    position: fixed !important;
+    top: calc(var(--ifm-navbar-height) - 0.25rem) !important;
+    right: 1rem !important;
+    left: auto !important;
+    max-height: calc(100dvh - var(--ifm-navbar-height) - 1rem);
+    overflow-y: auto;
+  }
+}
+@media (max-width: 359px) {
+  .navbar .navbar__search-input,
+  .navbar .navbar__search-input:not(:focus) {
+    width: 6.25rem;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-
-  body.aivory-home-page .navbar__link,
-  body:has(main.aivory-home-page) .navbar__link {
+  .navbar__link,
+  .pagination-nav__link {
     transition: none;
   }
 }
-
-@media (min-width: 997px) and (max-width: 1200px) {
-  body.aivory-home-page .navbar__brand,
-  body:has(main.aivory-home-page) .navbar__brand {
-    margin-right: 1rem;
+@media print {
+  .theme-doc-sidebar-container,
+  .theme-doc-toc-mobile,
+  .pagination-nav,
+  .theme-doc-breadcrumbs {
+    display: none !important;
   }
-
-  body.aivory-home-page .navbar__link,
-  body:has(main.aivory-home-page) .navbar__link {
-    padding-right: 0.45rem;
-    padding-left: 0.45rem;
-    font-size: 0.82rem;
+  .docs-wrapper main {
+    max-width: none !important;
   }
-
-  body.aivory-home-page .navbar__items--right > a[href*='github.com'],
-  body:has(main.aivory-home-page) .navbar__items--right > a[href*='github.com'] {
-    display: none;
+  .markdown table {
+    overflow: visible;
+    font-size: 0.75rem;
+  }
+  .aivory-table-scroll {
+    overflow: visible;
+  }
+  .markdown .aivory-table-scroll table {
+    min-width: 0;
+  }
+  .markdown pre {
+    white-space: pre-wrap;
   }
 }

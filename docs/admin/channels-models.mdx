@@ -9,7 +9,8 @@ import TabItem from '@theme/TabItem';
 
 # Channels, models, and policies
 
-:::info Applies to
+:::info[Applies to]
+
 
 Aivory v2.4.7 and later. This covers the "AI & models" rail: Channels / Models / Model tags / Model policy / Context & memory / Moderation. Screenshots show the Chinese admin UI unless noted; English labels are cited inline.
 
@@ -91,7 +92,8 @@ Three paths:
 - **"Fetch from upstream" inside the channel editor**: tick models while creating the channel — best for first-time onboarding.
 - **Manual "New model"**: for providers with no listing endpoint, private gateways, or inference-only keys.
 
-:::note Import is not judgment
+:::note[Import is not judgment]
+
 
 Auto-import doesn't decide what should be user-visible, whether a model is chat/image/embedding, or whether pricing and context descriptions are right. Review enabled state, capability flags, and billing fields record by record before exposing anything.
 
@@ -124,7 +126,8 @@ The editor is grouped into Basic / Chat behaviour / Pricing / Permissions / Tags
 | Input/output/cache-read/cache-write price per 1M, price per image | Drive credit deduction and the Usage & billing analytics | per provider | 0 |
 | Enabled (visible to users) | Off removes it from pickers and new requests | — | on |
 
-:::tip The classic mis-flag symptom
+:::tip[The classic mis-flag symptom]
+
 
 "A model appears in the picker but the first request fails" almost always means capability flags disagree with the upstream: non-function-calling models marked native, chat models marked embedding, or assuming every model handles vision/JSON/streaming. Run one minimal request per claimed capability.
 
@@ -193,7 +196,8 @@ The safe channel/model change flow:
 | Same ID hits the wrong upstream | The channel linked to the model record — not the display name |
 | Fallback channel never fires | Fallback must share the primary channel's type and API format, or it won't retry |
 
-:::warning Disable/delete blast radius
+:::warning[Disable/delete blast radius]
+
 
 Disabling a channel instantly makes all its models unusable for new requests; deleting a channel cascades to its model records. Before disabling or deleting a model, confirm no policy slot, verifier, image-prompt or summary model, workspace policy, plan quota, or user favorite references it.
 

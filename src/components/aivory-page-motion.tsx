@@ -19,16 +19,6 @@ type RevealStart = {
   scale?: number
 }
 
-const markdownRevealSelector = [
-  '.markdown > h2',
-  '.markdown > h3',
-  '.markdown > p',
-  '.markdown > ul',
-  '.markdown > ol',
-  '.markdown > blockquote',
-  '.markdown > .theme-admonition',
-].join(', ')
-
 // Must stay in sync with the ScrollTrigger `start: 'top 84%'` below.
 const revealStartFactor = 0.84
 
@@ -95,6 +85,10 @@ export default function AivoryPageMotion({scopeRef}: AivoryPageMotionProps) {
     const isInitialRun = isInitialRunRef.current
     isInitialRunRef.current = false
 
+    // Reading, anchor navigation, search and printing must never wait for an
+    // entrance animation. Keep motion scoped to the product showcase routes.
+    if (!main.classList.contains('aivory-experience-page')) return
+
     const media = gsap.matchMedia()
     let refreshFrame = 0
 
@@ -120,10 +114,7 @@ export default function AivoryPageMotion({scopeRef}: AivoryPageMotionProps) {
         }
 
         const explicitTargets = Array.from(scope.querySelectorAll<HTMLElement>('[data-aivory-reveal]'))
-        const markdownTargets = isHome || main.classList.contains('aivory-experience-page')
-          ? []
-          : Array.from(main.querySelectorAll<HTMLElement>(markdownRevealSelector))
-        const revealTargets = Array.from(new Set([...explicitTargets, ...markdownTargets]))
+        const revealTargets = explicitTargets
 
         // Only elements that have not been painted yet (below the trigger
         // line) are pre-hidden; anything in view stays exactly as rendered.

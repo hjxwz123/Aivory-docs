@@ -9,7 +9,8 @@ import TabItem from '@theme/TabItem';
 
 # Knowledge bases, RAG, and storage
 
-:::info Applies to
+:::info[Applies to]
+
 
 Aivory v2.4.7 and later. Relevant screens: "Capabilities & integrations → Documents" (RAG and embedding settings), "System → Storage & uploads", and the user-facing knowledge bases under `/kb`. Screenshots show the Chinese admin UI; English labels are cited inline.
 
@@ -25,7 +26,8 @@ upload → validate type/size and store the raw object → parse (text/tables/OC
 → at question time, retrieve only within the caller's permission scope → inject snippets
 ```
 
-:::warning Uploaded ≠ searchable
+:::warning[Uploaded ≠ searchable]
+
 
 Documents move through `pending → parsing → embedding → ready / failed` in an async queue; while ingest is unfinished, the composer blocks sending. Wait for the ready state, then test retrieval with a sentence **exactly verifiable** in the file. On failure, keep the original file and read the task error and app logs — do not re-upload the same file repeatedly to mask the root cause.
 
@@ -61,7 +63,8 @@ Full-edition ingest runs on the Redis queue (asynq) with two lanes — `rag` (sl
 | --- | --- | --- | --- |
 | Embedding model | Vectorization model for knowledge bases and documents; selectable only from kind=embedding models | `text-embedding-3-small` | unconfigured |
 
-:::danger The embedding model locks after first save
+:::danger[The embedding model locks after first save]
+
 
 To prevent stale chunks from mismatching the vector store, the embedding model **cannot be changed** once configured — the lock notice on the page is intentional. If you truly must switch (new vendor or dimension), plan the vector rebuild for every affected knowledge base first, and never delete the only copy of the original files: vectors can be rebuilt, lost documents and metadata usually cannot. If the selected model is deleted, the page shows a dangling-model warning; pick a replacement and re-index all knowledge bases.
 
@@ -125,7 +128,8 @@ Retrieval core behavior (`AIVORY_*` variables, see [Advanced environment variabl
 - Born-digital files (text, PDFs with a text layer, Office, text inside images) go through the local parsing chain.
 - **Scans, image-based PDFs, and complex layouts** need the MinerU cloud parser. Configure it via the `MINERU_API_URL` / `MINERU_API_KEY` environment variables (boot defaults) or the MinerU section on "Capabilities & integrations → Documents" (**MinerU endpoint**, **API token**; the cloud default is `https://mineru.net`).
 
-:::note MinerU requires object storage
+:::note[MinerU requires object storage]
+
 
 Non-plain-text uploads reach MinerU through S3/OSS: the backend uploads directly and hands MinerU a presigned URL. **Configure complete S3 or Aliyun OSS under "Storage & uploads" before enabling MinerU**, or the page refuses to save ("MinerU requires a complete S3 or Aliyun OSS configuration"). Local-storage single-node installs cannot use the MinerU path.
 

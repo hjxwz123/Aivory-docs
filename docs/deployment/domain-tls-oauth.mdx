@@ -8,7 +8,8 @@ description: Safely expose Aivory behind a reverse proxy or cloud load balancer,
 
 The official application image serves both the web UI and `/api` from a single process, so the reverse proxy forwards the whole request to one app. No separate frontend API address is needed, but domain and HTTPS deployments must still configure the browser-origin allowlist below.
 
-:::warning Required for domain deployments
+:::warning[Required for domain deployments]
+
 When using a domain or HTTPS reverse proxy, set `ALLOWED_ORIGINS=https://chat.example.com`. Without it, cookie-authenticated requests may return `cross-site request blocked`. Same-origin IP/HTTP testing may leave it unset.
 :::
 

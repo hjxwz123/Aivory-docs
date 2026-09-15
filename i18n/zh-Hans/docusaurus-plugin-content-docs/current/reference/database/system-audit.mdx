@@ -68,8 +68,10 @@ description: settings 全局键值表与 pending_storage_cleanup 删除清理队
 
 此外，**一次性回填/清理的幂等标记位**也写在本表（全量清单：`oauth_pwset_backfill_v1`、`msg_search_text_backfill_v1`、`user_sort_order_backfill_v1`、`user_onboarded_backfill_v1`、`user_group_billing_prices_backfill_v2`、`message_feedback_backfill_v1`、`daily_token_quota_ledger_backfill_v1`、`user_tool_mode_settings_cleanup_v1`）——它们就是 Aivory 的"迁移记账"。退役键会被迁移删除（`summary_target_percent`、`summary_merge_max_tokens`，`store.go:32-35,469`）。
 
-:::note 已知代码注释滞后
+:::note[已知代码注释滞后]
+
 `store.go:1176-1177` 把 `register_captcha_required` 描述为"算术题验证码"，实际实现是**滑块拼图**验证码（`/api/public/captcha`，`internal/api/captcha.go`）。以行为为准。
+
 :::
 
 ## `pending_storage_cleanup` — 删除清理队列

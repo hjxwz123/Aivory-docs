@@ -178,20 +178,17 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
+      title: 'Aivory',
       logo: {
         alt: 'Aivory',
-        src: 'img/aivory-logo.svg',
+        src: 'img/aivory-mark.svg',
       },
       items: [
         {
-          type: 'dropdown',
-          label: 'Capabilities',
+          type: 'docSidebar',
+          sidebarId: 'docsSidebar',
+          label: 'Documentation',
           position: 'left',
-          items: [
-            {label: 'Multi-model chat', to: '/docs/getting-started/first-chat'},
-            {label: 'Knowledge and vectors', to: '/docs/user-guide/conversations-files'},
-            {label: 'Tools and sandbox', to: '/docs/sandbox/overview'},
-          ],
         },
         {
           type: 'dropdown',
@@ -204,16 +201,13 @@ const config: Config = {
           ],
         },
         {
-          to: '/docs/admin/channels-models',
-          label: 'Models',
-          position: 'left',
-        },
-        {
           type: 'dropdown',
-          label: 'Learn',
+          label: 'Reference',
           position: 'left',
           items: [
-            {label: 'Quick start', to: '/docs/intro'},
+            {label: 'Database and tables', to: '/docs/reference/database/overview'},
+            {label: 'Environment variables', to: '/docs/deployment/environment'},
+            {label: 'Domain management', to: '/docs/admin/domain-management'},
             {label: 'Troubleshooting', to: '/docs/troubleshooting/common-issues'},
             {label: 'Changelog', to: '/docs/reference/changelog'},
           ],
@@ -236,12 +230,11 @@ const config: Config = {
           href: 'https://github.com/hjxwz123/Aivory',
           label: 'GitHub',
           position: 'right',
+          className: 'aivory-navbar-github',
         },
         {
-          to: '/docs/getting-started/personal',
-          label: 'Get started',
+          type: 'search',
           position: 'right',
-          className: 'aivory-navbar-cta',
         },
       ],
     },
@@ -276,8 +269,23 @@ const config: Config = {
       copyright: `Copyright © ${new Date().getFullYear()} Aivory contributors.`,
     },
     prism: {
-      theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      theme: {
+        ...prismThemes.github,
+        styles: [
+          ...prismThemes.github.styles,
+          {types: ['comment', 'prolog', 'doctype', 'cdata'], style: {color: '#59636e'}},
+          {types: ['string', 'attr-value'], style: {color: '#a31b50'}},
+          {types: ['number', 'boolean', 'constant'], style: {color: '#086766'}},
+          {types: ['function', 'keyword'], style: {color: '#a62636'}},
+        ],
+      },
+      darkTheme: {
+        ...prismThemes.dracula,
+        styles: [
+          ...prismThemes.dracula.styles,
+          {types: ['comment', 'prolog', 'doctype', 'cdata'], style: {color: '#a6aec7'}},
+        ],
+      },
     },
   } satisfies Preset.ThemeConfig,
 }

@@ -3,6 +3,7 @@ import Link from '@docusaurus/Link'
 import Layout from '@theme/Layout'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 
+import ExperienceNav from '../components/experience-nav'
 import styles from './experience.module.css'
 
 type ArchNode = {
@@ -92,7 +93,7 @@ export default function ArchitecturePage(): ReactNode {
 
   return (
     <Layout title={isEnglish ? 'Architecture path' : '架构路径'} description={isEnglish ? 'Follow an Aivory request from the browser through models, knowledge, tools, and persistence boundaries.' : '查看 Aivory 从浏览器到模型、知识库、工具和持久化边界的请求路径。'}>
-      <main className={`${styles.page} aivory-experience-page`}>
+      <main className={`${styles.page} aivory-experience-page`} data-aivory-page="architecture">
         <div className={styles.pageInner}>
           <header className={styles.pageHero} data-aivory-motion="hero">
             <div data-aivory-motion="hero-copy">
@@ -125,6 +126,7 @@ export default function ArchitecturePage(): ReactNode {
         <section className={styles.section}><div className={styles.pageInner}><div className={styles.splitSection}><div className={styles.splitIntro} data-aivory-reveal="split-copy"><p className={styles.eyebrow}><i />BOUNDARIES / BY DESIGN</p><h2>{isEnglish ? 'Deployment scale changes dependencies, not how you work.' : '部署规模改变依赖，不改变使用方式。'}</h2><p>{isEnglish ? 'The personal edition starts quickly with SQLite and in-process capability. The full edition distributes the same path across PostgreSQL, Redis, Qdrant, and the sandbox.' : '个人版用 SQLite 与进程内能力快速启动；完整版把同一条路径拆到 PostgreSQL、Redis、Qdrant 和沙盒。'}</p><Link className={styles.textLink} to="/docs/getting-started/personal">{isEnglish ? 'Read the deployment comparison' : '阅读部署对比'} <span aria-hidden="true">→</span></Link></div><div className={styles.featureGrid}><article className={styles.featureItem} data-aivory-reveal="feature-item"><span className={styles.featureNumber}>A</span><h3>{isEnglish ? 'Same-origin API' : '同源 API'}</h3><p>{isEnglish ? 'The application container serves the web UI and /api; the proxy needs to handle only one origin.' : '网页和 /api 由应用容器提供，代理层只需处理一个 origin。'}</p></article><article className={styles.featureItem} data-aivory-reveal="feature-item"><span className={styles.featureNumber}>B</span><h3>{isEnglish ? 'Explicit tools' : '显式工具'}</h3><p>{isEnglish ? 'Search, MCP, and the sandbox are configured by administrators. Models cannot cross the execution boundary.' : '搜索、MCP 与沙盒由管理员配置，模型不能越过运行边界。'}</p></article><article className={styles.featureItem} data-aivory-reveal="feature-item"><span className={styles.featureNumber}>C</span><h3>{isEnglish ? 'Recoverable state' : '可恢复状态'}</h3><p>{isEnglish ? 'Sessions, files, and indexes persist independently, with a clear backup path for upgrades and migration.' : '会话、文件和索引各自持久化，升级与迁移有清晰的备份路径。'}</p></article></div></div></div></section>
 
         <div className={styles.pageInner}><div className={styles.footerCta} data-aivory-reveal="footer-cta"><h2>{isEnglish ? 'Ready to run your workspace?' : '准备好把工作区跑起来了吗？'}</h2><Link className={styles.primaryLink} to="/docs/getting-started/first-chat">{isEnglish ? 'Start your first conversation' : '开始第一次对话'} <span aria-hidden="true">↗</span></Link></div></div>
+        <div className={styles.pageInner}><ExperienceNav current="architecture" isEnglish={isEnglish} /></div>
       </main>
     </Layout>
   )

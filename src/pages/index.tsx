@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 import Link from '@docusaurus/Link'
-import useBaseUrl from '@docusaurus/useBaseUrl'
 import Layout from '@theme/Layout'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
+import ProductBook from '../components/product-book'
+import ExperienceNav from '../components/experience-nav'
+import experience from './experience.module.css'
 import styles from './index.module.css'
 
 function Arrow({ external = false }: { external?: boolean }): ReactNode {
@@ -16,7 +18,6 @@ function Arrow({ external = false }: { external?: boolean }): ReactNode {
 export default function Home(): ReactNode {
   const { i18n } = useDocusaurusContext()
   const en = i18n.currentLocale === 'en'
-  const screenshot = useBaseUrl('/img/chat-home-welcome.png')
   const groups = [
     {
       title: en ? 'Configure your workspace' : '配置你的工作空间',
@@ -101,17 +102,17 @@ export default function Home(): ReactNode {
           : '部署、配置与维护你的 Aivory AI 工作空间。查阅模型、知识库、团队、数据库与备份指南。'
       }
     >
-      <main className={`${styles.home} aivory-home-page`}>
+      <main className={`${experience.page} ${styles.home} aivory-home-page aivory-experience-page`} data-aivory-page="home">
         <div className={styles.container}>
-          <section className={styles.hero} aria-labelledby="hero-title">
-            <div className={styles.heroCopy}>
+          <section className={styles.hero} aria-labelledby="hero-title" data-aivory-motion="hero">
+            <div className={styles.heroCopy} data-aivory-motion="hero-copy">
               <p className={styles.label}>
                 {en ? 'Aivory documentation' : 'Aivory 文档中心'}
               </p>
               <h1 id="hero-title">
                 {en ? 'Your workspace.' : '你的工作空间。'}
                 <br />
-                <span>{en ? 'Ready for real work.' : '从这里开始。'}</span>
+                <span>{en ? 'Your possibilities.' : '从这里开始。'}</span>
               </h1>
               <p className={styles.intro}>
                 {en
@@ -126,7 +127,7 @@ export default function Home(): ReactNode {
                   {en ? 'Start deploying' : '开始部署'}
                   <Arrow />
                 </Link>
-                <Link className={styles.secondary} to="/docs/intro">
+                <Link className={styles.secondary} to="/product">
                   {en ? 'Read the introduction' : '了解 Aivory'}
                   <Arrow />
                 </Link>
@@ -137,51 +138,14 @@ export default function Home(): ReactNode {
                   : '自主部署 · 多模型接入 · 团队协作'}
               </p>
             </div>
-            <figure className={styles.preview}>
+            <div className={styles.preview} data-aivory-depth="hero-book">
               <div className={styles.previewTop}>
                 <span className={styles.previewDot} aria-hidden="true" />
-                {en ? 'Inside your workspace' : '走进你的工作空间'}
-                <span>Aivory</span>
+                {en ? 'A closer look inside' : '走近你的工作空间'}
+                <a href="https://demo.aivorygo.com" target="_blank" rel="noreferrer">{en ? 'Live demo' : '在线体验'} <Arrow external /></a>
               </div>
-              <a
-                className={styles.previewImage}
-                href="https://demo.aivorygo.com"
-                target="_blank"
-                rel="noreferrer"
-                aria-label={
-                  en
-                    ? 'Try the Aivory demo (opens in a new tab)'
-                    : '体验 Aivory 演示（在新标签页打开）'
-                }
-              >
-                <img
-                  src={screenshot}
-                  alt={
-                    en
-                      ? 'Aivory workspace with a project sidebar, model selector, and conversation composer'
-                      : 'Aivory 工作空间：项目侧栏、模型选择与对话输入区'
-                  }
-                  width="2160"
-                  height="1350"
-                  fetchPriority="high"
-                />
-              </a>
-              <figcaption>
-                <span>
-                  {en
-                    ? 'Conversations, knowledge, and tools. Together.'
-                    : '对话、知识与工具，在同一处协同。'}
-                </span>
-                <a
-                  href="https://demo.aivorygo.com"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {en ? 'Live demo' : '在线体验'}
-                  <Arrow external />
-                </a>
-              </figcaption>
-            </figure>
+              <ProductBook compact isEnglish={en} />
+            </div>
           </section>
 
           <section className={styles.deployment} aria-labelledby="deploy-title">
@@ -203,7 +167,7 @@ export default function Home(): ReactNode {
                 <Arrow />
               </Link>
             </div>
-            <div className={styles.editions}>
+            <div className={styles.editions} data-aivory-list>
               <Link
                 className={styles.edition}
                 to="/docs/getting-started/personal"
@@ -251,7 +215,7 @@ export default function Home(): ReactNode {
               <div className={styles.guideGroup} key={group.title}>
                 <h2>{group.title}</h2>
                 <p>{group.description}</p>
-                <ul className={styles.guideList}>
+                <ul className={styles.guideList} data-aivory-list>
                   {group.links.map((link) => (
                     <li key={link.to}>
                       <Link to={link.to}>
@@ -301,6 +265,7 @@ export default function Home(): ReactNode {
               </a>
             </div>
           </section>
+          <ExperienceNav current="home" isEnglish={en} />
         </div>
       </main>
     </Layout>

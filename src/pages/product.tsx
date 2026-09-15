@@ -2,8 +2,11 @@ import {useEffect, useState, type ReactNode} from 'react'
 import Link from '@docusaurus/Link'
 import Layout from '@theme/Layout'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
+import useBrokenLinks from '@docusaurus/useBrokenLinks'
 
 import {PipelineDemo, StackedCards} from '../components/interactive-showcase'
+import ProductBook from '../components/product-book'
+import ExperienceNav from '../components/experience-nav'
 import styles from './experience.module.css'
 
 const capabilities = (isEnglish: boolean) => isEnglish ? [
@@ -33,6 +36,7 @@ const deploymentModes = (isEnglish: boolean) => isEnglish ? {
 } as const
 
 export default function ProductPage(): ReactNode {
+  useBrokenLinks().collectAnchor('product-tour')
   const {i18n} = useDocusaurusContext()
   const isEnglish = i18n.currentLocale === 'en'
   const modes = deploymentModes(isEnglish)
@@ -49,7 +53,7 @@ export default function ProductPage(): ReactNode {
 
   return (
     <Layout title={isEnglish ? 'Product workspace' : '产品工作区'} description={isEnglish ? 'See how Aivory organizes models, context, tools, and runtime into an AI workspace you can own.' : '了解 Aivory 如何把模型、上下文、工具和运行时组织成一个可拥有的 AI 工作区。'}>
-      <main className={`${styles.page} aivory-experience-page`}>
+      <main className={`${styles.page} aivory-experience-page`} data-aivory-page="product">
         <div className={styles.pageInner}>
           <header className={styles.pageHero} data-aivory-motion="hero">
             <div data-aivory-motion="hero-copy">
@@ -58,15 +62,27 @@ export default function ProductPage(): ReactNode {
               <p className={styles.pageLead}>{isEnglish ? 'Aivory places multi-model chat, knowledge, tool calling, and deployment policy on one observable path. Begin with one machine, then split into a full stack when you are ready.' : 'Aivory 把多模型对话、知识库、工具调用和部署策略放在同一条可观察的路径上。你可以从一台机器开始，也可以逐步拆分到完整栈。'}</p>
               <div className={styles.pageActions}>
                 <Link className={styles.primaryLink} to="/docs/getting-started/personal">{isEnglish ? 'Start deploying' : '开始部署'} <span aria-hidden="true">↗</span></Link>
-                <Link className={styles.textLink} to="/architecture">{isEnglish ? 'View architecture' : '查看架构'} <span aria-hidden="true">→</span></Link>
+                <Link className={styles.textLink} to="#product-tour">{isEnglish ? 'Explore the workspace' : '翻开产品导览'} <span aria-hidden="true">→</span></Link>
               </div>
             </div>
             <aside className={styles.heroAside} data-aivory-motion="hero-aside">
-              <p>{isEnglish ? 'This is not an API key behind another UI. Every phase of a request can be understood, configured, and recovered.' : '不是把 API Key 换个界面，而是让一轮请求的每个阶段都能被理解、配置和恢复。'}</p>
+              <div className={styles.heroIndex} aria-hidden="true"><span>01</span><i /><span>04</span></div>
+              <p>{isEnglish ? 'From the first idea to a finished result. Turn through four chapters of a workspace built to keep your work connected.' : '从第一个想法，到可以交付的成果。翻开四个章节，走进让工作持续连接的空间。'}</p>
+              <Link className={styles.textLink} to="#product-tour">{isEnglish ? 'Discover the four chapters' : '探索四个产品章节'} <span aria-hidden="true">↓</span></Link>
               <dl><div><dt>01</dt><dd>{isEnglish ? 'Multi-model' : '多模型'}</dd></div><div><dt>02</dt><dd>{isEnglish ? 'Traceable' : '可追溯'}</dd></div><div><dt>03</dt><dd>{isEnglish ? 'Self-hosted' : '自托管'}</dd></div></dl>
             </aside>
           </header>
         </div>
+
+        <section className={`${styles.section} ${styles.tourSection}`} id="product-tour" aria-labelledby="tour-title">
+          <div className={styles.pageInner}>
+            <div className={styles.sectionHeader}>
+              <div><p className={styles.eyebrow}><i />INSIDE AIVORY / 01—04</p><h2 id="tour-title">{isEnglish ? 'An idea. A path. A result.' : '一个想法，一条路径，一份成果。'}</h2></div>
+              <p>{isEnglish ? 'Explore the real interface, one page at a time. Conversations, knowledge, tools, and the work they bring to life.' : '一页一页，探索真实的产品界面。让对话、知识与工具，连接到最终的工作成果。'}</p>
+            </div>
+            <div data-aivory-depth="product-book"><ProductBook isEnglish={isEnglish} /></div>
+          </div>
+        </section>
 
         <section className={styles.sectionMuted}>
           <div className={styles.pageInner}>
@@ -80,7 +96,7 @@ export default function ProductPage(): ReactNode {
         <section className={styles.section}>
           <div className={styles.pageInner}>
             <div className={styles.splitSection}>
-              <div className={styles.splitIntro} data-aivory-reveal="deployment-copy"><p className={styles.eyebrow}><i />DEPLOYMENT / CHOOSE YOUR EDGE</p><h2>{isEnglish ? 'Start lean, upgrade whenever you need.' : '从轻量开始，随时升级。'}</h2><p>{current.intro}</p><div className={styles.modeSwitch} role="group" aria-label={isEnglish ? 'Choose a deployment edition' : '选择部署模式'}><button type="button" aria-pressed={mode === 'personal'} onClick={() => setMode('personal')}>{modes.personal.label}</button><button type="button" aria-pressed={mode === 'full'} onClick={() => setMode('full')}>{modes.full.label}</button></div><div className={styles.modeSummary}>{current.rows.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></div>
+              <div className={styles.splitIntro} data-aivory-reveal="deployment-copy"><p className={styles.eyebrow}><i />DEPLOYMENT / CHOOSE YOUR EDGE</p><h2>{isEnglish ? 'Start lean, upgrade whenever you need.' : '从轻量开始，随时升级。'}</h2><p>{current.intro}</p><div className={styles.modeSwitch} data-mode={mode} role="group" aria-label={isEnglish ? 'Choose a deployment edition' : '选择部署模式'}><button type="button" aria-pressed={mode === 'personal'} onClick={() => setMode('personal')}>{modes.personal.label}</button><button type="button" aria-pressed={mode === 'full'} onClick={() => setMode('full')}>{modes.full.label}</button></div><div className={styles.modeSummary} key={mode} aria-live="polite">{current.rows.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></div>
               <StackedCards compact isEnglish={isEnglish} />
             </div>
           </div>
@@ -91,6 +107,7 @@ export default function ProductPage(): ReactNode {
         </section>
 
         <div className={styles.pageInner}><div className={styles.footerCta} data-aivory-reveal="footer-cta"><h2>{isEnglish ? 'Run your first usable request.' : '把第一条可用的请求跑起来。'}</h2><Link className={styles.primaryLink} to="/docs/getting-started/first-chat">{isEnglish ? 'Open quick start' : '打开快速开始'} <span aria-hidden="true">↗</span></Link></div></div>
+        <div className={styles.pageInner}><ExperienceNav current="product" isEnglish={isEnglish} /></div>
       </main>
     </Layout>
   )

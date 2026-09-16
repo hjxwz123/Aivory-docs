@@ -6,28 +6,74 @@ description: Detailed changes, upgrade impact, and compatibility notes for offic
 
 # Changelog
 
-This page follows the tags and release times on [GitHub Releases](https://github.com/hjxwz123/Aivory/releases). For image deployments, pin the corresponding `IMAGE_TAG`; before upgrading, complete backups as described in [Upgrades and Backups](../deployment/upgrade-backup.mdx). The complete commit range, verification records, and original notes for each version remain authoritative on the corresponding GitHub Release.
-
-## Unreleased — workspace announcements
-
-The current implementation adds a **Workspace menu → Members → Announcement** editor for workspace owners and administrators, with an HTML popup, optional image, five-second required-reading delay, and an independently enabled top bar. Members and guests see notices for the active workspace; dismissal is stored in the browser, with no server-side read receipt. See [Workspace announcements](../admin/workspace-announcements.mdx).
-
-The new `workspace_announcements` table brings both database schemas to **61 tables**. Startup migration creates it automatically; each save records `announcement.updated` and publishes `workspace.announcement_updated`. Full backups include its rows, uploaded images require files to be included, and configuration-only exports exclude the rows. Compatible older archives without this new table restore with no workspace announcement configured. These notes describe development functionality and do not imply it is included in the `v2.4.7` image.
+This page follows the tags and release times on [GitHub Releases](https://github.com/hjxwz123/Aivory/releases). Pin image versions according to each release's upgrade notes; 2.4.8 supports `APP_IMAGE_TAG` for an application-only pin, taking precedence over `IMAGE_TAG`. Before upgrading, complete backups as described in [Upgrades and Backups](../deployment/upgrade-backup.mdx). The complete commit range, verification records, and original notes for each version remain authoritative on the corresponding GitHub Release.
 
 ## v2.4 Series
 
-### v2.4.7 and post-release main updates - 2026-09-15
+### [v2.4.8](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.8) - 2026-09-16
 
-The `v2.4.7` release added ephemeral private chat, optional WebAuthn passkeys, complete conversation export/archive tooling, request-proof hardening, Gemini and strict Responses compatibility fixes, batched document retrieval, and administrator model refresh. The release also raises source builds to Go 1.26 and creates the `passkeys` table automatically at startup; pin Docker images to `2.4.7` only after the application, runner, and sidecar images are available for both `linux/amd64` and `linux/arm64`. See the [full release notes](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.7).
+This release improves workspace management, enterprise-domain registration, and permission boundaries. It adds workspace announcements, usage statistics, administrator updates, and mask-based image editing, with fixes for passkey login, complete personal-history cleanup, historical backup restoration, and retrieval timeouts.
 
-The main branch after the tag also contains these documented features:
+#### Workspace management, announcements, and statistics
 
-- **Email-domain enrollment and access restrictions**: platform administrators map an exact email domain to a workspace from the separate `/admin/domains` page. New eligible registrations are enrolled transactionally; optional personal-space locks prevent ordinary bound users from switching, creating, joining, or directly addressing personal resources. Per-user overrides can restore personal access. Platform administrators retain a personal space. See [Domain enrollment and workspace access](../admin/domain-management.mdx).
-- **Workspace administration**: `/admin/workspaces` can create a workspace with an existing active user as owner/administrator. The workspace detail view can transfer ownership only to a current member; the previous owner becomes a regular member for this platform-admin operation.
-- **Conversation and project operations**: users can archive conversations in bulk and manage project conversations from the project action menu; clearing personal conversations preserves workspace isolation.
-- **Image editing**: generated images support masked editing with preserved mask state across message updates, and generation/editing states received reliability and accessibility polish.
+- Aligns workspace management with user settings: a left navigation rail and right content pane on desktop, with a full-screen dialog and horizontal navigation on mobile. Members, Invites, Capabilities, Announcement, Audit, and Statistics share one management surface; ordinary members retain access only to authorized member information.
+- Keeps headings and footer actions visible and gives member, invitation, and audit lists one shared content scroller. Section changes reset scrolling; arrow keys and Home / End support keyboard navigation.
+- Lets workspace owners and administrators publish workspace-only announcements with rich text, images, modal and banner presentation, remembered dismissal, and a required-reading countdown. Workspace and site-wide announcements are configured separately; changes notify connected clients and create audit events.
+- Adds statistics for the last 24 hours, 7 days, 30 days, 90 days, and 365 days: conversation rounds, request counts, input/output tokens, active members, credits, provider cost, member usage, and previous-period comparisons. Only current-workspace managers can access statistics; this does not grant access to other members' private conversation contents.
+- Creates `workspace_announcements` through startup migration. Full backups include announcement rows; images require file backups, and configuration-only exports exclude announcement rows.
 
-The domain feature adds `registration_domains` and `domain_users` to both database dialects. These tables are included in backup ordering, use `ON DELETE RESTRICT` for workspace references and `ON DELETE CASCADE` for user/rule bindings, and are covered in the [database reference](../reference/database/overview.mdx). Existing users are not retroactively enrolled; changing an email does not remove an existing binding.
+#### User-group, workspace, and private-chat permissions
+
+- Evaluates system user-group permissions, workspace-wide switches, ordinary member permissions, and resource access together. A denial at any applicable layer blocks the operation; workspace access cannot override a user-group restriction.
+- Allows workspace owners and administrators to bypass ordinary member restrictions while retaining user-group and workspace-wide limits. System administrators retain their user-group exemption but respect workspace-wide switches.
+- Completes checks for prompts, skills, workspace deletion, self-hosted MCP services, knowledge-base content, project materials, attachment transfers, and automatic ingestion. Fixes frontend handling of `usermcp:*` wildcard grants.
+- Checks effective upload access before enabling automatic project ingestion and still allows disabling it after permission revocation. Permitted conversation attachments can upload when knowledge bases are disabled, without being automatically ingested.
+- Adds private-chat switches to system user groups and workspaces; both must allow access for the entry point to appear. Locked enterprise-domain accounts no longer lose private chat unconditionally; guests remain excluded.
+- Rechecks the assigned workspace, models, image uploads, and member quotas on the server, including revocation during active private requests. Statistics retain only necessary workspace attribution rather than private message bodies.
+- Adds a domain-management explanation of intersecting permissions, recommending default groups allow intended capabilities before workspaces narrow them. Fixes nested scrolling in Add / Edit Domain while keeping Save and Cancel visible.
+
+#### Enterprise email-domain registration
+
+- Lets platform administrators map exact email domains to workspaces and configure initial user groups, automatic enrollment, password-registration email verification, and personal-space locking. Existing accounts are not retroactively enrolled.
+- Requires password-registration verification if either the global setting or the matching active domain rule requires it; no code is needed when both are disabled. New third-party and generic OAuth2 accounts follow the same enrollment, initial-group, and personal-space rules without an additional Aivory email-code challenge.
+- Creates accounts, domain bindings, and memberships transactionally. Personal-space restrictions apply in both frontend and API, with user-specific administrator exceptions. Pausing a rule stops future enrollment; deleting it removes bindings and restrictions while preserving membership and data.
+- Supports administrator-created workspaces with assigned owners and ownership transfers to current members. Includes `registration_domains` and `domain_users` in migration and backup coverage.
+
+#### Image editing, conversation organization, and project actions
+
+- Adds an Edit action to generated images from supported OpenAI-format models. Users paint the region to change and submit the original image, PNG mask, and instruction. Tools include brush, eraser, brush size, undo / redo, clear, and selection preview.
+- Preserves editing parameters through message edits, retries, and regeneration. The server checks image/mask access, conversation and branch ownership, format, and dimensions. Refines the editor and drawing-in-progress state for small screens and reduced motion. Upstream image-editing support is required; DALL·E 3 is excluded.
+- Fixes Clear All Conversations processing only frontend-loaded history: the server now batches the complete personal history, including archives. Adds Archive All independently of sidebar pagination and preserves workspace-shared conversations.
+- Bounds the archived-conversations dialog to the viewport, improves scrolling, and removes misleading simulated-action copy.
+- Replaces sidebar project counts with the same three-dot action menu used on project details. Project deletion optionally deletes all contained conversations; otherwise, conversations are preserved and moved out of the project. Deletion still checks the relevant permissions.
+
+#### Login, backup, and retrieval fixes
+
+- Fixes `Backup Eligible flag inconsistency detected during login validation` by persisting authenticator backup-eligibility and backup-state flags. Missing legacy flags are initialized only after signature, challenge, origin, RP ID, and identity validation; known flags retain consistency checks.
+- Counts only actual verification failures against login challenges and consumes successful challenges once. Improves origin errors, server diagnostics, and account-page passkey management.
+- Restores historical v3 backups using compatible schemas and current foreign-key dependency order, rejecting invalid archives before changing data. Preserves the current administrator's valid passkeys and device-side user handles, with rollback on credential conflicts.
+- Retains completed retrieval results as partial evidence if the sufficiency judge times out independently while the overall request remains valid. Cancellation, overall timeout, billing failures, or no usable evidence still return errors.
+
+#### Administrator updates and upgrade notes
+
+- Adds a sidebar version badge that highlights new stable Releases. It opens installed/latest version details, publication time, full release notes, and an update action. Long notes use one scrolling region.
+- The internal `updater` pulls the target version, writes `APP_IMAGE_TAG`, recreates only `app`, and waits for health checks. Jobs persist, and failures trigger an attempt to restore the previous application image configuration; this is not database restoration.
+- Deployments with the updater can update from the administration interface. To update only the application manually, set `APP_IMAGE_TAG=2.4.8` in the original `.env`, then run `docker compose -f docker-compose.prod.yml pull app` and `docker compose -f docker-compose.prod.yml up -d --no-deps --no-build app`.
+- Older deployments must merge the new `updater` service, `update-state` volume, and application updater variables into the existing Compose configuration, and set `UPDATER_IMAGE_TAG=2.4.8`. Pulling `app` alone does not add an updater. Preserve the project name, ports, data paths, database credentials, and JWT secret; do not run `down -v`.
+- Application, updater, sandbox runtime, and sidecar images use the `2.4.8` tag for `linux/amd64` and `linux/arm64`. Wait for the required image builds before pulling. Updating only the application does not require a sandbox upgrade, and database migrations run automatically at startup.
+- Release verification passed all 668 frontend tests, the full Go suite, five updater tests, type checking, and the production build, with dialog layout and interaction checks at five viewport sizes.
+
+See the [v2.4.8 Release](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.8) for complete upgrade commands and compatibility notes, and [v2.4.7…v2.4.8](https://github.com/hjxwz123/Aivory/compare/v2.4.7...v2.4.8) for the full commit range.
+
+### [v2.4.7](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.7) - 2026-09-13
+
+- Adds ephemeral private chat: messages, reasoning, images, and drafts remain in memory without ordinary conversation history, disappear on exit or refresh, and use anonymized usage records.
+- Adds optional WebAuthn passkey login and account-page device management for fingerprints, face recognition, or device PINs, with a global administrator switch.
+- Supports complete JSON/ZIP conversation exports, batch imports, and archives with read-only archived transcripts.
+- Hardens request-proof checks and fixes fragmented Gemini tool calls, strict OpenAI Responses replay, and output limits for non-OpenAI private requests.
+- Batches and parallelizes document retrieval, skips unnecessary RAG routing for empty projects, and lets administrators refresh models from saved channels.
+- Updates the brand lockup, loading states, About page, and settings layout. Initial rendering inherits the browser language while explicit language choices take priority.
+- Requires Go 1.26+ for source builds and creates the `passkeys` table at startup. Passkeys require HTTPS or development `localhost`; use `IMAGE_TAG=2.4.7` when pinning this release.
 
 ### [v2.4.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.6) - 2026-09-01
 

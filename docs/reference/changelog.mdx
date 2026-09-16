@@ -6,7 +6,25 @@ description: Detailed changes, upgrade impact, and compatibility notes for offic
 
 # Changelog
 
-This page follows the tags and release times on [GitHub Releases](https://github.com/hjxwz123/Aivory/releases). Pin image versions according to each release's upgrade notes; 2.4.8 supports `APP_IMAGE_TAG` for an application-only pin, taking precedence over `IMAGE_TAG`. Before upgrading, complete backups as described in [Upgrades and Backups](../deployment/upgrade-backup.mdx). The complete commit range, verification records, and original notes for each version remain authoritative on the corresponding GitHub Release.
+This page follows the tags and release times on [GitHub Releases](https://github.com/hjxwz123/Aivory/releases). Pin image versions according to each release's upgrade notes; `APP_IMAGE_TAG` supports an application-only pin and takes precedence over `IMAGE_TAG`. Before upgrading, complete backups as described in [Upgrades and Backups](../deployment/upgrade-backup.mdx). The complete commit range, verification records, and original notes for each version remain authoritative on the corresponding GitHub Release.
+
+## v2.4.9-beta.1 — Test release — 2026-09-16
+
+`v2.4.9-beta.1` is a **pre-release for testing**, not a stable production release. Stable in-app update checks do not select it. Use a backup and a test or staging environment; this build may be superseded by later beta releases. See the [GitHub pre-release](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.1).
+
+- **Search-only automatic routing**: Auto mode classifies simple, focused web-search requests into a one-batch Aivory search path, avoiding unnecessary multi-tool rounds. Complex investigation, full-page reading, file work, code, image work, skills, memory, and custom tools retain the complete tool set. Off mode now exposes only permitted Aivory web search rather than unconditionally disabling every tool.
+- **Domain management**: a rule can match up to 50 exact domains and starts automatic enrollment by default. Platform administrators can stop future automatic enrollment without preventing manual additions, add or remove arbitrary eligible members in **Domain users**, and resolve historical personal conversations through download, permitted private-workspace migration, or deferred Data Management.
+- **Workspace announcements and tool selector**: workspace owners and administrators can publish announcements; editor controls are localized for English, Simplified Chinese, Traditional Chinese, Japanese, and French. The tool selector no longer displays explanatory mode text.
+- **Image references**: uploaded current-turn reference images are included in supported image-generation requests.
+
+For a pinned Docker test deployment, use the exact pre-release tags:
+
+```dotenv
+APP_IMAGE_TAG=2.4.9-beta.1
+UPDATER_IMAGE_TAG=2.4.9-beta.1
+```
+
+Do not treat this tag as a stable automatic update. Back up data first, validate domain policies and personal-data migration behavior, and replace this beta with a later tested release when available.
 
 ## v2.4 Series
 

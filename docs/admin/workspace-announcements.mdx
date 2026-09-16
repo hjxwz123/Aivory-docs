@@ -9,7 +9,7 @@ Workspace announcements let a team publish a maintenance notice, onboarding inst
 
 :::info[Availability]
 
-This page documents the current workspace-announcement implementation under development after `v2.4.7`. Use an application build that includes this feature; the `2.4.7` image alone does not imply support.
+This feature is available in the `v2.4.9-beta.1` test release. It is a pre-release rather than a stable production release; use it for testing and validate it in a non-production environment before relying on it.
 
 :::
 
@@ -22,6 +22,8 @@ This page documents the current workspace-announcement implementation under deve
 5. Enter the same workspace with a member account to verify the result.
 
 The workspace **owner and administrators** can publish and upload announcement images. Ordinary members and guests can read announcements but cannot edit them. A platform administrator needs the appropriate role in this workspace; platform administration alone does not grant this editor's write permission.
+
+The editor controls use the administrator's selected UI language in English, Simplified Chinese, Traditional Chinese, Japanese, and French. Announcement titles, popup/top-bar HTML, and other authored content are not automatically translated for recipients.
 
 Announcements are displayed for the **currently active workspace**. Personal space does not display workspace announcements. Members of another workspace do not receive this workspace's announcement through its announcement API.
 

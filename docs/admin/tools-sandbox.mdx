@@ -43,6 +43,20 @@ The README's "48 tool calls across 12 provider cycles" is imprecise: 48 is the n
 
 ![Tools page: global availability, code sandbox, and web search](/img/admin-tools.png)
 
+## Per-turn tool modes
+
+The conversation tool selector controls the scope for the current turn. Global availability, the model's selected defaults, user-group permissions, and workspace policy still apply before a tool is offered.
+
+| Mode | Available scope | Intended use |
+| --- | --- | --- |
+| **Auto** | The router selects either search-only or the full resolved tool set | Normal conversations where Aivory should avoid unnecessary tool rounds while retaining full tools for work that needs them |
+| **On** | Full resolved tool set | The user explicitly wants the permitted local, hosted, MCP, and skill tools available |
+| **Off** | Only `aivory_web_search`, when it is allowed and configured | A focused answer that may use one web-search query or batch, without page fetching, code, files, image tools, skills, MCP, memory writes, or provider-hosted tools |
+
+**Off is a search-only mode, not necessarily a no-tools mode.** The model may answer directly when search is unnecessary. When the optional **Search before answering** control is enabled, it must search first. Search-only execution permits at most one search call or one batch of independent queries; after results return, the turn is finalized from the result snippets rather than starting another tool round.
+
+If policy, user selection, the model configuration, or backend configuration does not permit `aivory_web_search`, Off has no search tool to expose. It never bypasses those controls.
+
 ## Web search
 
 The "Web search" section on the Tools page configures the `aivory_web_search` backend:

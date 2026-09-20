@@ -5,12 +5,12 @@
 .copy p:not(.eyebrow) { max-width: 33rem; font-size: 0.9rem; color: var(--page-muted); line-height: 1.85; }
 .copy .lead { color: var(--page-fg) !important; font-size: 1rem !important; }
 .copy > a { display: inline-flex; gap: 1.5rem; align-items: center; min-height: 44px; margin-top: 1rem; color: var(--page-sage); font-size: 0.85rem; }
-.diagram { min-width: 0; background: var(--page-surface); border: 1px solid oklch(80% 0.05 290 / 0.2); border-radius: 10px; padding: 1.4rem; transform-origin: center bottom; }
+.diagram { min-width: 0; background: transparent; border: 1px solid oklch(80% 0.05 290 / 0.2); border-radius: 10px; padding: 1.4rem; transform-origin: center bottom; }
 .diagramLabel { margin: 0 0 1.5rem; color: var(--page-muted); font-size: 0.8rem; }
 .diagram svg { display: block; width: 100%; height: auto; overflow: visible; }
 .connections { stroke: var(--page-sage); stroke-width: 1.5; }
-.appBox { fill: oklch(31% 0.07 290); stroke: var(--page-violet); }
-.dataBox { fill: var(--page-raised); stroke: oklch(80% 0.05 290 / 0.25); }
+.appBox { fill: none; stroke: var(--page-violet); }
+.dataBox { fill: none; stroke: oklch(80% 0.05 290 / 0.25); }
 .diagram text { text-anchor: middle; }
 .appLabel { fill: var(--page-fg); font: 30px var(--page-serif); }
 .nodeTitle { fill: var(--page-fg); font-size: 13px; }
@@ -39,7 +39,7 @@
 @media (max-width: 600px) {
   .diagram svg { display: none; }
   .mobileDataMap { display: grid; gap: 1.5rem; }
-  .mobileDataMap > strong { justify-self: center; padding: 0.8rem 2.5rem; color: var(--page-fg); background: oklch(31% 0.07 290); border: 1px solid var(--page-violet); border-radius: 6px; font: 1.6rem var(--page-serif); }
+  .mobileDataMap > strong { justify-self: center; padding: 0.8rem 2.5rem; color: var(--page-fg); background: transparent; border: 1px solid var(--page-violet); border-radius: 6px; font: 1.6rem var(--page-serif); }
   .mobileDataMap dl { margin: 0 0 0 0.5rem; padding-left: 1rem; border-left: 1px solid var(--page-sage); }
   .mobileDataMap dl > div { padding: 0.65rem 0; }
   .mobileDataMap dt { font-size: 0.85rem; color: var(--page-fg); }

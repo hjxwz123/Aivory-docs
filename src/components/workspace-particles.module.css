@@ -1,0 +1,23 @@
+/* This sibling of the content never inherits a book/panel's perspective or pin. */
+.scene {
+  position: fixed;
+  z-index: 2;
+  inset: var(--ifm-navbar-height, 64px) 0 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+.canvas { display: block; width: 100%; height: 100%; }
+.fallback {
+  position: absolute;
+  left: var(--particle-x, 55%);
+  top: var(--particle-y, 67%);
+  width: var(--particle-size, 8rem);
+  transform: translate(-50%, -50%);
+  color: var(--page-violet);
+  opacity: 0.3;
+}
+.scene[data-ready='true'] .fallback { display: none; }
+@media (max-width: 1199px) {
+  .fallback { opacity: 0.16; }
+}

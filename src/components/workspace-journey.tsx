@@ -187,12 +187,12 @@ export default function WorkspaceJourney({isEnglish: en}: {isEnglish: boolean}) 
       </div>
       <div className={styles.pages}>
         {pages.map((page, index) => <article key={page.id} className={styles.panel} id={`journey-${page.id}`} data-journey-panel data-tone={page.tone} aria-labelledby={`journey-title-${page.id}`}>
-          <div className={styles.panelCopy}>
+          <div className={styles.panelCopy} data-journey-copy>
             <p className={styles.chapterLabel}><span>0{index + 1}</span> / {page.label}</p>
             <h3 id={`journey-title-${page.id}`}>{page.title}</h3>
             <p className={styles.lead}>{page.lead}</p>
-            <p className={styles.detail}>{page.detail}</p>
-            <ul>{page.facts.map(fact => <li key={fact}><span aria-hidden="true">↗</span>{fact}</li>)}</ul>
+            <p className={styles.detail} data-journey-detail>{page.detail}</p>
+            <ul>{page.facts.map(fact => <li key={fact}><span aria-hidden="true">↗</span><span data-journey-fact>{fact}</span></li>)}</ul>
             <Link to={page.to} className={styles.chapterLink}>{page.link}<span aria-hidden="true">→</span></Link>
           </div>
           <figure className={styles.visual} data-journey-visual>

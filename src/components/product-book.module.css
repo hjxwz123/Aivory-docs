@@ -74,6 +74,14 @@
 .stage:focus-visible { outline: 2px solid var(--page-sage); outline-offset: 6px; border-radius: 12px; }
 .compact .sheetCopy p { min-height: 3.6em; }
 .turningLeaf .sheet { height: 100%; box-shadow: 16px 10px 45px oklch(5% 0.02 290 / 0.45); }
+/* On the particle homepage, only the page outlines define the book layers. */
+:global(.aivory-home-page) .stage::before,
+:global(.aivory-home-page) .stage::after,
+:global(.aivory-home-page) :is(.sheet, .windowBar, .visual img, .fold, .chapterButtons button, .turnControls button) { background: transparent; }
+:global(.aivory-home-page) .turningLeaf .sheet { box-shadow: none; }
+:global(.aivory-home-page) .chapterButtons button[aria-pressed='true'] { outline: 1px solid var(--page-violet); outline-offset: -1px; }
+:global(.aivory-home-page) .turnControls button:hover:enabled { color: var(--page-violet); border-color: currentColor; }
+:global(.aivory-home-page) .fold { border-left: 1px solid var(--home-border); border-bottom: 1px solid var(--home-border); }
 @media (max-width: 360px) {
   .bookFooter { flex-wrap: wrap; gap: 0.5rem; }
   .turnControls { margin-left: auto; }

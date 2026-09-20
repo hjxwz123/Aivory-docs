@@ -244,6 +244,22 @@ body:has(.aivory-experience-page) .navbar {
   --aivory-on-accent: oklch(19% 0.03 290);
 }
 
+/* Paint the document canvas: Docusaurus limits body to one viewport's height,
+   so a body-only backdrop exposes the light html background further down. */
+html:has(.aivory-home-page) {
+  --ifm-background-color: oklch(15% 0.025 290);
+  background: var(--ifm-background-color);
+}
+body:has(.aivory-home-page) .navbar {
+  --ifm-navbar-background-color: transparent;
+  --ifm-background-color: transparent;
+  --ifm-navbar-search-input-background-color: transparent;
+  --aivory-surface: transparent;
+  --aivory-accent-surface: transparent;
+}
+body:has(.aivory-home-page) .navbar__search-input { background-color: transparent; }
+body:has(.aivory-home-page) .footer { background: transparent; }
+
 /* Sidebar navigation is quieter than the article and stays independently scrollable. */
 .theme-doc-sidebar-container {
   background: var(--aivory-surface);

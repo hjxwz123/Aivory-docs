@@ -8,6 +8,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import ProductBook from '../components/product-book'
 import WorkspaceJourney from '../components/workspace-journey'
 import DataOwnership from '../components/data-ownership'
+import WorkspaceParticles from '../components/workspace-particles'
 import ExperienceNav from '../components/experience-nav'
 import experience from './experience.module.css'
 import styles from './index.module.css'
@@ -120,6 +121,7 @@ export default function Home(): ReactNode {
       }
     >
       <main ref={home} className={`${experience.page} ${styles.home} aivory-home-page aivory-experience-page`} data-aivory-page="home">
+        <WorkspaceParticles scopeRef={home} />
         <div className={styles.container}>
           <section className={styles.hero} aria-labelledby="hero-title" data-aivory-motion="hero">
             <div className={styles.heroCopy} data-aivory-motion="hero-copy">

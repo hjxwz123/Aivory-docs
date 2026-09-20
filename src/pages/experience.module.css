@@ -565,6 +565,7 @@
 .chapterNav a { display: flex; align-items: center; gap: 1rem; position: relative; min-width: 0; padding: 1.4rem; color: var(--page-muted); text-decoration: none; border-radius: 0.5rem; transition: background-color 250ms ease, color 250ms ease; }
 .chapterNav a + a { border-left: 1px solid oklch(80% 0.05 290 / 0.15); }
 .chapterNav a:hover { background: var(--page-surface); color: var(--page-fg); }
+.page:global(.aivory-home-page) .chapterNav a:hover { background: transparent; }
 .chapterNav a[aria-current='page'] { color: var(--page-fg); }
 .chapterNav strong { display: block; font-weight: 500; font-size: 1rem; }
 .chapterNav small { display: block; margin-top: 0.45rem; font-size: 0.7rem; color: var(--page-muted); }

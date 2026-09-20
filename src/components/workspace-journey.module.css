@@ -46,7 +46,7 @@
   padding-block: 4rem;
   min-height: 85svh;
   border-bottom: 1px solid oklch(80% 0.05 290 / 0.15);
-  background: var(--page-bg);
+  background: transparent;
   isolation: isolate;
   scroll-margin-top: 5rem;
 }
@@ -66,19 +66,19 @@
 .detail { color: var(--page-muted); font-size: 0.85rem; line-height: 1.85; margin: 0; text-wrap: pretty; }
 .panelCopy ul { list-style: none; padding: 0; margin: 1.4rem 0 0.8rem; }
 .panelCopy li { display: flex; gap: 0.9rem; color: var(--page-muted); font-size: 0.8rem; line-height: 1.9; }
-.panelCopy li span { color: var(--chapter-accent); }
+.panelCopy li > span[aria-hidden='true'] { color: var(--chapter-accent); }
 .chapterLink { display: inline-flex; min-height: 44px; align-items: center; gap: 1.4rem; font-size: 0.83rem; color: var(--chapter-accent); }
 .chapterLink:hover { color: var(--page-fg); }
 .chapterLink span { transition: transform 220ms ease; }
 .chapterLink:hover span { transform: translateX(6px); }
 .visual { position: relative; margin: 0; min-width: 0; padding-bottom: 0.25rem; }
-.imageFrame { position: relative; border: 1px solid oklch(80% 0.05 290 / 0.22); border-radius: 9px; overflow: hidden; background: var(--page-surface); }
+.imageFrame { position: relative; border: 1px solid oklch(80% 0.05 290 / 0.22); border-radius: 9px; overflow: hidden; background: transparent; }
 .windowBar { display: flex; align-items: center; gap: 1rem; height: 36px; padding-inline: 1rem; color: var(--page-muted); font-size: 0.63rem; }
 .windowBar > span:first-child { font-size: 0.42rem; letter-spacing: 3px; color: var(--chapter-accent); }
-.visual img { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; object-fit: cover; object-position: top; background: var(--page-surface); }
+.visual img { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; object-fit: cover; object-position: top; background: transparent; }
 .visual figcaption { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1.2rem; color: var(--page-muted); font-size: 0.75rem; }
 .visual figcaption > span:last-child { font: italic 2.8rem / 1 var(--page-serif); color: var(--chapter-accent); }
-.pageEdge { position: absolute; left: 1rem; right: 1rem; top: 0.6rem; bottom: 4.15rem; border: 1px solid oklch(80% 0.05 290 / 0.2); border-radius: 8px; z-index: -1; transform: rotate(2deg); background: var(--page-raised); }
+.pageEdge { position: absolute; left: 1rem; right: 1rem; top: 0.6rem; bottom: 4.15rem; border: 1px solid oklch(80% 0.05 290 / 0.2); border-radius: 8px; z-index: -1; transform: rotate(2deg); background: transparent; }
 .watermark { position: absolute; z-index: -1; right: 0; bottom: 0; color: oklch(80% 0.05 290 / 0.045); font: italic clamp(12rem, 22vw, 24rem) / 0.8 var(--page-serif); pointer-events: none; }
 .chapterTabs { display: flex; gap: 1rem; padding-block: 1rem; border-top: 1px solid oklch(80% 0.05 290 / 0.2); }
 .chapterTabs a { position: relative; display: flex; flex: 1; align-items: center; gap: 0.6rem; min-height: 44px; color: var(--page-muted); font-size: 0.8rem; text-decoration: none; transition: color 220ms ease; }
@@ -86,7 +86,7 @@
 .chapterTabs a > i { position: absolute; top: -1rem; left: 0; right: 0; height: 2px; background: var(--page-sage); transform: scaleX(0); transform-origin: left; transition: transform 350ms ease; }
 .chapterTabs a:hover, .chapterTabs a[aria-current='step'] { color: var(--page-fg); }
 .chapterTabs a[aria-current='step'] > i { transform: scaleX(1); }
-.journey[data-enhanced='true'] .viewport { height: calc(100svh - 64px); display: flex; flex-direction: column; background: var(--page-bg); }
+.journey[data-enhanced='true'] .viewport { height: calc(100svh - 64px); display: flex; flex-direction: column; background: transparent; }
 .journey[data-enhanced='true'] .railCount { display: block; }
 .journey[data-enhanced='true'] .pages { flex: 1; min-height: 0; }
 .journey[data-enhanced='true'] .panel { position: absolute; inset: 0; min-height: 0; padding: 1.75rem 0; border: 0; backface-visibility: hidden; }

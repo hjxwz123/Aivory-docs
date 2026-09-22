@@ -8,6 +8,64 @@ description: Detailed changes, upgrade impact, and compatibility notes for offic
 
 This page follows the tags and release times on [GitHub Releases](https://github.com/hjxwz123/Aivory/releases). Pin image versions according to each release's upgrade notes; `APP_IMAGE_TAG` supports an application-only pin and takes precedence over `IMAGE_TAG`. Before upgrading, complete backups as described in [Upgrades and Backups](../deployment/upgrade-backup.mdx). The complete commit range, verification records, and original notes for each version remain authoritative on the corresponding GitHub Release.
 
+## v2.5.0-beta.2 — Test release — 2026-09-22
+
+`v2.5.0-beta.2` is the current **test release**. It adds the Docmee AI PPT
+workbench, credit-safe per-deck billing, and generated-file preview controls.
+Use it in test or staging first; stable update checks do not select prereleases.
+See the [GitHub pre-release](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.2).
+
+- **AI PPT (Docmee)**: administrators configure the API key, enable switch,
+  creator version, fixed per-deck price, token lifetime, API origin, SDK URL,
+  and optional international or proxy endpoints in Credits and quotas. The
+  sidebar shows AI PPT only when the service has a usable key and is enabled;
+  direct `/ppt` links otherwise show an unavailable state.
+- **Safe presentation billing**: Aivory reserves credits before generation,
+  settles once a deck is reported, and releases unused holds. The Docmee
+  presentation ID is idempotent, so retries, reloads, and duplicate SDK events
+  cannot charge one deck twice. Charged presentations appear in Usage & billing
+  under the `ppt` purpose.
+- **File preview**: generated-file cards can open the existing Artifact Panel
+  for HTML, PDF, Office documents, spreadsheets, text, and supported images.
+  The release also repairs saving an edited document copy through the normal
+  file upload pipeline.
+
+Read [AI PPT (Docmee)](../admin/ai-ppt.mdx) before enabling the provider. The
+release passed 810 frontend tests across 137 files, TypeScript, ESLint without
+new errors, the production frontend build, and the targeted Docmee, credit,
+usage, and sandbox-path Go tests.
+
+To pin this prerelease in a Compose deployment:
+
+```dotenv
+APP_IMAGE_TAG=2.5.0-beta.2
+UPDATER_IMAGE_TAG=2.5.0-beta.2
+```
+
+Database migrations run automatically. The Docmee feature remains unavailable
+until an administrator configures and enables it.
+
+## v2.5.0-beta.1 — Test release — 2026-09-22
+
+`v2.5.0-beta.1` introduced a unified resizable Artifact Panel, in-browser
+editing for text, HTML, DOCX, XLSX, and existing PPTX text, and structured
+folder uploads for sandbox tasks. Folder uploads preserve relative paths, are
+staged under `/workspace/uploads/<folder>/<path>`, and provide the model with
+an `/workspace/aivory-uploads.txt` inventory. The initial beta adds the
+`files.rel_path` migration; a rollback leaves that additive column in place.
+See the [GitHub pre-release](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.1).
+
+## [v2.4.9](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9) — Stable release — 2026-09-22
+
+`v2.4.9` promotes the completed 2.4.9 beta work to stable: TypeSafe/Jev
+decision policies for routing, memory, moderation, and document selection;
+smarter tool routing and three-search search-only mode; Tavily search; domain
+enrollment and workspace profile controls; public HTML previews; WeCom sign-in;
+and Responses message-ID recovery. It is the recommended upgrade target for
+the 2.4 series. No TypeSafe environment variable is required: channel,
+credential, model, and policy settings are stored in the administrator
+configuration database.
+
 ## v2.4.9-beta.1 — Test release — 2026-09-16
 
 `v2.4.9-beta.1` is a **pre-release for testing**, not a stable production release. Stable in-app update checks do not select it. Use a backup and a test or staging environment; this build may be superseded by later beta releases. See the [GitHub pre-release](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.1).

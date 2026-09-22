@@ -133,6 +133,16 @@ Core fields and defaults:
 
 Check a model's real price, context length, output cap, and tool cost before adjusting its quota; quota changes affect subsequent requests only — past usage rows and orders are never rewritten.
 
+### AI PPT fixed-price credits
+
+The optional Docmee **AI PPT** workbench is configured in the same Credits and
+quotas page, but it does not use model token pricing. It reserves and settles a
+fixed number of credits per completed deck, using the provider's presentation ID
+to prevent duplicate charges. The sidebar entry stays hidden until an
+administrator supplies a key and enables the integration. See [AI PPT
+(Docmee)](./ai-ppt.mdx) for setup, visibility, provider endpoints, and the
+reserve/settle/release lifecycle.
+
 ## Redeem codes
 
 "Billing & entitlements → Redeem codes" mints batches granting one of two benefits:

@@ -136,19 +136,4 @@ openssl rand -hex 32
 | `SANDBOX_BASE_URL` | 外部或个人版本地沙盒 | 空；官方完整版固定内部地址 | 沙盒 HTTP 服务地址。个人版本机 profile 用 `http://sandbox:8000`；不配置时 Python 保持不可用。 | 内部网络 |
 | `SANDBOX_API_KEY` | 启用沙盒 | 空；官方内置沙盒有内部共享值 | 沙盒 Bearer Key，必须与沙盒服务端一致。不要通过公网暴露沙盒。 | 密钥 |
 
-## AI PPT 回退配置
-
-常规的文多多 AI PPT 配置应使用管理后台。只有对应数据库设置为空时，以下变量才作为回退；
-已经保存的管理后台值优先。这些变量由 API 进程启动时读取，修改后需要重建 API 容器。
-
-| 变量 | 默认值 | 用途 | 敏感性 |
-| --- | --- | --- | --- |
-| `DOCMEE_API_KEY` | 空 | 服务端签发用户范围 iframe token 的文多多 API Key。 | 密钥 |
-| `DOCMEE_API_BASE_URL` | `https://docmee.cn` | 服务端 token API 地址。 | 内部网络 |
-| `DOCMEE_DOMAIN` | 空 | iframe 域名，例如国际版端点或受控代理。 | 内部网络 |
-| `DOCMEE_SDK_URL` | 固定的 Docmee SDK | 浏览器 SDK 脚本地址；仅指向受信任的镜像或自托管副本。 | 内部网络 |
-| `DOCMEE_SDK_BASE_URL` | 空 | 浏览器经由受控代理访问时的 SDK API base URL。 | 内部网络 |
-
-浏览器无需获得 API Key。功能门控、积分结算和服务商部署选项见[AI PPT（文多多 Docmee）](../admin/ai-ppt.mdx)。
-
 沙盒资源、会话、上传和工作区变量见[沙盒变量](./environment-sandbox.mdx)。模型渠道、搜索、OCR 和 embedding 的运营步骤见[渠道、模型与策略](../admin/channels-models.mdx)和[知识库、RAG 与存储](../admin/knowledge-rag.mdx)。

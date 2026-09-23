@@ -136,22 +136,4 @@ These variables provide startup fallbacks. The corresponding settings already sa
 | `SANDBOX_BASE_URL` | External or Personal edition local sandbox | Empty; the official Full edition pins the internal address | Sandbox HTTP service address. The Personal edition local profile uses `http://sandbox:8000`; without configuration, Python remains unavailable. | Internal network |
 | `SANDBOX_API_KEY` | When the sandbox is enabled | Empty; the official built-in sandbox has an internal shared value | Sandbox Bearer key; it must match the sandbox server side. Do not expose the sandbox over the public internet. | Secret |
 
-## AI PPT fallback
-
-Use the admin UI for the normal Docmee AI PPT configuration. These variables are
-only fallbacks when the matching database setting is blank; a saved admin value
-takes precedence. They are read by the API process at startup, so recreate the
-API container after changing them.
-
-| Variable | Default | Purpose | Sensitivity |
-| --- | --- | --- | --- |
-| `DOCMEE_API_KEY` | Empty | Server-side Docmee API key used to mint user-scoped iframe tokens. | Secret |
-| `DOCMEE_API_BASE_URL` | `https://docmee.cn` | Server-side token API origin. | Internal network |
-| `DOCMEE_DOMAIN` | Empty | Iframe domain, such as the international endpoint or a controlled proxy. | Internal network |
-| `DOCMEE_SDK_URL` | Pinned Docmee SDK | Browser SDK script URL; set only to a trusted mirror or self-hosted copy. | Internal network |
-| `DOCMEE_SDK_BASE_URL` | Empty | SDK API base URL when the browser uses a controlled proxy. | Internal network |
-
-The key never needs to be available to the browser. For feature gating, credit
-accounting, and provider deployment options, see [AI PPT (Docmee)](../admin/ai-ppt.mdx).
-
 For sandbox resource, session, upload, and workspace variables, see [Sandbox variables](./environment-sandbox.mdx). For operational steps on model channels, search, OCR, and embeddings, see [Channels, Models, and Policies](../admin/channels-models.mdx) and [Knowledge Bases, RAG, and Storage](../admin/knowledge-rag.mdx).

@@ -34,7 +34,6 @@ const sidebars: SidebarsConfig = {
         'admin/domain-management',
         'admin/workspace-announcements',
         'admin/billing',
-        'admin/ai-ppt',
         'admin/platform-operations',
       ],
     },

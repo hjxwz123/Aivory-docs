@@ -8,33 +8,24 @@ description: Aivory 正式发布版本的详细变更、升级影响与兼容性
 
 本页以 [GitHub Releases](https://github.com/hjxwz123/Aivory/releases) 的 tag 和发布时间为准。镜像部署请按对应版本说明固定镜像标签；`APP_IMAGE_TAG` 可单独固定应用版本，且优先于 `IMAGE_TAG`。升级前按[升级与备份](../deployment/upgrade-backup.mdx)完成备份。每个版本的完整提交范围、校验记录和原始说明仍以对应 GitHub Release 为准。
 
-## v2.5.0-beta.2 — 测试版 — 2026-09-22
+## v2.5.0-beta.3 — 测试版 — 2026-09-23
 
-`v2.5.0-beta.2` 是当前的**测试版本**，新增文多多 AI PPT 创作台、按份安全计费和生成文件
-预览控件。请先在测试或预发环境使用；稳定版更新检查不会自动选择预发布版本。详见
-[GitHub 预发布说明](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.2)。
-
-- **AI PPT（文多多）**：管理员可在「积分与配额」配置 API Key、启用开关、创作器版本、
-  每份固定积分、token 有效期、API 地址、SDK URL，以及国际版或代理地址。只有服务已配置
-  可用 Key 且处于启用状态时，侧边栏才显示 AI PPT；直接打开 `/ppt` 时则显示不可用状态。
-- **演示文稿安全计费**：生成前预占积分，PPT 完成后结算，未使用预占会释放。使用 Docmee
-  PPT ID 做幂等键，SDK 重试、刷新和重复事件都不会对同一份 PPT 重复扣费；已扣费记录会以
-  `ppt` 用途显示在「用量与计费」。
-- **文件预览**：生成文件卡片可在既有的统一产物面板中打开 HTML、PDF、Office 文档、表格、
-  文本和支持的图片。该版本也修复了通过常规文件上传链路保存已编辑文档副本的行为。
-
-启用服务商前请阅读[AI PPT（文多多 Docmee）](../admin/ai-ppt.mdx)。本版本通过 137 个
-前端测试文件中的 810 项用例、TypeScript、无新增错误的 ESLint、生产前端构建，以及
-Docmee、积分、用量和沙箱路径相关 Go 测试。
+`v2.5.0-beta.3` 移除了 beta.2 加入的 AI PPT 创作台、管理配置、服务商接口和按份扣费。
+统一产物面板、PPTX 文本编辑、文件夹上传以及对话生成文件预览继续可用。已有积分账本和
+用量记录保留，供历史对账。详见
+[GitHub 预发布说明](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.3)。
 
 在 Compose 部署中固定此测试版本：
 
 ```dotenv
-APP_IMAGE_TAG=2.5.0-beta.2
-UPDATER_IMAGE_TAG=2.5.0-beta.2
+APP_IMAGE_TAG=2.5.0-beta.3
+UPDATER_IMAGE_TAG=2.5.0-beta.3
 ```
 
-数据库迁移会自动执行。管理员完成配置并打开开关前，Docmee 功能保持不可用。
+## v2.5.0-beta.2 — 测试版 — 2026-09-22
+
+此版本加入了对话生成文件预览，并修复了使用常规上传接口另存已编辑文档副本。完整历史
+说明见 [GitHub 预发布说明](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.2)。
 
 ## v2.5.0-beta.1 — 测试版 — 2026-09-22
 

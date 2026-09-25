@@ -1,12 +1,30 @@
 ---
 title: 更新日志
 sidebar_position: 1
-description: Aivory 正式发布版本的详细变更、升级影响与兼容性说明。
+description: Aivory 正式版与测试版的变更、升级影响和兼容性说明。
 ---
 
 # 更新日志
 
-本页以 [GitHub Releases](https://github.com/hjxwz123/Aivory/releases) 的 tag 和发布时间为准。镜像部署请按对应版本说明固定镜像标签；`APP_IMAGE_TAG` 可单独固定应用版本，且优先于 `IMAGE_TAG`。升级前按[升级与备份](../deployment/upgrade-backup.mdx)完成备份。每个版本的完整提交范围、校验记录和原始说明仍以对应 GitHub Release 为准。
+本页覆盖 [GitHub Releases](https://github.com/hjxwz123/Aivory/releases) 中所有已发布版本，并与其 tag、发布时间和正式版／预发布状态保持一致。每个版本均可打开 GitHub 原始说明，完整改动、升级命令和验证记录以原始说明为准。镜像部署请按对应版本说明固定镜像标签；`APP_IMAGE_TAG` 可单独固定应用版本，且优先于 `IMAGE_TAG`。升级前按[升级与备份](../deployment/upgrade-backup.mdx)完成备份。
+
+## v2.5.0 系列测试版
+
+v2.5.0 系列均为 GitHub 测试预发布版，不是稳定生产版本。请先备份，并在测试或预发环境使用。稳定版应用内更新提示不会选择预发布版；支持的版本可由管理员在**系统更新**中手动选择。
+
+### [v2.5.0-beta.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.5) — 2026-09-25
+
+- 恢复 AI PPT 工作台，使用 Aivory 自有的演示文稿流程，支持大纲编辑、模板选择、演示文稿列表和预览。文多多凭据及上游调用仅在服务端处理。
+- 增加 AI PPT 的分层访问控制：用户组、工作空间策略和成员权限均需允许；访客不能使用。
+- 沙盒及上传权限允许时，可将整个文件夹直接上传到当前对话的沙盒。一次请求保留原始文件字节和相对路径，不逐个解析文档、不转换图片，也不进行 RAG 索引；同时校验路径安全、文件数量和大小上限。
+- 文件限制、部分写入行为和升级步骤见 [GitHub 原始发布说明](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.5)。
+
+### [v2.5.0-beta.4](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.4) — 2026-09-23
+
+- 为使用纯文本模型的对话增加可选图片识别，由管理员选择视觉模型；原生支持视觉的模型仍直接接收图片。
+- 普通对话会缓存图片证据并限制每轮新增识别次数；隐私对话只在内存中处理图片证据。图片识别失败不会阻断对话。
+- 视觉调用记录为 `task.vision_caption`。本测试版不包含 AI PPT；普通 PPTX 预览和编辑仍可使用。
+- 配置和升级步骤见 [GitHub 原始发布说明](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.4)。
 
 ## v2.5.0-beta.3 — 测试版 — 2026-09-23
 
@@ -60,6 +78,16 @@ UPDATER_IMAGE_TAG=2.4.9-beta.1
 ```
 
 不要把该 tag 视作稳定自动更新。请先备份，验证域策略和个人数据迁移行为，并在后续经验证的版本可用后替换此 beta。
+
+### 其他 v2.4.9 测试版
+
+- [v2.4.9-beta.2 — 2026-09-16](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.2)：支持在系统更新中选择预发布版本，并增加公开 HTML 预览链接。
+- [v2.4.9-beta.3 — 2026-09-17](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.3)：增加企业微信登录、公开预览管理、Tavily 搜索和流式推理修复。
+- [v2.4.9-beta.4 — 2026-09-20](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.4)：增加 TypeSafe/Jev 工具路由、记忆、审核和文档路由策略，并改进注册与 Responses 兼容性。
+- [v2.4.9-beta.5 — 2026-09-20](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.5)：改进工作空间资料与设置、仅搜索对话、订阅信息展示和聊天抽屉样式。
+- [v2.4.9-beta.6 — 2026-09-20](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.6)：修复 Responses 消息 ID 兼容问题，并恢复专用工作空间管理弹窗。
+
+每个 beta 均为测试版，不是稳定生产版本。完整说明和升级指引见对应 GitHub 页面。
 
 ## v2.4 系列
 
@@ -305,6 +333,26 @@ UPDATER_IMAGE_TAG=2.4.9-beta.1
 
 ## 早期版本
 
+### [v2.2.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6) — 2026-07-30
+
+- 全面改进管理员移动端体验，适配导航、配置页面、数据记录、弹窗和统计分析。
+- 重组后台导航、排序及详情操作流程，增加模型标签排序、永久删除备份和仅允许 ZIP 格式的配置导入。
+- 改进 Waffo 支付恢复与取消，移除冗余知识库搜索行为，并为公告增加标题。
+- 完整变更和验证记录见 [GitHub 原始发布说明](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6)。
+
+### [v2.2.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5) — 2026-07-29
+
+- 增加多渠道支付、支付方式和订单管理、永久积分套餐，以及用户组月付／年付定价。
+- 增加个人技能与提示词库、可配置法律政策、登录历史审计和头像对象存储。
+- 改进助手回复编辑、支付恢复、模型额度和会员到期处理。
+- 支持的支付渠道、兼容性和升级说明见 [GitHub 原始发布说明](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5)。
+
+### [v2.2.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3) — 2026-07-24
+
+- 重构用户文件页和管理员文件页，增加 PDF、DOCX、PPTX、XLSX 及常见文本和图片格式的原生预览。
+- 增加按模型配置的服务商工具，并改进工具选择、图片生成与编辑、分享页、设置加载和聊天交互。
+- 完整变更见 [GitHub 原始发布说明](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3)。
+
 ### [v2.2.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.2) - 2026-07-21
 
 - 增加可视化公式编辑器，并统一公式编辑、分享、分支、导入和剪贴板场景的存储格式。
@@ -340,12 +388,46 @@ UPDATER_IMAGE_TAG=2.4.9-beta.1
 
 ## 完整发布目录
 
-以下版本均存在正式 GitHub Release；需要每个补丁版本的完整改动、提交范围和升级说明时，进入对应链接查看原始 release notes。
+截至 2026-09-25，本目录包含 GitHub 上全部 39 个非草稿 Release。**正式版**表示稳定发布，**测试版**表示预发布；点击版本可查看对应的 GitHub 原始发布说明。
 
-| 版本 | 发布时间 | 版本 | 发布时间 |
+| 版本 | 发布时间（UTC） | 渠道 | 原始说明 |
 | --- | --- | --- | --- |
-| [v2.2.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6) | 2026-07-30 | [v2.2.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5) | 2026-07-29 |
-| [v2.2.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3) | 2026-07-24 | [v2.0.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.1) | 2026-06-23 |
-| [v2.0.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.0) | 2026-06-22 | [v2.1.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.0) | 2026-07-01 |
-
-`v2.2.4` 没有对应的 Git tag 或 GitHub Release，因此不在正式发布目录中。
+| [v2.5.0-beta.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.5) | 2026-09-25 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.5) |
+| [v2.5.0-beta.4](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.4) | 2026-09-23 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.4) |
+| [v2.5.0-beta.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.3) | 2026-09-23 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.3) |
+| [v2.5.0-beta.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.2) | 2026-09-22 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.2) |
+| [v2.5.0-beta.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.1) | 2026-09-22 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.1) |
+| [v2.4.9](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9) | 2026-09-22 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9) |
+| [v2.4.9-beta.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.6) | 2026-09-20 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.6) |
+| [v2.4.9-beta.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.5) | 2026-09-20 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.5) |
+| [v2.4.9-beta.4](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.4) | 2026-09-20 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.4) |
+| [v2.4.9-beta.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.3) | 2026-09-17 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.3) |
+| [v2.4.9-beta.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.2) | 2026-09-16 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.2) |
+| [v2.4.9-beta.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.1) | 2026-09-16 | 测试版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.1) |
+| [v2.4.8](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.8) | 2026-09-16 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.8) |
+| [v2.4.7](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.7) | 2026-09-13 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.7) |
+| [v2.4.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.6) | 2026-09-01 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.6) |
+| [v2.4.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.5) | 2026-08-31 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.5) |
+| [v2.4.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.3) | 2026-08-30 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.3) |
+| [v2.4.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.2) | 2026-08-29 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.2) |
+| [v2.4.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.1) | 2026-08-29 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.1) |
+| [v2.4.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.0) | 2026-08-29 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.0) |
+| [v2.3.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.3.1) | 2026-08-22 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.3.1) |
+| [v2.3.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.3.0) | 2026-08-19 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.3.0) |
+| [v2.2.13](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.13) | 2026-08-16 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.13) |
+| [v2.2.12](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.12) | 2026-08-14 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.12) |
+| [v2.2.11](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.11) | 2026-08-14 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.11) |
+| [v2.2.10](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.10) | 2026-08-14 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.10) |
+| [v2.2.9](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.9) | 2026-08-14 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.9) |
+| [v2.2.8](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.8) | 2026-08-14 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.8) |
+| [v2.2.7](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.7) | 2026-08-04 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.7) |
+| [v2.2.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6) | 2026-07-30 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6) |
+| [v2.2.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5) | 2026-07-29 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5) |
+| [v2.2.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3) | 2026-07-24 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3) |
+| [v2.2.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.2) | 2026-07-21 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.2) |
+| [v2.2.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.1) | 2026-07-14 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.1) |
+| [v2.2.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.0) | 2026-07-12 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.0) |
+| [v2.1.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.1) | 2026-07-02 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.1) |
+| [v2.1.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.0) | 2026-07-01 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.0) |
+| [v2.0.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.1) | 2026-06-23 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.1) |
+| [v2.0.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.0) | 2026-06-22 | 正式版 | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.0) |

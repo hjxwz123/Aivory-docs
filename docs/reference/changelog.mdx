@@ -6,7 +6,25 @@ description: Detailed changes, upgrade impact, and compatibility notes for offic
 
 # Changelog
 
-This page follows the tags and release times on [GitHub Releases](https://github.com/hjxwz123/Aivory/releases). Pin image versions according to each release's upgrade notes; `APP_IMAGE_TAG` supports an application-only pin and takes precedence over `IMAGE_TAG`. Before upgrading, complete backups as described in [Upgrades and Backups](../deployment/upgrade-backup.mdx). The complete commit range, verification records, and original notes for each version remain authoritative on the corresponding GitHub Release.
+This page follows every published tag, publication date, and release channel on [GitHub Releases](https://github.com/hjxwz123/Aivory/releases), including prereleases. Each version links to its original GitHub notes, which remain authoritative for complete changes, upgrade commands, and verification records. Pin image versions according to those notes; `APP_IMAGE_TAG` supports an application-only pin and takes precedence over `IMAGE_TAG`. Before upgrading, complete backups as described in [Upgrades and Backups](../deployment/upgrade-backup.mdx).
+
+## v2.5.0 Series — Test Releases
+
+The v2.5.0 releases are GitHub prereleases for testing, not stable production releases. Use a backup and a test or staging environment. The stable in-app update badge does not select prereleases; administrators can select them in **System update** where supported.
+
+### [v2.5.0-beta.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.5) — 2026-09-25
+
+- Restores the AI PPT workbench with Aivory's own presentation workflow, outline editing, template selection, deck listing and preview. Docmee credentials and upstream calls remain server-side.
+- Adds layered AI PPT access controls for user groups, workspace policy and workspace members. Every applicable layer must allow access; guests are excluded.
+- Adds direct folder uploads to the current conversation sandbox when sandbox and upload permissions allow it. The directory is sent in one request with its original bytes and relative paths; no document parsing, image conversion or RAG indexing occurs. Path safety and file-count and size limits are enforced.
+- See the [original release notes](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.5) for limits, partial-write behavior and upgrade steps.
+
+### [v2.5.0-beta.4](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.4) — 2026-09-23
+
+- Adds optional image reading for conversations using text-only models through an administrator-selected vision model. Native-vision models continue receiving images directly.
+- Caches image evidence for regular conversations, limits new reads per turn, and keeps private-chat image evidence in memory only. Image-reading failures do not block the conversation.
+- Vision calls are recorded as `task.vision_caption`. This beta does not include AI PPT; standard PPTX preview and editing remain available.
+- See the [original release notes](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.4) for configuration and upgrade steps.
 
 ## v2.5.0-beta.3 — Test release — 2026-09-23
 
@@ -68,6 +86,16 @@ UPDATER_IMAGE_TAG=2.4.9-beta.1
 ```
 
 Do not treat this tag as a stable automatic update. Back up data first, validate domain policies and personal-data migration behavior, and replace this beta with a later tested release when available.
+
+### Other v2.4.9 test releases
+
+- [v2.4.9-beta.2 — 2026-09-16](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.2): prerelease-aware system updates and public HTML preview links.
+- [v2.4.9-beta.3 — 2026-09-17](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.3): WeCom sign-in, public-preview administration, Tavily search and streamed-reasoning fixes.
+- [v2.4.9-beta.4 — 2026-09-20](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.4): TypeSafe/Jev policies for tool routing, memory, moderation and document routing, plus registration and Responses fixes.
+- [v2.4.9-beta.5 — 2026-09-20](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.5): workspace profiles and settings, search-only conversations, subscription visibility and chat drawer styling.
+- [v2.4.9-beta.6 — 2026-09-20](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.6): Responses message-ID compatibility and restored workspace administration dialog.
+
+Each beta is a test release, not a stable production release. Its linked GitHub page contains the complete notes and upgrade instructions.
 
 ## v2.4 Series
 
@@ -313,6 +341,26 @@ See the [v2.4.8 Release](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.8)
 
 ## Earlier Versions
 
+### [v2.2.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6) — 2026-07-30
+
+- Reworks the administrator experience for mobile, with responsive navigation and layouts for configuration pages, records, dialogs and analytics.
+- Reorganizes administrator navigation, ordering and detail workflows; adds model-tag ordering, permanent backup deletion and ZIP-only configuration imports.
+- Improves Waffo payment recovery and cancellation, removes redundant knowledge-search behavior and adds announcement titles.
+- See the [original release notes](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6) for the complete changes and verification.
+
+### [v2.2.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5) — 2026-07-29
+
+- Adds multi-channel payments, payment methods and order administration, permanent credit packages, and monthly and annual group pricing.
+- Adds personal skills and prompt libraries, configurable legal policies, login-history auditing and avatar object storage.
+- Improves assistant-reply editing, payment recovery, model quotas and membership-expiry handling.
+- See the [original release notes](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5) for supported providers, compatibility and upgrade details.
+
+### [v2.2.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3) — 2026-07-24
+
+- Reworks user and administrator file pages around native previews for PDF, DOCX, PPTX, XLSX and common text and image formats.
+- Adds per-model provider tools and improves tool selection, image generation and editing, shared pages, settings loading and chat interactions.
+- See the [original release notes](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3) for the complete changes.
+
 ### [v2.2.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.2) - 2026-07-21
 
 - Added a visual formula editor and unified the storage format of formulas across editing, sharing, branching, import, and clipboard scenarios.
@@ -346,14 +394,48 @@ See the [v2.4.8 Release](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.8)
 - Hardened the concurrency, estimation, injection, and deletion consistency of long-context compression.
 - Added Mermaid diagram zoom, drag, fit-to-window, full-screen viewing, and PNG/SVG export.
 
-## Full Release Catalog
+## Complete Release Catalog
 
-Each of the following versions has an official GitHub Release; for the complete changes, commit range, and upgrade notes of each patch version, open the corresponding link for the original release notes.
+This index contains every non-draft GitHub Release published as of 2026-09-25. **Stable** marks a production release; **Test** marks a prerelease. Select a version to open its original GitHub notes.
 
-| Version | Release date | Version | Release date |
+| Version | Published (UTC) | Channel | Original notes |
 | --- | --- | --- | --- |
-| [v2.2.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6) | 2026-07-30 | [v2.2.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5) | 2026-07-29 |
-| [v2.2.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3) | 2026-07-24 | [v2.0.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.1) | 2026-06-23 |
-| [v2.0.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.0) | 2026-06-22 | [v2.1.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.0) | 2026-07-01 |
-
-`v2.2.4` has no corresponding Git tag or GitHub Release, so it is not included in the official release catalog.
+| [v2.5.0-beta.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.5) | 2026-09-25 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.5) |
+| [v2.5.0-beta.4](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.4) | 2026-09-23 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.4) |
+| [v2.5.0-beta.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.3) | 2026-09-23 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.3) |
+| [v2.5.0-beta.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.2) | 2026-09-22 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.2) |
+| [v2.5.0-beta.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.1) | 2026-09-22 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.1) |
+| [v2.4.9](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9) | 2026-09-22 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9) |
+| [v2.4.9-beta.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.6) | 2026-09-20 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.6) |
+| [v2.4.9-beta.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.5) | 2026-09-20 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.5) |
+| [v2.4.9-beta.4](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.4) | 2026-09-20 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.4) |
+| [v2.4.9-beta.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.3) | 2026-09-17 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.3) |
+| [v2.4.9-beta.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.2) | 2026-09-16 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.2) |
+| [v2.4.9-beta.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.1) | 2026-09-16 | Test | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.1) |
+| [v2.4.8](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.8) | 2026-09-16 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.8) |
+| [v2.4.7](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.7) | 2026-09-13 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.7) |
+| [v2.4.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.6) | 2026-09-01 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.6) |
+| [v2.4.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.5) | 2026-08-31 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.5) |
+| [v2.4.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.3) | 2026-08-30 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.3) |
+| [v2.4.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.2) | 2026-08-29 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.2) |
+| [v2.4.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.1) | 2026-08-29 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.1) |
+| [v2.4.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.0) | 2026-08-29 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.0) |
+| [v2.3.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.3.1) | 2026-08-22 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.3.1) |
+| [v2.3.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.3.0) | 2026-08-19 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.3.0) |
+| [v2.2.13](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.13) | 2026-08-16 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.13) |
+| [v2.2.12](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.12) | 2026-08-14 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.12) |
+| [v2.2.11](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.11) | 2026-08-14 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.11) |
+| [v2.2.10](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.10) | 2026-08-14 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.10) |
+| [v2.2.9](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.9) | 2026-08-14 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.9) |
+| [v2.2.8](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.8) | 2026-08-14 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.8) |
+| [v2.2.7](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.7) | 2026-08-04 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.7) |
+| [v2.2.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6) | 2026-07-30 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.6) |
+| [v2.2.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5) | 2026-07-29 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.5) |
+| [v2.2.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3) | 2026-07-24 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.3) |
+| [v2.2.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.2) | 2026-07-21 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.2) |
+| [v2.2.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.1) | 2026-07-14 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.1) |
+| [v2.2.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.0) | 2026-07-12 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.2.0) |
+| [v2.1.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.1) | 2026-07-02 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.1) |
+| [v2.1.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.0) | 2026-07-01 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.1.0) |
+| [v2.0.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.1) | 2026-06-23 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.1) |
+| [v2.0.0](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.0) | 2026-06-22 | Stable | [GitHub](https://github.com/hjxwz123/Aivory/releases/tag/v2.0.0) |

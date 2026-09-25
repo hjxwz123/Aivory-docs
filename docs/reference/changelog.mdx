@@ -16,8 +16,6 @@ Every published GitHub Release is listed below in publication order with its com
 
 #### Aivory v2.5.0-beta.5
 
-> Test release / prerelease.
-
 This release includes PR #36's AI PPT workbench and layered permissions, followed by direct folder uploads to conversation sandboxes.
 
 ##### AI PPT
@@ -69,8 +67,6 @@ docker compose --env-file .env -f docker-compose.prod.yml up -d --no-build
 
 #### Aivory v2.5.0-beta.4
 
-> Test release / prerelease.
-
 This release adds image reading for conversations using a text-only model. An administrator can select an enabled, vision-capable chat model under **Settings > Model policy**. When configured, that model reads attached images and supplies structured text evidence to the selected conversation model. Models with native vision continue to receive images directly. Leaving the setting empty keeps the existing image-skipping behavior for text-only models.
 
 In regular conversations, image evidence is cached with the uploaded file and regenerated when the vision model or evidence prompt version changes. A turn makes at most four new vision calls; cached evidence remains available without that limit. Private chat stores no image cache and reads only images on the newest user turn. If image reading fails, the conversation can continue without the unavailable image.
@@ -100,8 +96,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 
 #### Aivory v2.5.0-beta.3
 
-> Test release / prerelease.
-
 This release removes the Docmee AI PPT integration introduced in beta.2. The AI PPT sidebar entry, `/ppt` workbench, administrator settings, Docmee API endpoints, iframe SDK, and per-deck credit charging are no longer available.
 
 The unified artifact panel, browser document editors (including PPTX text editing), structured folder uploads, and in-chat preview of generated files remain available. Saving an edited document as a new file still uses the existing upload API.
@@ -130,8 +124,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 ### [v2.5.0-beta.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.2) — 2026-09-22
 
 #### Aivory v2.5.0-beta.2
-
-> Test release / prerelease.
 
 `v2.5.0-beta.2` adds the Docmee / 文多多 AI PPT workbench, credit-safe presentation billing, and in-chat preview controls for generated files.
 
@@ -197,8 +189,6 @@ Database migrations run automatically on startup. The AI PPT integration stays u
 ### [v2.5.0-beta.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.1) — 2026-09-22
 
 #### Aivory v2.5.0-beta.1
-
-> Test release / prerelease.
 
 `v2.5.0-beta.1` introduces a unified, resizable artifact panel, browser-based document editing, and structured folder uploads for sandbox tasks. This release contains the work contributed in [PR #31](https://github.com/hjxwz123/Aivory/pull/31).
 
@@ -389,8 +379,6 @@ Database migrations, including domain controls and workspace profiles, run autom
 
 #### Aivory v2.4.9-beta.6
 
-> Test release / prerelease.
-
 `v2.4.9-beta.6` repairs Responses message IDs before channel fallback, including the final answer request after tool limits are reached. It also restores the dedicated workspace administration dialog.
 
 ##### Responses compatibility and tool finalization
@@ -441,8 +429,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 
 #### Aivory v2.4.9-beta.5
 
-> Test release / prerelease.
-
 `v2.4.9-beta.5` improves workspace profiles and settings, search-only conversations, subscription visibility and chat drawer styling.
 
 ##### Workspace profiles and settings
@@ -492,8 +478,6 @@ Workspace profile database migrations run automatically on startup. Preserve exi
 ### [v2.4.9-beta.4](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.4) — 2026-09-20
 
 #### Aivory v2.4.9-beta.4
-
-> Test release / prerelease.
 
 `v2.4.9-beta.4` adds administrator-managed TypeSafe/Jev decisions for tools, memory, moderation and document routing. It also improves registration, domain subscription controls, workspace announcements and OpenAI Responses output handling.
 
@@ -549,8 +533,6 @@ Database migrations run automatically on startup. Preserve existing deployment s
 ### [v2.4.9-beta.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.3) — 2026-09-17
 
 #### Aivory v2.4.9-beta.3
-
-> Test release / prerelease. This is not a stable production release.
 
 `v2.4.9-beta.3` adds WeCom sign-in, administrator management for public HTML preview links, Tavily as a web search backend, and more reliable streamed reasoning output. Back up application data before testing and use a staging deployment where possible.
 
@@ -610,8 +592,6 @@ Do not replace an existing deployment environment file with an example. Preserve
 
 #### Aivory v2.4.9-beta.2
 
-> Test release / prerelease. This is not a stable production release.
-
 `v2.4.9-beta.2` is the second focused test build in the 2.4.9 line. It adds prerelease-aware in-app updates and public HTML preview links. Back up application data before testing and use a staging deployment where possible.
 
 ##### What to test
@@ -661,8 +641,6 @@ Do not replace an existing deployment environment file with an example. Preserve
 ### [v2.4.9-beta.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.1) — 2026-09-16
 
 #### Aivory v2.4.9-beta.1
-
-> Test release / prerelease. This is not a stable production release.
 
 `v2.4.9-beta.1` is intended for staging and focused validation. Stable in-app update checks do not select pre-releases. Back up data before testing, do not treat this build as a production automatic update, and expect a later beta or stable release to supersede it.
 

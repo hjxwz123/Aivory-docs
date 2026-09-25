@@ -16,8 +16,6 @@ description: Aivory 所有 GitHub 正式版与预发布版本的完整说明。
 
 #### Aivory v2.5.0-beta.5
 
-> 测试版 / 预发布版。
-
 此版本包含 PR #36 中的 AI PPT 工作台和分层权限，随后还加入了直接将文件夹上传到对话沙箱的功能。
 
 ##### AI PPT
@@ -69,8 +67,6 @@ docker compose --env-file .env -f docker-compose.prod.yml up -d --no-build
 
 #### Aivory v2.5.0-beta.4
 
-> 测试版 / 预发布版。
-
 此版本为使用纯文本模型的对话增加了图像读取功能。管理员可以在 **设置 > 模型策略**下选择一个已启用且支持视觉的聊天模型。配置后，该模型会读取附加图像，并向所选对话模型提供结构化文本证据。原生支持视觉的模型仍会直接接收图像。将此设置留空时，纯文本模型仍会沿用现有的跳过图像行为。
 
 在普通对话中，图像证据会与上传的文件一起缓存；当视觉模型或证据提示词版本发生变化时，会重新生成。每轮最多发起四次新的视觉调用；缓存的证据不受此限制，仍可使用。私聊不会存储图像缓存，且只读取最新用户轮次中的图像。如果图像读取失败，对话仍可在不使用无法读取的图像的情况下继续。
@@ -100,8 +96,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 
 #### Aivory v2.5.0-beta.3
 
-> 测试版 / 预发布版。
-
 此版本移除了 beta.2 中引入的 Docmee AI PPT 集成。AI PPT 侧边栏入口、`/ppt` 工作台、管理员设置、Docmee API 端点、iframe SDK 以及按演示文稿计费的积分扣除均不再提供。
 
 统一的资源面板、浏览器文档编辑器（包括 PPTX 文本编辑）、结构化文件夹上传，以及对话中生成文件的预览功能仍可使用。将编辑后的文档另存为新文件仍使用现有的上传 API。
@@ -130,8 +124,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 ### [v2.5.0-beta.2](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.2) — 2026-09-22
 
 #### Aivory v2.5.0-beta.2
-
-> 测试版 / 预发布版。
 
 `v2.5.0-beta.2` 新增了 Docmee / 文多多 AI PPT 工作台、保障积分安全的演示文稿计费，以及聊天中对生成文件的预览控件。
 
@@ -197,8 +189,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 ### [v2.5.0-beta.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.1) — 2026-09-22
 
 #### Aivory v2.5.0-beta.1
-
-> 测试版发布 / 预发布版本。
 
 `v2.5.0-beta.1` 引入了统一的可调整大小的产物面板、基于浏览器的文档编辑，以及面向沙箱任务的结构化文件夹上传。此版本包含 [PR #31](https://github.com/hjxwz123/Aivory/pull/31) 中贡献的工作。
 
@@ -389,8 +379,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 
 #### Aivory v2.4.9-beta.6
 
-> 测试版发布 / 预发布版。
-
 `v2.4.9-beta.6` 会在回退到备用渠道之前修复 Responses 消息 ID，包括达到工具限制后的最终答案请求。此版本还恢复了专用的工作区管理对话框。
 
 ##### Responses 兼容性与工具最终处理
@@ -441,8 +429,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 
 #### Aivory v2.4.9-beta.5
 
-> 测试版发布 / 预发布版。
-
 `v2.4.9-beta.5` 改进了工作区资料和设置、仅搜索对话、订阅信息显示以及聊天抽屉样式。
 
 ##### 工作区资料和设置
@@ -492,8 +478,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 ### [v2.4.9-beta.4](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.4) — 2026-09-20
 
 #### Aivory v2.4.9-beta.4
-
-> 测试版 / 预发布版本。
 
 `v2.4.9-beta.4` 为工具、记忆、审核和文档路由新增了由管理员管理的 TypeSafe/Jev 决策。它还改进了注册、域名订阅控制、工作区公告以及 OpenAI Responses 输出处理。
 
@@ -549,8 +533,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 ### [v2.4.9-beta.3](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.3) — 2026-09-17
 
 #### Aivory v2.4.9-beta.3
-
-> 测试版 / 预发布版本。这不是稳定的生产版本。
 
 `v2.4.9-beta.3` 新增了企业微信登录、公开 HTML 预览链接的管理员管理功能、Tavily 网络搜索后端，并提高了流式推理输出的可靠性。测试前请备份应用数据，并尽可能使用预发布部署环境。
 
@@ -610,8 +592,6 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate updat
 
 #### Aivory v2.4.9-beta.2
 
-> 测试版 / 预发布版。这不是稳定的生产版本。
-
 `v2.4.9-beta.2` 是 2.4.9 系列的第二个定向测试构建。它新增了支持预发布版本的应用内更新和公开 HTML 预览链接。测试前请备份应用数据，并尽可能使用预发布环境部署。
 
 ##### 测试内容
@@ -661,8 +641,6 @@ beta.2 运行后，其更新器将接受严格校验的预发布标签，系统�
 ### [v2.4.9-beta.1](https://github.com/hjxwz123/Aivory/releases/tag/v2.4.9-beta.1) — 2026-09-16
 
 #### Aivory v2.4.9-beta.1
-
-> 测试版 / 预发布版。这不是稳定的生产版本。
 
 `v2.4.9-beta.1` 面向预发布环境部署和定向验证。稳定版应用内更新检查不会选择预发布版本。测试前请备份数据，不要将此构建视为生产环境的自动更新版本，并请预期后续 beta 版或稳定版会取代它。
 

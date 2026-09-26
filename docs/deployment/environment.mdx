@@ -124,8 +124,8 @@ These variables provide startup fallbacks. The corresponding settings already sa
 
 | Variable | Applies to | Default | Purpose and values | Sensitivity |
 | --- | --- | --- | --- | --- |
-| `SEARCH_PROVIDER` | All deployments | Empty | `serper`, `brave`, `searxng`, or `auto`. Web search is unavailable when unconfigured; `searxng` requires a base URL. | Normal |
-| `SEARCH_API_KEY` | Serper/Brave | Empty | Search provider API key. Self-hosted SearXNG usually does not need one. | Secret |
+| `SEARCH_PROVIDER` | All deployments | Empty | `duckduckgo` (or `ddg`), `searxng`, `serper`, `brave`, `tavily`, or `auto`. DuckDuckGo is explicitly selected and needs no other setting; `auto` does not choose it. | Normal |
+| `SEARCH_API_KEY` | Serper/Brave/Tavily | Empty | Search provider API key. DuckDuckGo and self-hosted SearXNG do not need one. | Secret |
 | `SEARCH_BASE_URL` | SearXNG | Empty | Root URL of a self-hosted SearXNG instance; it should not include the specific `/search` path. | Internal network |
 | `EMBEDDING_BASE_URL` | All deployments | Empty | Base URL of an OpenAI-compatible embedding API. When empty, a basic local embedding serves as the fallback. | Internal network |
 | `EMBEDDING_API_KEY` | External embeddings | Empty | Embedding service key. | Secret |

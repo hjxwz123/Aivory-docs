@@ -102,6 +102,8 @@ Admin, staff, trial, paid. Per tier define default model, visible models, daily 
 
 "Credits and quotas" ("Billing & entitlements → Credits and quotas") holds the global switches and platform limits. The billing-policy block — model cost internal conversion, credit preflight, settlement currency — applies to every member and every credit-charged model, exactly as the page lead states. The platform-limits block below it is per user: daily message and image caps, a daily input+output token cap (in UTC days), and a cap on concurrently streaming generations; 0 = unlimited on each.
 
+As of v2.5.0-beta.6, AI PPT configuration is on **Capabilities & integrations → AI PPT** (`/admin/ai-ppt`). That page owns the Docmee connection, enable switch, presentation prices, templates, and vendor balance. The platform-wide credit conversion and general limits remain here; the two pages save their own settings independently.
+
 ```
 模型成本内部换算（per USD / Credits per USD）
 结算货币（settlement_currency，三位 ISO 4217 代码）

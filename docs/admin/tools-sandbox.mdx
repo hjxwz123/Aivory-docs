@@ -63,12 +63,14 @@ The "Web search" section on the Tools page configures the `aivory_web_search` ba
 
 | Field | Description | Example | Default |
 | --- | --- | --- | --- |
-| Provider | SearXNG (self-hosted, keyless); Serper / Brave are paid | `SearXNG (self-hosted)` | Disabled |
+| Provider | DuckDuckGo (free, keyless); SearXNG (self-hosted); Serper / Brave / Tavily (API key) | `DuckDuckGo (free, no key)` | Disabled |
 | Base URL | SearXNG instance root | `https://searx.example.com` | empty |
 | SearXNG engines | Comma- or space-separated engine names/shortcuts; empty uses instance defaults | `bing, wikipedia` | empty |
-| API key | Required for Serper / Brave | — | empty |
+| API key | Required for Serper / Brave / Tavily | — | empty |
 
 Boot defaults come from `SEARCH_PROVIDER` / `SEARCH_API_KEY` / `SEARCH_BASE_URL`; once saved in the admin UI, the database wins.
+
+DuckDuckGo needs no key or base URL, but must be selected explicitly; `auto` does not enable it. Aivory tries DuckDuckGo's HTML results first and falls back to its lite page. Public endpoints may challenge or rate-limit server IPs, especially datacenter addresses. For dependable production search, use a keyed provider or a controlled SearXNG instance.
 
 Recommended rollout: pick a provider meeting your region, privacy, quota, and latency needs → validate result quality with a question that has a known answer → confirm the target models may call search and set credits/quotas per user group → watch cost, failure rate, and objectionable-content exposure before enabling deep research or page fetching.
 
@@ -214,6 +216,6 @@ A `"docker":false` from `/healthz` means the socket is down or unreadable; a 401
 | Sporadic Python 500s mentioning image pulls | The runtime image was pruned — restore the keepalive service |
 | Execs always die at the same second | The minimum of admin "Execution timeout", sidecar `SANDBOX_EXEC_TIMEOUT_CAP_MS`, and proxy read timeout |
 | Workspace files vanish after switching replicas | Archives go to local storage while the app is multi-replica — move to shared object storage |
-| Search consistently "unavailable" | Provider/key pairing (SearXNG needs no key; Serper/Brave require one) |
+| Search consistently "unavailable" | Check provider requirements: DuckDuckGo needs no key but may block server IPs; SearXNG needs a base URL; Serper, Brave, and Tavily need a key |
 | Model claims a tool doesn't exist | Global disable > per-model built-in defaults > user-group permissions > workspace policy — any layer can hide it |
 | MCP enabled but unusable by models | Whether the service is ticked under "MCP tool availability" and has been synced |

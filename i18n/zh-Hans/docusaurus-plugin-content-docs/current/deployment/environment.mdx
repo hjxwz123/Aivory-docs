@@ -124,8 +124,8 @@ openssl rand -hex 32
 
 | 变量 | 适用范围 | 默认值 | 作用与取值 | 敏感性 |
 | --- | --- | --- | --- | --- |
-| `SEARCH_PROVIDER` | 所有部署 | 空 | `serper`、`brave`、`searxng` 或 `auto`。未配置时网页搜索不可用；`searxng` 需要基础地址。 | 普通 |
-| `SEARCH_API_KEY` | Serper/Brave | 空 | 搜索服务商 API Key。自托管 SearXNG 通常不需要。 | 密钥 |
+| `SEARCH_PROVIDER` | 所有部署 | 空 | `duckduckgo`（或 `ddg`）、`searxng`、`serper`、`brave`、`tavily` 或 `auto`。DuckDuckGo 需明确选择，但无需其他配置；`auto` 不会选择它。 | 普通 |
+| `SEARCH_API_KEY` | Serper/Brave/Tavily | 空 | 搜索服务商 API Key。DuckDuckGo 和自托管 SearXNG 不需要。 | 密钥 |
 | `SEARCH_BASE_URL` | SearXNG | 空 | 自托管 SearXNG 实例根 URL，不应包含具体 `/search` 路径。 | 内部网络 |
 | `EMBEDDING_BASE_URL` | 所有部署 | 空 | OpenAI 兼容 embedding API 基础地址。留空时使用基础本地 embedding 兜底。 | 内部网络 |
 | `EMBEDDING_API_KEY` | 外部 embedding | 空 | embedding 服务密钥。 | 密钥 |

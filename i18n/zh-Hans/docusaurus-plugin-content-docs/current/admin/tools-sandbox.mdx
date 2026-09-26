@@ -65,12 +65,14 @@ README 里“48 次工具调用、12 个服务商轮次”的说法并不精确�
 
 | 字段 | 说明 | 示例 | 默认 |
 | --- | --- | --- | --- |
-| 搜索后端 | SearXNG 自部署（无需密钥）；Serper / Brave 为付费 | `SearXNG(自部署)` | 禁用 |
+| 搜索后端 | DuckDuckGo 免费免密钥；SearXNG 自部署；Serper / Brave / Tavily 需要 API Key | `DuckDuckGo（免费，无需密钥）` | 禁用 |
 | Base URL | SearXNG 实例根地址 | `https://searx.example.com` | 空 |
 | SearXNG 搜索引擎 | 逗号/空格分隔的引擎名或快捷键，留空用实例默认 | `bing, wikipedia` | 空 |
-| API Key | Serper / Brave 必填 | — | 空 |
+| API Key | Serper / Brave / Tavily 必填 | — | 空 |
 
 启动默认值由环境变量 `SEARCH_PROVIDER` / `SEARCH_API_KEY` / `SEARCH_BASE_URL` 提供，后台保存后以数据库为准。
+
+DuckDuckGo 无需密钥或基础地址，但必须由管理员明确选择；`auto` 不会自动启用。Aivory 会先请求 DuckDuckGo 的 HTML 结果页，再尝试 lite 页面。公开端点可能对服务器 IP，尤其是数据中心地址，发起挑战或限流。需要稳定搜索时，请选有密钥的服务商或受控的 SearXNG 实例。
 
 推荐上线顺序：选定满足地区、隐私、额度和延迟要求的提供方 → 保存后用**确定答案的问题**验证结果质量 → 确认目标模型允许调用搜索、为用户群设置积分/配额 → 观察费用、失败率与不当内容风险，再决定开放深度研究与网页抓取。
 
@@ -216,6 +218,6 @@ curl -s -X POST http://<sandbox-host>:48217/exec \
 | Python 偶发 500，日志提到 pull image | 运行镜像被 prune——检查 keepalive 服务与镜像策略 |
 | 执行总在同一秒数被掐断 | 后台“执行超时”、sidecar `SANDBOX_EXEC_TIMEOUT_CAP_MS`、代理读超时三者取最小 |
 | 换副本后工作区文件消失 | 归档写的是本地存储而应用多副本——改共享对象存储 |
-| 搜索总是“不可用” | 搜索后端选择与 Key 是否匹配（SearXNG 无需 Key、Serper/Brave 必须有） |
+| 搜索总是“不可用” | 核对后端要求：DuckDuckGo 无需 Key 但可能封锁服务器 IP；SearXNG 需要地址；Serper、Brave、Tavily 需要 Key |
 | 模型说没有某工具 | 全局禁用 > 模型内置工具默认项 > 用户组权限 > 工作空间策略，四层任一拦截 |
 | MCP 已启用但模型用不了 | “MCP 工具可用性”里该服务是否勾选、是否同步过工具 |

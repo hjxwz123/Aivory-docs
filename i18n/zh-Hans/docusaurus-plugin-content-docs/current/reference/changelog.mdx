@@ -12,6 +12,67 @@ description: Aivory 所有 GitHub 正式版与预发布版本的完整说明。
 
 ## v2.5.0 系列
 
+### [v2.5.0-beta.6](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.6) — 2026-09-26
+
+#### Aivory v2.5.0-beta.6
+
+这个测试版包含 beta.5 以来合入的全部应用改动：免密钥的 DuckDuckGo 搜索、独立的 AI PPT 管理页、重新设计的登录与注册界面、更清晰的消息操作、响应状态修复，以及聊天宽度控件校准。
+
+##### 联网搜索
+
+- 为 `aivory_web_search` 增加可明确选择的 DuckDuckGo 免密钥后端，与 SearXNG、Serper、Brave、Tavily 并列。服务端也接受 `ddg` 别名；`auto` 仍只选择已有密钥或 SearXNG 地址对应的后端。
+- 先请求 DuckDuckGo HTML 结果页；请求失败、遇到挑战页或解析不到结果时，再尝试 lite 页面。单页最多取十条结果；过滤识别到的 HTML 广告，解开 DuckDuckGo 跟踪跳转，丢弃非 HTTP(S) 目标，并按现有工具格式返回标题、摘要与引用。
+- 对可识别的反爬挑战、HTTP 错误和限流返回对应提示。有效的空结果页返回无结果；两个端点都失败时报告原因。
+- 在“管理 → 工具”中加入新后端及服务器 IP 限流提示；引导流程允许无 Key、无地址时将其视为已配置。更新五种语言的管理文案、README 工具列表和两份环境变量模板，模板也补上 Tavily。
+
+##### AI PPT 管理
+
+- 将 Docmee / AI PPT 配置从“积分与配额”移到独立的“管理 → 能力与集成 → AI PPT”页面；全站积分换算率和通用配额仍留在“积分与配额”。
+- 在新页面统一管理启用开关、API Key 和地址、生成与编辑价格、默认模板、上传上限、Token 有效期、SDK 与国际版域名、服务商余额查询，以及共享模板。
+- 新页面只保存 AI PPT 自有设置；切换启用状态立即生效。设置了 PPT 价格但关闭了全站积分时，页面会提示并提供“积分与配额”入口。导航、翻译及集成指南也改为新位置。
+
+##### 登录与注册
+
+- 用统一的响应式布局和带标签的表单字段重新设计登录、注册、找回密码及首次设置页面，并更新品牌标志、语言切换控件、表单文案和五种语言的译文。
+- 加入随主题变化的视觉场景：浅色主题使用 SVG，深色主题使用 WebGL；各主题从自己的场景集合中选择。按需加载视觉资源，加载期间显示兜底画面，主题切换时在准备好的场景间过渡，并遵循减少动态效果的系统偏好。
+- 在新布局中保留密码、OAuth、通行密钥、双重验证、邮箱验证和密码重置流程，以及内联错误、加载状态和重发验证码控件。
+
+##### 聊天与外观
+
+- 将“分叉为新对话”直接放入桌面消息工具栏并加上提示，移除重复的桌面溢出菜单操作。按复制/编辑、重新生成/分叉、导出、反馈/举报、删除的顺序组织操作，移动端操作菜单采用相同顺序。
+- 助手回复期间，尚未持久化的用户消息仍可使用本地复制/编辑操作；删除、反馈、重新生成、分叉等需要服务端消息 ID 的操作继续等待持久化。
+- 如果调用工具前的说明文字已作为最后一条思考内容出现，避免再次显示同样的文字；停止响应并从服务端对齐消息后也保持这一行为。
+- 校准聊天宽度滑块的五个档位与标签，并固定滑块尺寸；档位按钮可通过键盘操作。
+
+##### 维护与已知限制
+
+- 忽略本地 API 构建可能产生 Windows 可执行文件的 `server/bin/` 目录。
+- [PR #39](https://github.com/hjxwz123/Aivory/pull/39) 中 DuckDuckGo 贡献者的原始提交和作者信息保留在仓库历史中。
+- DuckDuckGo 的公开端点可能挑战或限流服务器 IP。本测试版中，包含反爬标记字符串的查询可能被误判为挑战页；lite 结果缺少摘要时，摘要可能与后续引用错位。需要可靠搜索时，使用 Serper、Brave、Tavily 或 SearXNG。
+
+##### 升级
+
+这是测试版。部署前请备份数据库和应用数据。应用、更新器和沙箱镜像发布完成后，将部署实际使用的 `deploy/.env` 设置为：
+
+```dotenv
+IMAGE_TAG=2.5.0-beta.6
+UPDATER_IMAGE_TAG=2.5.0-beta.6
+```
+
+移除或调整显式设置的 `APP_IMAGE_TAG`、`SANDBOX_IMAGE_TAG` 覆盖项，然后验证并部署：
+
+```bash
+cd deploy
+docker compose --env-file .env -f docker-compose.prod.yml config --images
+docker compose --env-file .env -f docker-compose.prod.yml pull
+docker compose --env-file .env -f docker-compose.prod.yml up -d --no-build
+```
+
+**完整更新日志：** https://github.com/hjxwz123/Aivory/compare/v2.5.0-beta.5...v2.5.0-beta.6
+
+
+---
+
 ### [v2.5.0-beta.5](https://github.com/hjxwz123/Aivory/releases/tag/v2.5.0-beta.5) — 2026-09-25
 
 #### Aivory v2.5.0-beta.5

@@ -6,6 +6,8 @@ import Link from '@docusaurus/Link'
 import Layout from '@theme/Layout'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import ProductBook from '../components/product-book'
+import HeroFilm from '../components/hero-film'
+import ModelMarquee from '../components/model-marquee'
 import WorkspaceJourney from '../components/workspace-journey'
 import DataOwnership from '../components/data-ownership'
 import WorkspaceParticles from '../components/workspace-particles'
@@ -29,12 +31,29 @@ export default function Home(): ReactNode {
   const home = useRef<HTMLElement>(null)
   useGSAP(() => {
     const media = gsap.matchMedia()
-    media.add('(min-width: 997px) and (prefers-reduced-motion: no-preference)', () => {
+    media.add('(prefers-reduced-motion: no-preference)', () => {
       const hero = home.current!.querySelector('[data-aivory-motion="hero"]')
-      const preview = hero!.querySelector('[data-aivory-depth="hero-book"]')
-      gsap.to(preview, {y: -90, rotationY: -12, rotationX: 5, scale: 1.045, ease: 'none', scrollTrigger: {trigger: hero, start: 'top top', end: 'bottom top', scrub: 0.5}})
+      // The opening recedes as the film rises into view.
+      gsap.to(hero!.querySelector('[data-hero-copy]'), {yPercent: -18, autoAlpha: 0.15, ease: 'none', scrollTrigger: {trigger: hero, start: 'top top', end: 'bottom top', scrub: 0.5}})
+      gsap.to(hero!.querySelector('[data-hero-aura]'), {scale: 1.25, autoAlpha: 0, ease: 'none', scrollTrigger: {trigger: hero, start: 'top top', end: 'bottom top', scrub: 0.5}})
     })
-    return () => media.revert()
+    // Pointer-follow spotlight and a light tilt on the edition cards.
+    const fine = window.matchMedia('(pointer: fine) and (prefers-reduced-motion: no-preference)')
+    const cards = Array.from(home.current!.querySelectorAll<HTMLElement>('[data-spotlight]'))
+    const move = (event: PointerEvent) => {
+      const card = event.currentTarget as HTMLElement
+      const r = card.getBoundingClientRect()
+      const x = (event.clientX - r.left) / r.width, y = (event.clientY - r.top) / r.height
+      card.style.setProperty('--mx', `${x * 100}%`)
+      card.style.setProperty('--my', `${y * 100}%`)
+      if (fine.matches && card.dataset.spotlight === 'tilt') card.style.transform = `perspective(1100px) rotateX(${(0.5 - y) * 5}deg) rotateY(${(x - 0.5) * 6}deg) translateY(-4px)`
+    }
+    const leave = (event: PointerEvent) => {(event.currentTarget as HTMLElement).style.transform = ''}
+    cards.forEach(card => {card.addEventListener('pointermove', move); card.addEventListener('pointerleave', leave)})
+    return () => {
+      media.revert()
+      cards.forEach(card => {card.removeEventListener('pointermove', move); card.removeEventListener('pointerleave', leave); card.style.transform = ''})
+    }
   }, {scope: home, dependencies: [en], revertOnUpdate: true})
   const groups = [
     {
@@ -124,50 +143,31 @@ export default function Home(): ReactNode {
         <WorkspaceParticles scopeRef={home} />
         <div className={styles.container}>
           <section className={styles.hero} aria-labelledby="hero-title" data-aivory-motion="hero">
-            <div className={styles.heroCopy} data-aivory-motion="hero-copy">
-              <p className={styles.label}>
-                {en ? 'Aivory documentation' : 'Aivory 文档中心'}
-              </p>
+            <div className={styles.aura} data-hero-aura aria-hidden="true"><span /><span /><i /></div>
+            <div className={styles.heroCopy} data-hero-copy>
+              <div className={styles.emblem} data-particle-slot="identity" aria-hidden="true" />
+              <p className={styles.label}>{en ? 'Aivory documentation' : 'Aivory 文档中心'}</p>
               <h1 id="hero-title">
-                {en ? 'Your workspace.' : '你的工作空间。'}
-                <br />
-                <span>{en ? 'Your possibilities.' : '从这里开始。'}</span>
+                <span className={styles.line}>{en ? 'Your workspace.' : '你的工作空间。'}</span>
+                <span className={`${styles.line} ${styles.accentLine}`}>{en ? 'Your possibilities.' : '从这里开始。'}</span>
               </h1>
               <p className={styles.intro}>
                 {en
                   ? 'A place for your projects, models, knowledge, and tools. Start with a conversation, carry it through to a result, and build a workspace your whole team can make their own.'
-                  : '让项目、模型、知识与工具，在同一个空间里协同。从一段对话，到一份可以交付的成果，再到整个团队的日常工作。把 AI 放进自己的工作方式里，也把数据留在自己的掌控之中。'}
+                  : '让项目、模型、知识与工具，在同一个空间里协同。从一段对话，到一份可以交付的成果，再到整个团队的日常工作——把 AI 放进自己的工作方式里，也把数据留在自己的掌控之中。'}
               </p>
               <div className={styles.actions}>
-                <Link
-                  className={styles.primary}
-                  to="/docs/getting-started/personal"
-                >
-                  {en ? 'Start deploying' : '开始部署'}
-                  <Arrow />
-                </Link>
-                <Link className={styles.secondary} to="/product">
-                  {en ? 'Read the introduction' : '了解 Aivory'}
-                  <Arrow />
-                </Link>
+                <Link className={styles.primary} to="/docs/getting-started/personal">{en ? 'Start deploying' : '开始部署'}<Arrow /></Link>
+                <Link className={styles.secondary} to="/product">{en ? 'Read the introduction' : '了解 Aivory'}<Arrow /></Link>
+                <a className={styles.secondary} href="https://demo.aivorygo.com" target="_blank" rel="noreferrer">{en ? 'Live demo' : '在线体验'}<Arrow external /></a>
               </div>
-              <p className={styles.heroNote}>
-                {en
-                  ? 'Self-hosted · Multi-model · Built for teams'
-                  : '自主部署 · 多模型接入 · 团队协作'}
-              </p>
+              <p className={styles.heroNote}>{en ? 'Self-hosted · Multi-model · Built for teams' : '自主部署 · 多模型接入 · 团队协作'}</p>
             </div>
-            <div className={styles.preview} data-aivory-depth="hero-book">
-              <div className={styles.previewTop}>
-                <span className={styles.previewDot} aria-hidden="true" />
-                {en ? 'A closer look inside' : '走近你的工作空间'}
-                <a href="https://demo.aivorygo.com" target="_blank" rel="noreferrer">{en ? 'Live demo' : '在线体验'} <Arrow external /></a>
-              </div>
-              <ProductBook compact isEnglish={en} />
-            </div>
+            <a className={styles.scrollCue} href="#film-title"><span>{en ? 'Watch the film' : '观看产品影片'}</span><i aria-hidden="true" /></a>
           </section>
 
-          <a className={styles.journeyInvitation} href="#workspace-journey"><span>{en ? 'A workspace, in five chapters' : '五个章节，走进完整工作空间'}</span><span aria-hidden="true">{en ? 'Scroll to explore' : '向下探索'} ↓</span></a>
+          <HeroFilm isEnglish={en} />
+          <ModelMarquee isEnglish={en} />
           <WorkspaceJourney isEnglish={en} />
           <DataOwnership isEnglish={en} />
 
@@ -185,6 +185,7 @@ export default function Home(): ReactNode {
                     : '两种部署形态，同样完整的工作空间。'}
                 </p>
               </div>
+              <div className={styles.deploySlot} data-particle-slot="deployment" aria-hidden="true" />
               <Link to="/docs/deployment/choose-edition">
                 {en ? 'Compare editions' : '对比部署版本'}
                 <Arrow />
@@ -194,6 +195,7 @@ export default function Home(): ReactNode {
               <Link
                 className={styles.edition}
                 to="/docs/getting-started/personal"
+                data-spotlight="tilt"
               >
                 <div className={styles.editionHeading}>
                   <h3>{en ? 'Personal edition' : '个人版'}</h3>
@@ -212,6 +214,7 @@ export default function Home(): ReactNode {
               <Link
                 className={`${styles.edition} ${styles.fullEdition}`}
                 to="/docs/getting-started/full"
+                data-spotlight="tilt"
               >
                 <div className={styles.editionHeading}>
                   <h3>{en ? 'Full edition' : '完整版'}</h3>
@@ -255,37 +258,20 @@ export default function Home(): ReactNode {
             ))}
           </section>
 
-          <section
-            className={styles.keepExploring}
-            aria-labelledby="explore-title"
-          >
-            <div>
-              <h2 id="explore-title">
-                {en ? 'Get to know Aivory.' : '继续探索 Aivory。'}
-              </h2>
-              <p>
-                {en
-                  ? 'See how it works, follow new releases, or explore the source.'
-                  : '了解产品如何运转，跟进新版本，或直接阅读源码。'}
-              </p>
+          <section className={styles.keepExploring} aria-labelledby="explore-title">
+            <div className={styles.exploreCopy}>
+              <p className={styles.label}>{en ? 'Keep exploring' : '继续探索'}</p>
+              <h2 id="explore-title">{en ? 'Get to know Aivory.' : '继续探索 Aivory。'}</h2>
+              <p>{en ? 'Turn the pages of the product, follow new releases, or explore the source.' : '翻阅产品图册，跟进新版本，或直接阅读源码。'}</p>
+              <div className={styles.exploreLinks}>
+                <Link to="/product">{en ? 'Product tour' : '产品导览'}<Arrow /></Link>
+                <Link to="/docs/reference/changelog">{en ? 'Changelog' : '更新日志'}<Arrow /></Link>
+                <a href="https://github.com/hjxwz123/Aivory" target="_blank" rel="noreferrer">GitHub<Arrow external /></a>
+              </div>
+              <div className={styles.endSlot} data-particle-slot="identity" aria-hidden="true" />
             </div>
-            <div className={styles.exploreLinks}>
-              <Link to="/product">
-                {en ? 'Product tour' : '产品导览'}
-                <Arrow />
-              </Link>
-              <Link to="/docs/reference/changelog">
-                {en ? 'Changelog' : '更新日志'}
-                <Arrow />
-              </Link>
-              <a
-                href="https://github.com/hjxwz123/Aivory"
-                target="_blank"
-                rel="noreferrer"
-              >
-                GitHub
-                <Arrow external />
-              </a>
+            <div className={styles.exploreBook} data-aivory-depth="hero-book">
+              <ProductBook compact isEnglish={en} />
             </div>
           </section>
           <ExperienceNav current="home" isEnglish={en} />

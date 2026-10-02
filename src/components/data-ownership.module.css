@@ -4,7 +4,9 @@
 .copy h2 em { color: var(--page-violet); }
 .copy p:not(.eyebrow) { max-width: 33rem; font-size: 0.9rem; color: var(--page-muted); line-height: 1.85; }
 .copy .lead { color: var(--page-fg) !important; font-size: 1rem !important; }
-.copy > a { display: inline-flex; gap: 1.5rem; align-items: center; min-height: 44px; margin-top: 1rem; color: var(--page-sage); font-size: 0.85rem; }
+.copyFoot { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; margin-top: 1rem; }
+.copyFoot > a { display: inline-flex; gap: 1.5rem; align-items: center; min-height: 44px; color: var(--page-sage); font-size: 0.85rem; }
+.particleSlot { flex: none; width: clamp(7.5rem, 12vw, 10rem); aspect-ratio: 1; margin-right: clamp(0rem, 3vw, 3rem); }
 .diagram { min-width: 0; background: transparent; border: 1px solid oklch(80% 0.05 290 / 0.2); border-radius: 10px; padding: 1.4rem; transform-origin: center bottom; }
 .diagramLabel { margin: 0 0 1.5rem; color: var(--page-muted); font-size: 0.8rem; }
 .diagram svg { display: block; width: 100%; height: auto; overflow: visible; }
@@ -34,6 +36,7 @@
   .diagram { padding: 1rem 0.8rem; }
 }
 @media (max-width: 380px) { .copy h2 { font-size: 2.2rem; } }
+@media (max-width: 599px) { .particleSlot { width: 6.5rem; margin-right: 0; } }
 
 .mobileDataMap { display: none; }
 @media (max-width: 600px) {

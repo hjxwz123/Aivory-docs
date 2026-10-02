@@ -258,6 +258,13 @@ body:has(.aivory-home-page) .navbar {
   --aivory-accent-surface: transparent;
 }
 body:has(.aivory-home-page) .navbar__search-input { background-color: transparent; }
+/* Frosted bar: content scrolling underneath stays legible instead of colliding. */
+body:has(.aivory-home-page) .navbar {
+  background-color: oklch(14% 0.022 290 / 0.72);
+  -webkit-backdrop-filter: saturate(150%) blur(18px);
+  backdrop-filter: saturate(150%) blur(18px);
+  box-shadow: 0 1px 0 oklch(80% 0.05 290 / 0.1);
+}
 body:has(.aivory-home-page) .footer { background: transparent; }
 
 /* Sidebar navigation is quieter than the article and stays independently scrollable. */

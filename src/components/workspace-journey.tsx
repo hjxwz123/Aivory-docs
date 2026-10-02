@@ -1,4 +1,4 @@
-import {useRef, useState, type MouseEvent} from 'react'
+import {useRef, useState, type CSSProperties, type MouseEvent} from 'react'
 import Link from '@docusaurus/Link'
 import useBaseUrl from '@docusaurus/useBaseUrl'
 import useBrokenLinks from '@docusaurus/useBrokenLinks'
@@ -88,32 +88,33 @@ export default function WorkspaceJourney({isEnglish: en}: {isEnglish: boolean}) 
       })
     }
 
-    media.add({motion: '(prefers-reduced-motion: no-preference)', wide: '(min-width: 900px) and (min-height: 680px)'}, context => {
+    media.add({motion: '(prefers-reduced-motion: no-preference)', wide: '(min-width: 900px) and (min-height: 640px)'}, context => {
       if (!context.conditions?.motion) return
       if (context.conditions.wide) {
         section.dataset.enhanced = 'true'
-        gsap.set(panels, {transformPerspective: 1600, transformOrigin: '0% 50%', zIndex: index => panels.length - index})
-        gsap.set(panels.slice(1), {autoAlpha: 0, xPercent: 9, rotationY: 12, scale: 0.94})
+        // Stacked cards: each chapter slides up over the previous one, which
+        // settles back and dims. The new card is opaque, so copy never overlaps.
+        gsap.set(panels, {transformOrigin: '50% 0%', zIndex: index => index + 1})
+        gsap.set(panels.slice(1), {yPercent: 118})
         setChapter(0)
         const timeline = gsap.timeline({defaults: {ease: 'none'}, scrollTrigger: {
           id: 'workspace-journey', trigger: viewport, start: 'top top+=64',
-          end: () => `+=${window.innerHeight * 5.2}`, pin: true, scrub: 0.35,
+          end: () => `+=${window.innerHeight * 4.6}`, pin: true, scrub: 0.4,
           anticipatePin: 1, invalidateOnRefresh: true,
         }})
-        const selectFromProgress = () => {
-          const position = timeline.progress()
-          setChapter(Math.min(4, Math.floor(position * 5 + 0.2)))
-        }
+        const selectFromProgress = () => setChapter(Math.min(4, Math.floor(timeline.progress() * 5 + 0.22)))
         timeline.eventCallback('onUpdate', selectFromProgress)
         timeline.to(progress, {scaleX: 1, duration: 5}, 0)
         panels.slice(0, -1).forEach((panel, n) => {
-          // Hold each composition for reading; turn during the final third.
-          const at = n + 0.64
-          timeline.to(panel, {xPercent: -17, rotationY: 78, scale: 0.92, duration: 0.48, ease: 'power2.inOut'}, at)
-          timeline.to(panel, {autoAlpha: 0, duration: 0.12}, at + 0.38)
-          timeline.to(panels[n + 1], {xPercent: 0, rotationY: 0, scale: 1, autoAlpha: 1, duration: 0.56, ease: 'power2.out'}, at)
-          timeline.fromTo(panels[n + 1].querySelector('[data-journey-visual]'), {x: 65, clipPath: 'inset(0 0 0 18%)'}, {x: 0, clipPath: 'inset(0)', duration: 0.62, ease: 'power2.out'}, at + 0.08)
+          const next = panels[n + 1]
+          const at = n + 0.58
+          timeline.to(next, {yPercent: 0, duration: 0.42, ease: 'power2.inOut'}, at)
+          timeline.to(panel, {scale: 0.94, duration: 0.42, ease: 'power2.inOut'}, at)
+          timeline.to(panel.querySelector('[data-journey-dim]'), {opacity: 0.62, duration: 0.42, ease: 'power1.in'}, at)
+          timeline.fromTo(next.querySelector('[data-journey-visual]'), {y: 70, rotationX: 9}, {y: 0, rotationX: 0, duration: 0.5, ease: 'power2.out'}, at + 0.04)
+          timeline.fromTo(next.querySelectorAll('[data-journey-copy] > *'), {y: 26, autoAlpha: 0}, {y: 0, autoAlpha: 1, stagger: 0.025, duration: 0.3, ease: 'power2.out'}, at + 0.14)
         })
+        timeline.set({}, {}, 5)
         trigger.current = timeline.scrollTrigger!
         const syncPosition = () => {
           const current = trigger.current
@@ -129,8 +130,7 @@ export default function WorkspaceJourney({isEnglish: en}: {isEnglish: boolean}) 
           }
           syncPosition()
         }
-        // On reload, native anchor restoration runs as the document finishes
-        // loading. Resolve the chapter after that restoration and pin layout.
+        // Resolve a deep link after native anchor restoration and pin layout.
         const afterLoad = () => {
           frame = requestAnimationFrame(() => {
             frame = requestAnimationFrame(() => {
@@ -186,21 +186,26 @@ export default function WorkspaceJourney({isEnglish: en}: {isEnglish: boolean}) 
         <div className={styles.progressTrack} aria-hidden="true"><span data-journey-progress /></div>
       </div>
       <div className={styles.pages}>
-        {pages.map((page, index) => <article key={page.id} className={styles.panel} id={`journey-${page.id}`} data-journey-panel data-tone={page.tone} aria-labelledby={`journey-title-${page.id}`}>
-          <div className={styles.panelCopy} data-journey-copy>
-            <p className={styles.chapterLabel}><span>0{index + 1}</span> / {page.label}</p>
-            <h3 id={`journey-title-${page.id}`}>{page.title}</h3>
-            <p className={styles.lead}>{page.lead}</p>
-            <p className={styles.detail} data-journey-detail>{page.detail}</p>
-            <ul>{page.facts.map(fact => <li key={fact}><span aria-hidden="true">↗</span><span data-journey-fact>{fact}</span></li>)}</ul>
-            <Link to={page.to} className={styles.chapterLink}>{page.link}<span aria-hidden="true">→</span></Link>
+        {pages.map((page, index) => <article key={page.id} className={styles.panel} id={`journey-${page.id}`} data-journey-panel data-tone={page.tone} aria-labelledby={`journey-title-${page.id}`} style={{'--stack': index} as CSSProperties}>
+          <div className={styles.card}>
+            <div className={styles.panelCopy} data-journey-copy>
+              <p className={styles.chapterLabel}><span>0{index + 1}</span> / {page.label}</p>
+              <h3 id={`journey-title-${page.id}`}>{page.title}</h3>
+              <p className={styles.lead}>{page.lead}</p>
+              <p className={styles.detail} data-journey-detail>{page.detail}</p>
+              <div className={styles.copyFoot}>
+                <ul>{page.facts.map(fact => <li key={fact}><span aria-hidden="true">↗</span><span data-journey-fact>{fact}</span></li>)}</ul>
+                <div className={styles.particleSlot} data-particle-slot={page.id} aria-hidden="true" />
+              </div>
+              <Link to={page.to} className={styles.chapterLink}>{page.link}<span aria-hidden="true">→</span></Link>
+            </div>
+            <figure className={styles.visual} data-journey-visual>
+              <div className={styles.imageFrame}><div className={styles.windowBar}><span aria-hidden="true">● ● ●</span><span>Aivory / {page.label}</span></div><img src={`${imageRoot}${page.image}`} alt={page.alt} width="2160" height="1350" loading="lazy" /></div>
+              <figcaption><span>{page.caption}</span><span aria-hidden="true">0{index + 1}</span></figcaption>
+            </figure>
+            <span className={styles.watermark} aria-hidden="true">0{index + 1}</span>
+            <div className={styles.dim} data-journey-dim aria-hidden="true" />
           </div>
-          <figure className={styles.visual} data-journey-visual>
-            <div className={styles.imageFrame}><div className={styles.windowBar}><span aria-hidden="true">● ● ●</span><span>Aivory / {page.label}</span></div><img src={`${imageRoot}${page.image}`} alt={page.alt} width="2160" height="1350" loading="lazy" /></div>
-            <figcaption><span>{page.caption}</span><span aria-hidden="true">0{index + 1}</span></figcaption>
-            <div className={styles.pageEdge} aria-hidden="true" />
-          </figure>
-          <span className={styles.watermark} aria-hidden="true">0{index + 1}</span>
         </article>)}
       </div>
       <nav className={styles.chapterTabs} aria-label={en ? 'Workspace story chapters' : '工作空间故事章节'}>

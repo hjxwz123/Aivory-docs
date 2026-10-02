@@ -34,7 +34,10 @@ export default function DataOwnership({isEnglish: en}: {isEnglish: boolean}) {
       <h2 id="ownership-title">{en ? 'Your data has a home.' : '你的数据，'}<br /><em>{en ? 'You hold the keys.' : '有明确的归属。'}</em></h2>
       <p className={styles.lead}>{en ? 'The interface is only one part of your workspace. Understand where conversations, files, and indexes live—and how to look after them.' : '工作空间不只有眼前的界面。对话、文件、知识索引各自存在哪里，如何维护与恢复，都应该清晰可查。'}</p>
       <p>{en ? 'Start with SQLite and embedded vectors, or operate a full stack with PostgreSQL, Redis, and Qdrant. The documentation follows the actual services, database tables, and recovery steps.' : '你可以从 SQLite 与内嵌向量开始，也可以使用 PostgreSQL、Redis 与 Qdrant 组成完整数据栈。文档会带你理解实际服务、数据库表结构和恢复步骤。'}</p>
-      <Link to="/docs/reference/database/overview">{en ? 'Open the database reference' : '打开数据库参考'} <span aria-hidden="true">↗</span></Link>
+      <div className={styles.copyFoot}>
+        <Link to="/docs/reference/database/overview">{en ? 'Open the database reference' : '打开数据库参考'} <span aria-hidden="true">↗</span></Link>
+        <div className={styles.particleSlot} data-particle-slot="ownership" aria-hidden="true" />
+      </div>
     </div>
     <div className={styles.diagram} data-data-diagram>
       <p className={styles.diagramLabel}>{en ? 'A clear map of what you own' : '看清工作空间的数据边界'}</p>
